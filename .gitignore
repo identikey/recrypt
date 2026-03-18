@@ -40,3 +40,4 @@ thoughts/
 
 # Buf generated code (use buf.build registry instead)
 gen/
+.omc
