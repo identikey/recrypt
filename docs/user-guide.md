@@ -10,20 +10,20 @@ Recrypt enables end-to-end encrypted file storage and sharing where files can be
 
 ```bash
 # 1. Create your first identity
-dcypher identity new --name alice
+recrypt identity new --name alice
 
 # 2. Configure your server
-dcypher config set default_server http://localhost:7222
+recrypt config set default_server http://localhost:7222
 
 # 3. Register on the server
-dcypher account register
+recrypt account register
 
 # 4. Encrypt and upload a file
-dcypher encrypt secret.txt --for alice --output secret.enc
-dcypher file upload secret.enc
+recrypt encrypt secret.txt --for alice --output secret.enc
+recrypt file upload secret.enc
 
 # 5. Share with Bob (who has registered)
-dcypher share create <file-hash> --to <bob-fingerprint>
+recrypt share create <file-hash> --to <bob-fingerprint>
 ```
 
 ---
@@ -49,16 +49,16 @@ dcypher share create <file-hash> --to <bob-fingerprint>
 ### From Source
 
 ```bash
-cd dcypher
+cd recrypt
 cargo build --release
-# Binary at: target/release/dcypher
+# Binary at: target/release/recrypt
 ```
 
 ### Verify Installation
 
 ```bash
-dcypher --version
-dcypher --help
+recrypt --version
+recrypt --help
 ```
 
 ---
@@ -85,9 +85,9 @@ Traditional encryption: Alice encrypts for Bob, Bob decrypts. If Alice later wan
 
 Your identities are stored in an encrypted **wallet** file:
 
-- **macOS**: `~/Library/Application Support/io.identikey.dcypher/wallet.recrypt`
-- **Linux**: `~/.local/share/dcypher/wallet.recrypt`
-- **Windows**: `C:\Users\<user>\AppData\Roaming\identikey\dcypher\wallet.recrypt`
+- **macOS**: `~/Library/Application Support/io.identikey.recrypt/wallet.recrypt`
+- **Linux**: `~/.local/share/recrypt/wallet.recrypt`
+- **Windows**: `C:\Users\<user>\AppData\Roaming\identikey\recrypt\wallet.recrypt`
 
 The wallet is encrypted with a password-derived key (Argon2id). On subsequent runs, the key is cached in your OS keychain (macOS Keychain, Linux Secret Service, Windows Credential Manager) so you don't have to re-enter it.
 
@@ -99,10 +99,10 @@ The wallet is encrypted with a password-derived key (Argon2id). On subsequent ru
 
 ```bash
 # Auto-named (identity-1, identity-2, etc.)
-dcypher identity new
+recrypt identity new
 
 # Named identity
-dcypher identity new --name alice
+recrypt identity new --name alice
 ```
 
 The first identity created becomes the active identity.
@@ -110,7 +110,7 @@ The first identity created becomes the active identity.
 ### List Identities
 
 ```bash
-dcypher identity list
+recrypt identity list
 ```
 
 Output:
@@ -127,16 +127,16 @@ The star (★) marks the active identity.
 
 ```bash
 # Active identity
-dcypher identity show
+recrypt identity show
 
 # Specific identity
-dcypher identity show --name bob
+recrypt identity show --name bob
 ```
 
 ### Set Active Identity
 
 ```bash
-dcypher identity use bob
+recrypt identity use bob
 ```
 
 The active identity is used for all operations unless overridden with `--identity`.
@@ -144,7 +144,7 @@ The active identity is used for all operations unless overridden with `--identit
 ### Delete an Identity
 
 ```bash
-dcypher identity delete bob
+recrypt identity delete bob
 ```
 
 ⚠️ **Warning**: This is irreversible. Export first if you might need it later.
@@ -153,10 +153,10 @@ dcypher identity delete bob
 
 ```bash
 # Export (includes secret keys!)
-dcypher identity export alice --output alice-backup.json
+recrypt identity export alice --output alice-backup.json
 
 # Import
-dcypher identity import alice-backup.json --name alice-restored
+recrypt identity import alice-backup.json --name alice-restored
 ```
 
 ⚠️ **Security**: Exported files contain secret keys. Protect them accordingly.
@@ -171,13 +171,13 @@ Encrypt and decrypt files locally without involving a server.
 
 ```bash
 # Encrypt for yourself
-dcypher encrypt document.pdf --for alice
+recrypt encrypt document.pdf --for alice
 
 # Encrypt for another identity in your wallet
-dcypher encrypt document.pdf --for bob
+recrypt encrypt document.pdf --for bob
 
 # Custom output path
-dcypher encrypt document.pdf --for alice --output encrypted/document.enc
+recrypt encrypt document.pdf --for alice --output encrypted/document.enc
 ```
 
 Default output: `<filename>.enc`
@@ -186,13 +186,13 @@ Default output: `<filename>.enc`
 
 ```bash
 # Uses active identity
-dcypher decrypt document.enc
+recrypt decrypt document.enc
 
 # Specific identity
-dcypher decrypt document.enc --identity alice
+recrypt decrypt document.enc --identity alice
 
 # Custom output
-dcypher decrypt document.enc --output restored.pdf
+recrypt decrypt document.enc --output restored.pdf
 ```
 
 Default output: strips `.enc` suffix, or appends `.decrypted`
@@ -204,13 +204,13 @@ Default output: strips `.enc` suffix, or appends `.decrypted`
 ### Configure Server
 
 ```bash
-dcypher config set default_server http://localhost:7222
+recrypt config set default_server http://localhost:7222
 ```
 
 Or use the `--server` flag per-command:
 
 ```bash
-dcypher account register --server http://prod.example.com:7222
+recrypt account register --server http://prod.example.com:7222
 ```
 
 ### Register Account
@@ -218,7 +218,7 @@ dcypher account register --server http://prod.example.com:7222
 Before uploading files or sharing, register your identity:
 
 ```bash
-dcypher account register
+recrypt account register
 ```
 
 This uploads your public keys to the server. Secret keys never leave your machine.
@@ -227,16 +227,16 @@ This uploads your public keys to the server. Secret keys never leave your machin
 
 ```bash
 # Your account
-dcypher account show
+recrypt account show
 
 # Someone else's account (by fingerprint)
-dcypher account show 2YzWq8...
+recrypt account show 2YzWq8...
 ```
 
 ### Upload Files
 
 ```bash
-dcypher file upload document.enc
+recrypt file upload document.enc
 ```
 
 Returns the file hash (content address):
@@ -250,22 +250,22 @@ Returns the file hash (content address):
 
 ```bash
 # To default path (<hash>.bin)
-dcypher file download 4xNvKp9...
+recrypt file download 4xNvKp9...
 
 # Custom output
-dcypher file download 4xNvKp9... --output document.enc
+recrypt file download 4xNvKp9... --output document.enc
 ```
 
 ### List Your Files
 
 ```bash
-dcypher file list
+recrypt file list
 ```
 
 ### Delete a File
 
 ```bash
-dcypher file delete 4xNvKp9...
+recrypt file delete 4xNvKp9...
 ```
 
 ---
@@ -278,10 +278,10 @@ The magic of proxy recryption: share encrypted files without re-encrypting or sh
 
 ```bash
 # Get recipient's fingerprint first
-dcypher account show <bob-fingerprint>
+recrypt account show <bob-fingerprint>
 
 # Create share
-dcypher share create <file-hash> --to <bob-fingerprint>
+recrypt share create <file-hash> --to <bob-fingerprint>
 ```
 
 This:
@@ -296,13 +296,13 @@ Bob can now download the file, and the server will transform the ciphertext so B
 
 ```bash
 # All shares
-dcypher share list
+recrypt share list
 
 # Only outgoing (files you shared)
-dcypher share list --from
+recrypt share list --from
 
 # Only incoming (files shared with you)
-dcypher share list --to
+recrypt share list --to
 ```
 
 ### Download a Shared File
@@ -310,10 +310,10 @@ dcypher share list --to
 When someone shares a file with you:
 
 ```bash
-dcypher share download <share-id>
+recrypt share download <share-id>
 
 # Custom output
-dcypher share download <share-id> --output received.enc
+recrypt share download <share-id> --output received.enc
 ```
 
 The server applies the recrypt transformation, and you can decrypt with your own keys.
@@ -321,7 +321,7 @@ The server applies the recrypt transformation, and you can decrypt with your own
 ### Revoke a Share
 
 ```bash
-dcypher share revoke <share-id>
+recrypt share revoke <share-id>
 ```
 
 The recrypt key is deleted. The recipient can no longer access the file (even if they previously downloaded it, they can't get new versions or re-download).
@@ -332,20 +332,20 @@ The recrypt key is deleted. The recipient can no longer access the file (even if
 
 Configuration is stored in:
 
-- **macOS**: `~/Library/Application Support/io.identikey.dcypher/config.toml`
-- **Linux**: `~/.config/dcypher/config.toml`
-- **Windows**: `C:\Users\<user>\AppData\Roaming\identikey\dcypher\config.toml`
+- **macOS**: `~/Library/Application Support/io.identikey.recrypt/config.toml`
+- **Linux**: `~/.config/recrypt/config.toml`
+- **Windows**: `C:\Users\<user>\AppData\Roaming\identikey\recrypt\config.toml`
 
 ### View Configuration
 
 ```bash
-dcypher config show
+recrypt config show
 ```
 
 ### Set Configuration
 
 ```bash
-dcypher config set <key> <value>
+recrypt config set <key> <value>
 ```
 
 | Key               | Description                              | Example                   |
@@ -354,6 +354,7 @@ dcypher config set <key> <value>
 | `active_identity` | Current identity (prefer `identity use`) | `alice`                   |
 | `output_format`   | Default output format                    | `pretty` or `json`        |
 | `wallet_path`     | Custom wallet file location              | `/path/to/wallet.recrypt` |
+| `default_backend` | PRE backend for new identities           | `lattice` or `mock`       |
 
 ---
 
@@ -361,17 +362,19 @@ dcypher config set <key> <value>
 
 Override configuration with environment variables:
 
-| Variable             | Description                         |
-| -------------------- | ----------------------------------- |
-| `DCYPHER_SERVER`     | Server URL                          |
-| `DCYPHER_IDENTITY`   | Identity name                       |
-| `DCYPHER_WALLET`     | Wallet file path                    |
-| `DCYPHER_WALLET_KEY` | Wallet encryption key (hex, for CI) |
+| Variable                 | Description                            |
+| ------------------------ | -------------------------------------- |
+| `RECRYPT_SERVER`         | Server URL                             |
+| `RECRYPT_IDENTITY`       | Identity name                          |
+| `RECRYPT_WALLET`         | Wallet file path                       |
+| `RECRYPT_WALLET_PASSWORD`| Wallet password (for CI/scripting)     |
+| `RECRYPT_BACKEND`        | PRE backend: `lattice` or `mock`       |
+| `RECRYPT_DEBUG`          | Enable debug logging (`1` or `true`)   |
 
 Example:
 
 ```bash
-DCYPHER_SERVER=http://prod:7222 dcypher file list
+RECRYPT_SERVER=http://prod:7222 recrypt file list
 ```
 
 ---
@@ -383,7 +386,7 @@ DCYPHER_SERVER=http://prod:7222 dcypher file list
 Human-readable, colored output:
 
 ```bash
-dcypher identity list
+recrypt identity list
 ```
 
 ### JSON Output
@@ -391,24 +394,40 @@ dcypher identity list
 Machine-readable JSON:
 
 ```bash
-dcypher --json identity list
+recrypt --json identity list
 ```
 
 Or set as default:
 
 ```bash
-dcypher config set output_format json
+recrypt config set output_format json
 ```
 
 Useful for scripting:
 
 ```bash
-dcypher --json identity show | jq '.fingerprint'
+recrypt --json identity show | jq '.fingerprint'
 ```
 
 ---
 
 ## Wallet Security
+
+### Wallet Commands
+
+```bash
+# Unlock wallet (prompts for password, caches key)
+recrypt wallet unlock
+
+# Lock wallet (clears cached key)
+recrypt wallet lock
+
+# Check wallet status
+recrypt wallet status
+
+# Show wallet file path
+recrypt wallet path
+```
 
 ### Password Protection
 
@@ -426,25 +445,25 @@ Subsequent commands won't prompt for a password until you reboot or the cache ex
 
 ### CI/Headless Usage
 
-For automated environments, set the wallet key directly:
+For automated environments, set the wallet password via environment variable:
 
 ```bash
-export DCYPHER_WALLET_KEY=<64-char-hex-key>
-dcypher identity list
+export RECRYPT_WALLET_PASSWORD=your-wallet-password
+recrypt identity list
 ```
 
-⚠️ **Security**: Don't commit this key to version control. Use secrets management.
+⚠️ **Security**: Don't commit passwords to version control. Use secrets management.
 
 ### Backup Your Wallet
 
 ```bash
-cp ~/Library/Application\ Support/io.identikey.dcypher/wallet.recrypt ./wallet-backup.recrypt
+cp ~/Library/Application\ Support/io.identikey.recrypt/wallet.recrypt ./wallet-backup.recrypt
 ```
 
 Or export individual identities:
 
 ```bash
-dcypher identity export alice --output alice-backup.json
+recrypt identity export alice --output alice-backup.json
 ```
 
 ---
@@ -455,10 +474,10 @@ dcypher identity export alice --output alice-backup.json
 
 ```bash
 # Set an active identity
-dcypher identity use alice
+recrypt identity use alice
 
 # Or specify per-command
-dcypher --identity alice file list
+recrypt --identity alice file list
 ```
 
 ### "Could not determine config directory"
@@ -466,20 +485,20 @@ dcypher --identity alice file list
 Ensure your home directory is accessible. On unusual systems, use explicit paths:
 
 ```bash
-DCYPHER_WALLET=/tmp/wallet.recrypt dcypher identity new
+RECRYPT_WALLET=/tmp/wallet.recrypt recrypt identity new
 ```
 
 ### "Failed to decrypt wallet (wrong password?)"
 
 The cached key may be stale. Clear it and re-enter your password:
 
-- **macOS**: Delete "dcypher-wallet-key" in Keychain Access
-- **Linux**: Use `secret-tool clear service dcypher`
+- **macOS**: Delete "recrypt-wallet-key" in Keychain Access
+- **Linux**: Use `secret-tool clear service recrypt`
 
 ### "Connection refused" / Server errors
 
 1. Check server is running: `curl http://localhost:7222/health`
-2. Verify URL: `dcypher config show`
+2. Verify URL: `recrypt config show`
 3. Check network/firewall
 
 ### "Recipient has no PRE public key"
@@ -488,7 +507,7 @@ The recipient must have registered their account before you can share with them:
 
 ```bash
 # Recipient runs:
-dcypher account register
+recrypt account register
 ```
 
 ---
@@ -501,17 +520,17 @@ dcypher account register
 
 ```bash
 # Setup
-dcypher identity new --name alice
-dcypher config set default_server http://server:7222
-dcypher account register
+recrypt identity new --name alice
+recrypt config set default_server http://server:7222
+recrypt account register
 
 # Encrypt and upload
-dcypher encrypt secret.pdf --for alice
-dcypher file upload secret.pdf.enc
+recrypt encrypt secret.pdf --for alice
+recrypt file upload secret.pdf.enc
 # → Hash: 4xNvKp9...
 
 # Share with Bob (get his fingerprint first)
-dcypher share create 4xNvKp9... --to 5XjKm9...
+recrypt share create 4xNvKp9... --to 5XjKm9...
 # → Share ID: abc123
 ```
 
@@ -519,23 +538,23 @@ dcypher share create 4xNvKp9... --to 5XjKm9...
 
 ```bash
 # Setup
-dcypher identity new --name bob
-dcypher config set default_server http://server:7222
-dcypher account register
+recrypt identity new --name bob
+recrypt config set default_server http://server:7222
+recrypt account register
 
 # Download shared file
-dcypher share list --to
+recrypt share list --to
 # → Share ID: abc123
-dcypher share download abc123 --output secret.enc
+recrypt share download abc123 --output secret.enc
 
 # Decrypt
-dcypher decrypt secret.enc --output secret.pdf
+recrypt decrypt secret.enc --output secret.pdf
 ```
 
 **Alice (revoke access):**
 
 ```bash
-dcypher share revoke abc123
+recrypt share revoke abc123
 # Bob can no longer access the file
 ```
 
@@ -544,13 +563,15 @@ dcypher share revoke abc123
 ## Command Reference
 
 ```
-dcypher [OPTIONS] <COMMAND>
+recrypt [OPTIONS] <COMMAND>
 
 Options:
   --json              Output as JSON
   --identity <NAME>   Override active identity
   --server <URL>      Override server URL
   --wallet <PATH>     Override wallet path
+  --backend <NAME>    PRE backend: "lattice" (default) or "mock"
+  --debug             Enable debug logging
   -v, --verbose       Verbose output
   -h, --help          Print help
   -V, --version       Print version
@@ -563,6 +584,7 @@ Commands:
   file       Manage files on server (upload, download, list, delete)
   share      Manage file shares (create, list, download, revoke)
   config     Manage configuration (show, set)
+  wallet     Manage wallet (unlock, lock, status, path)
 ```
 
 ---
