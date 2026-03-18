@@ -20,9 +20,6 @@ pub enum BackendId {
     /// NuCypher Umbral (classical, secp256k1) - future
     #[serde(rename = "ec-secp256k1")]
     EcSecp256k1 = 2,
-    /// TFHE LWE-based PRE (post-quantum, fast)
-    #[serde(rename = "tfhe")]
-    Tfhe = 4,
     /// Mock backend for testing
     #[serde(rename = "mock")]
     Mock = 255,
@@ -34,7 +31,6 @@ impl std::fmt::Display for BackendId {
             BackendId::Lattice => write!(f, "lattice"),
             BackendId::EcPairing => write!(f, "ec-pairing"),
             BackendId::EcSecp256k1 => write!(f, "ec-secp256k1"),
-            BackendId::Tfhe => write!(f, "tfhe"),
             BackendId::Mock => write!(f, "mock"),
         }
     }
@@ -48,7 +44,6 @@ impl std::str::FromStr for BackendId {
             "lattice" | "pq" | "post-quantum" | "openfhe" => Ok(BackendId::Lattice),
             "ec-pairing" | "ecpairing" | "pairing" => Ok(BackendId::EcPairing),
             "ec-secp256k1" | "secp256k1" | "umbral" => Ok(BackendId::EcSecp256k1),
-            "tfhe" | "fast" => Ok(BackendId::Tfhe),
             "mock" | "test" => Ok(BackendId::Mock),
             other => Err(PreError::InvalidKey(format!("Unknown backend: {other}"))),
         }
@@ -63,7 +58,6 @@ impl TryFrom<u8> for BackendId {
             0 => Ok(Self::Lattice),
             1 => Ok(Self::EcPairing),
             2 => Ok(Self::EcSecp256k1),
-            4 => Ok(Self::Tfhe),
             255 => Ok(Self::Mock),
             other => Err(PreError::InvalidKey(format!("Unknown backend ID: {other}"))),
         }

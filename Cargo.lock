@@ -19,17 +19,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "aes"
-version = "0.8.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b169f7a6d4742236a0a00c541b845991d0ac43e546831af1249753ab4c3aa3a0"
-dependencies = [
- "cfg-if",
- "cipher",
- "cpufeatures",
-]
-
-[[package]]
 name = "ahash"
 version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -48,15 +37,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ddd31a130427c27518df266943a5308ed92d4b226cc639f5a8f1002816174301"
 dependencies = [
  "memchr",
-]
-
-[[package]]
-name = "aligned-vec"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4aa90d7ce82d4be67b64039a3d588d38dbcc6736577de4a847025ce5b0c468d1"
-dependencies = [
- "serde",
 ]
 
 [[package]]
@@ -757,15 +737,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 
 [[package]]
-name = "bincode"
-version = "1.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1f45e9417d87227c7a56d22e471c6206462cba514c7590c09aff4cf6d1ddcad"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "bindgen"
 version = "0.71.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1115,42 +1086,6 @@ name = "compression-core"
 version = "0.4.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "75984efb6ed102a0d42db99afb6c1948f0380d1d91808d5529916e6c08b49d8d"
-
-[[package]]
-name = "concrete-csprng"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90518357249582c16a6b64d7410243dfb3109d5bf0ad1665c058c9a59f2fc4cc"
-dependencies = [
- "aes",
- "libc",
- "rayon",
-]
-
-[[package]]
-name = "concrete-fft"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86ff7397e00e903afb03f0adca6a5f3bec3a6e96a7cdb70bdc088e01b125e170"
-dependencies = [
- "aligned-vec",
- "bytemuck",
- "dyn-stack",
- "js-sys",
- "num-complex",
- "pulp",
- "serde",
-]
-
-[[package]]
-name = "concrete-ntt"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bea708a14b4cfe650eec644eac11889a187404a3a0738a41a5524b0f548850a1"
-dependencies = [
- "aligned-vec",
- "pulp",
-]
 
 [[package]]
 name = "console"
@@ -1549,16 +1484,6 @@ name = "dunce"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
-
-[[package]]
-name = "dyn-stack"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56e53799688f5632f364f8fb387488dd05db9fe45db7011be066fc20e7027f8b"
-dependencies = [
- "bytemuck",
- "reborrow",
-]
 
 [[package]]
 name = "ecdsa"
@@ -2384,15 +2309,6 @@ dependencies = [
 
 [[package]]
 name = "itertools"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1c173a5686ce8bfa551b3563d0c2170bf24ca44da99c7ca4bfdab5418c3fe57"
-dependencies = [
- "either",
-]
-
-[[package]]
-name = "itertools"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
@@ -2469,12 +2385,6 @@ dependencies = [
  "cfg-if",
  "windows-link",
 ]
-
-[[package]]
-name = "libm"
-version = "0.2.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9fbbcab51052fe104eb5e5d351cf728d30a5be1fe14d9be8a3b097481fb97de"
 
 [[package]]
 name = "libredox"
@@ -2665,17 +2575,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "num-complex"
-version = "0.4.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "73f88a1307638156682bada9d7604135552957b7818057dcef22705b4d509495"
-dependencies = [
- "bytemuck",
- "num-traits",
- "serde",
-]
-
-[[package]]
 name = "num-conv"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2859,12 +2758,6 @@ dependencies = [
  "rand_core 0.6.4",
  "subtle",
 ]
-
-[[package]]
-name = "paste"
-version = "1.0.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
 name = "pear"
@@ -3146,18 +3039,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pulp"
-version = "0.18.22"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a0a01a0dc67cf4558d279f0c25b0962bd08fc6dec0137699eae304103e882fe6"
-dependencies = [
- "bytemuck",
- "libm",
- "num-complex",
- "reborrow",
-]
-
-[[package]]
 name = "quick-error"
 version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3267,12 +3148,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "reborrow"
-version = "0.5.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03251193000f4bd3b042892be858ee50e8b3719f2b08e5833ac4353724632430"
-
-[[package]]
 name = "recrypt-cli"
 version = "0.1.0"
 dependencies = [
@@ -3322,7 +3197,6 @@ dependencies = [
  "rand 0.8.5",
  "rand_core 0.6.4",
  "recrypt-ffi",
- "recrypt-tfhe",
  "serde",
  "thiserror 2.0.17",
  "tokio",
@@ -3416,19 +3290,6 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.17",
  "tokio",
-]
-
-[[package]]
-name = "recrypt-tfhe"
-version = "0.1.0"
-dependencies = [
- "criterion",
- "rand 0.8.5",
- "rand_chacha 0.3.1",
- "rand_core 0.6.4",
- "tfhe",
- "thiserror 2.0.17",
- "zeroize",
 ]
 
 [[package]]
@@ -4100,51 +3961,6 @@ name = "termtree"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f50febec83f5ee1df3015341d8bd429f2d1cc62bcba7ea2076759d315084683"
-
-[[package]]
-name = "tfhe"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf50da57f871bae30942edcc272db3a3943ec1a0c9cb3011d34c130ca9cde9bc"
-dependencies = [
- "aligned-vec",
- "bincode",
- "bytemuck",
- "concrete-csprng",
- "concrete-fft",
- "concrete-ntt",
- "dyn-stack",
- "itertools 0.11.0",
- "paste",
- "pulp",
- "rand_core 0.6.4",
- "rayon",
- "serde",
- "tfhe-versionable",
-]
-
-[[package]]
-name = "tfhe-versionable"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32111f6df1b4ced57bea0bc548a35eb8130e5b9f2084378299eeacf4148cb8a5"
-dependencies = [
- "aligned-vec",
- "num-complex",
- "serde",
- "tfhe-versionable-derive",
-]
-
-[[package]]
-name = "tfhe-versionable-derive"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a463428890873548472daba5bdcecfe34b89c98518b4bd6cbd8595ac48fc0771"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
 
 [[package]]
 name = "thiserror"

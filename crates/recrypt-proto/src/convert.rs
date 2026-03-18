@@ -13,7 +13,6 @@ impl From<BackendId> for proto::BackendId {
             BackendId::Lattice => proto::BackendId::BackendLattice,
             BackendId::EcPairing => proto::BackendId::BackendEcPairing,
             BackendId::EcSecp256k1 => proto::BackendId::BackendEcSecp256k1,
-            BackendId::Tfhe => proto::BackendId::BackendTfhe,
             BackendId::Mock => proto::BackendId::BackendMock,
         }
     }
@@ -27,7 +26,6 @@ impl TryFrom<proto::BackendId> for BackendId {
             proto::BackendId::BackendLattice => Ok(BackendId::Lattice),
             proto::BackendId::BackendEcPairing => Ok(BackendId::EcPairing),
             proto::BackendId::BackendEcSecp256k1 => Ok(BackendId::EcSecp256k1),
-            proto::BackendId::BackendTfhe => Ok(BackendId::Tfhe),
             proto::BackendId::BackendMock => Ok(BackendId::Mock),
             proto::BackendId::BackendUnknown => {
                 Err(ProtoError::InvalidFormat("Unknown backend ID".into()))

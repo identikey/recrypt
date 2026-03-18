@@ -225,8 +225,6 @@ pub enum BackendId {
     BackendEcPairing = 2,
     /// NuCypher Umbral (classical)
     BackendEcSecp256k1 = 3,
-    /// TFHE LWE PRE (post-quantum, fast)
-    BackendTfhe = 4,
     /// Testing only
     BackendMock = 255,
 }
@@ -241,7 +239,6 @@ impl BackendId {
             Self::BackendLattice => "BACKEND_LATTICE",
             Self::BackendEcPairing => "BACKEND_EC_PAIRING",
             Self::BackendEcSecp256k1 => "BACKEND_EC_SECP256K1",
-            Self::BackendTfhe => "BACKEND_TFHE",
             Self::BackendMock => "BACKEND_MOCK",
         }
     }
@@ -252,7 +249,6 @@ impl BackendId {
             "BACKEND_LATTICE" => Some(Self::BackendLattice),
             "BACKEND_EC_PAIRING" => Some(Self::BackendEcPairing),
             "BACKEND_EC_SECP256K1" => Some(Self::BackendEcSecp256k1),
-            "BACKEND_TFHE" => Some(Self::BackendTfhe),
             "BACKEND_MOCK" => Some(Self::BackendMock),
             _ => None,
         }

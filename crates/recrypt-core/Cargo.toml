@@ -24,9 +24,6 @@ ed25519-dalek.workspace = true
 # FFI binding (our Phase 1 crate)
 recrypt-ffi = { path = "../recrypt-ffi", default-features = false }
 
-# TFHE backend (our Phase 1 crate)
-recrypt-tfhe = { path = "../recrypt-tfhe", optional = true }
-
 # Serialization for BackendId
 serde = { version = "1.0", features = ["derive"] }
 
@@ -41,7 +38,6 @@ criterion = "0.5"
 default = ["openfhe", "liboqs"]
 openfhe = ["recrypt-ffi/openfhe"]
 liboqs = ["recrypt-ffi/liboqs"]
-tfhe = ["recrypt-tfhe"]
 proptest = ["dep:proptest"]
 
 [[bench]]
