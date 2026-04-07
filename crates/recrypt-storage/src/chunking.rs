@@ -4,6 +4,46 @@
 //! Default chunk size: 4 MiB (aligned with typical S3 multipart size).
 
 use blake3::Hash;
+use serde::{Deserialize, Serialize};
+
+/// Custom serde helpers for a single `blake3::Hash` as base58
+mod blake3_base58 {
+    use serde::{Deserialize, Deserializer, Serializer, de::Error};
+
+    pub fn serialize<S: Serializer>(hash: &blake3::Hash, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(&crate::hash_to_base58(hash))
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<blake3::Hash, D::Error> {
+        let s = <String as Deserialize>::deserialize(d)?;
+        crate::hash_from_base58(&s)
+            .ok_or_else(|| D::Error::custom(format!("invalid base58 blake3 hash: {s}")))
+    }
+}
+
+/// Custom serde helpers for `Vec<blake3::Hash>` as `Vec<String>` (base58)
+mod vec_blake3_base58 {
+    use serde::{Deserialize, Deserializer, Serializer, de::Error, ser::SerializeSeq};
+
+    pub fn serialize<S: Serializer>(hashes: &[blake3::Hash], s: S) -> Result<S::Ok, S::Error> {
+        let mut seq = s.serialize_seq(Some(hashes.len()))?;
+        for hash in hashes {
+            seq.serialize_element(&crate::hash_to_base58(hash))?;
+        }
+        seq.end()
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<blake3::Hash>, D::Error> {
+        let strings: Vec<String> = Vec::<String>::deserialize(d)?;
+        strings
+            .iter()
+            .map(|s| {
+                crate::hash_from_base58(s)
+                    .ok_or_else(|| D::Error::custom(format!("invalid base58 blake3 hash: {s}")))
+            })
+            .collect()
+    }
+}
 
 /// Default chunk size: 4 MiB
 pub const DEFAULT_CHUNK_SIZE: usize = 4 * 1024 * 1024;
@@ -17,15 +57,17 @@ pub struct Chunk {
 }
 
 /// Manifest for a chunked file
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChunkManifest {
     /// Hash algorithm identifier (for future agility)
-    pub hash_algorithm: &'static str,
+    pub hash_algorithm: String,
     /// Blake3 hash of the complete data
+    #[serde(with = "blake3_base58")]
     pub file_hash: Hash,
     /// Total size of original data
     pub total_size: u64,
     /// Ordered list of chunk hashes
+    #[serde(with = "vec_blake3_base58")]
     pub chunk_hashes: Vec<Hash>,
     /// Chunk size used (for reconstruction)
     pub chunk_size: usize,
@@ -53,7 +95,7 @@ pub fn split(data: &[u8], chunk_size: usize) -> (ChunkManifest, Vec<Chunk>) {
     }
 
     let manifest = ChunkManifest {
-        hash_algorithm: HASH_ALGORITHM,
+        hash_algorithm: HASH_ALGORITHM.to_string(),
         file_hash,
         total_size: data.len() as u64,
         chunk_hashes,
@@ -76,6 +118,13 @@ pub fn split_default(data: &[u8]) -> (ChunkManifest, Vec<Chunk>) {
 ///
 /// Returns `None` if verification fails.
 pub fn join(manifest: &ChunkManifest, chunks: &[&[u8]]) -> Option<Vec<u8>> {
+    // Reject manifests declaring an unsupported hash algorithm. We only
+    // verify with Blake3; silently accepting a foreign algorithm would
+    // declare integrity we cannot actually provide.
+    if manifest.hash_algorithm != HASH_ALGORITHM {
+        return None;
+    }
+
     if chunks.len() != manifest.chunk_hashes.len() {
         return None;
     }
@@ -186,6 +235,21 @@ mod tests {
         assert_eq!(chunks.len(), 2);
         assert_eq!(chunks[0].hash, chunks[1].hash);
         assert_eq!(manifest.chunk_hashes[0], manifest.chunk_hashes[1]);
+    }
+
+    #[test]
+    fn test_chunk_manifest_serde_round_trip() {
+        let data: Vec<u8> = (0u16..3000).map(|i| (i % 256) as u8).collect();
+        let (manifest, _) = split(&data, 1000);
+
+        let json = serde_json::to_string(&manifest).unwrap();
+        let restored: ChunkManifest = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(manifest.file_hash, restored.file_hash);
+        assert_eq!(manifest.total_size, restored.total_size);
+        assert_eq!(manifest.chunk_size, restored.chunk_size);
+        assert_eq!(manifest.hash_algorithm, restored.hash_algorithm);
+        assert_eq!(manifest.chunk_hashes, restored.chunk_hashes);
     }
 
     #[tokio::test]

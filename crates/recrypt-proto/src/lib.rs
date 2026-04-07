@@ -4,7 +4,6 @@
 //! - Protobuf serialization (primary wire format)
 //! - ASCII armor (human-readable export)
 //! - JSON (debugging, API responses)
-//! - Streaming verification via Blake3/Bao
 //!
 //! ## Format Selection
 //!
@@ -15,7 +14,6 @@
 //! | ASCII Armor | Key export, manual backup   |         ~35%  |
 
 pub mod armor;
-pub mod bao_stream;
 pub mod convert;
 pub mod error;
 pub mod format;
@@ -24,7 +22,6 @@ pub mod impls;
 mod generated;
 
 pub use armor::{ArmorType, armor_decode, armor_encode};
-pub use bao_stream::{BaoDecoder, BaoEncoder, SliceVerifier};
 pub use error::{ProtoError, ProtoResult};
 pub use format::{Format, MultiFormat, detect_format};
 pub use generated::recrypt::v1 as proto;

@@ -81,7 +81,6 @@ pub struct RecryptKey {
     pub(crate) backend: BackendId,
     pub(crate) from_public: PublicKey,
     pub(crate) to_public: PublicKey,
-    #[allow(dead_code)] // Used in Phase 2.3+
     pub(crate) bytes: Vec<u8>,
 }
 

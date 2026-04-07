@@ -18,6 +18,7 @@ async-trait.workspace = true
 # Hashing & encoding
 blake3 = "1"
 bs58.workspace = true
+serde = { version = "1.0", features = ["derive"] }
 
 # S3 (optional)
 aws-sdk-s3 = { workspace = true, optional = true }
@@ -26,3 +27,4 @@ aws-config = { workspace = true, optional = true }
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 tempfile = "3"
+serde_json = "1"

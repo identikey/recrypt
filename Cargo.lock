@@ -3287,6 +3287,8 @@ dependencies = [
  "aws-sdk-s3",
  "blake3",
  "bs58",
+ "serde",
+ "serde_json",
  "tempfile",
  "thiserror 2.0.17",
  "tokio",

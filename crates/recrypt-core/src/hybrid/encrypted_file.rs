@@ -51,27 +51,4 @@ impl EncryptedFile {
         }
     }
 
-    /// Serialize to bytes (simplified—full wire format in Phase 3)
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let wrapped = self.wrapped_key.to_bytes();
-        let mut out = Vec::new();
-
-        // Version
-        out.push(2u8);
-
-        // Wrapped key
-        out.extend((wrapped.len() as u32).to_le_bytes());
-        out.extend(&wrapped);
-
-        // Bao hash
-        out.extend(&self.bao_hash);
-        out.extend((self.bao_outboard.len() as u64).to_le_bytes());
-        out.extend(&self.bao_outboard);
-
-        // Ciphertext
-        out.extend((self.ciphertext.len() as u64).to_le_bytes());
-        out.extend(&self.ciphertext);
-
-        out
-    }
 }

@@ -187,6 +187,42 @@ pub trait ChunkStorage: Send + Sync {
 }
 ```
 
+### ChunkManifest
+
+`crates/recrypt-storage/src/chunking.rs` provides a flat manifest for files
+that have been split into content-addressed 4 MiB (default) chunks:
+
+```rust
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ChunkManifest {
+    pub hash_algorithm: String,          // "blake3", validated on join()
+    #[serde(with = "blake3_base58")]
+    pub file_hash: Hash,                 // Blake3 of the full file
+    pub total_size: u64,
+    #[serde(with = "vec_blake3_base58")]
+    pub chunk_hashes: Vec<Hash>,         // one hash per 4 MiB chunk
+    pub chunk_size: usize,
+}
+```
+
+The manifest is JSON-serializable (Blake3 hashes serialize as base58
+strings via custom `serde` helpers). `join()` validates that
+`manifest.hash_algorithm == "blake3"` before attempting verification —
+a manifest claiming a different algorithm is rejected rather than
+silently re-verified with Blake3.
+
+**Note — chunking vs Bao (convergence pending).** The per-chunk Blake3
+hashes in the manifest provide integrity on top of the storage layer,
+but once streaming Bao verification lands in `recrypt-core` (see
+[verification-architecture.md](verification-architecture.md)), the
+manifest's integrity role becomes redundant: Bao's outboard gives
+finer-grained leaves (1024 B), O(log n) proofs, and random access over
+the same ciphertext. The likely endgame is that `ChunkManifest` shrinks
+to a pure storage-layout concern (split into 4 MiB blobs for S3
+multipart/dedup), with all integrity delegated to Bao. Until then the
+two layers coexist; `manifest.file_hash` and `EncryptedFile.bao_hash`
+compute the same 32-byte value over the same bytes.
+
 ### Implementations
 
 ```rust

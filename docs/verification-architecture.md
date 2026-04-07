@@ -253,6 +253,73 @@ bao = "0.12"
 
 ---
 
+## Current status
+
+This document describes the **target** verification architecture. Here is
+what is actually wired in today versus what is still outstanding:
+
+| Capability                                                             | Status     | Where                                              |
+| ---------------------------------------------------------------------- | ---------- | -------------------------------------------------- |
+| Bao outboard generated at encryption time                              | ✅ Done     | `recrypt-core/src/hybrid/mod.rs` — `bao::encode::outboard` |
+| Root hash stored in `EncryptedFile.bao_hash`                           | ✅ Done     | same                                               |
+| Root hash signed together with `wrapped_key` in the multi-signature    | ✅ Done     | `EncryptedFile::signature_payload`                 |
+| **Full-file integrity check on decrypt**                               | ✅ Done     | `HybridEncryptor::decrypt` — `blake3::hash(ciphertext) == bao_hash`, correct because the Bao root equals `blake3(data)` |
+| **Streaming verification** against the outboard                        | 🚧 Planned | see "Next work" below                              |
+| **Slice / random-access verification**                                 | 🚧 Planned | see "Next work" below                              |
+| Bao outboard stored in `EncryptedFile.bao_outboard`                    | ✅ Done     | but **not yet consumed during decrypt**            |
+
+### Why the gap
+
+`bao::encode::outboard(data).1` returns a 32-byte root that, by Bao's
+construction, equals `blake3::hash(data)`. The current decrypt path
+re-hashes the whole ciphertext and compares against the stored
+`bao_hash`. That is a valid integrity check on a complete, buffered
+ciphertext — it is not a streaming check, and it does not walk the
+outboard tree.
+
+What the outboard unlocks — and what we currently leave on the table —
+is the ability to verify **as bytes arrive** and to verify **arbitrary
+byte ranges** without downloading the whole ciphertext. Both are
+explicit goals of the design and are why we pay the ~1% size cost for
+the outboard in the first place.
+
+### Historical note
+
+An earlier `recrypt-proto::bao_stream` module partially attempted
+streaming verification. Its `BaoDecoder::verify()` compared the stored
+root against `blake3::hash(data)` (correct, by the identity above, but
+presented as if it were tree verification) and then only size-checked
+the outboard. The module was never called in production and was removed
+to avoid giving the false impression that the outboard was being
+walked. See `crates/recrypt-proto/src/bao_stream.rs` in the git history
+pre-removal.
+
+### Next work
+
+1. **Wire `bao::decode::Decoder::new_outboard`** into
+   `HybridEncryptor::decrypt`. Read the ciphertext through the decoder
+   with the stored outboard and root; this walks the Bao tree as data
+   flows through, so any tampering is caught mid-stream rather than
+   after a full buffer. This *replaces* the current `blake3::hash(ct)
+   == bao_hash` compare — functionally equivalent on the full-buffer
+   path today, but opens the door to streaming callers.
+2. **Add a slice-verification API** on `HybridEncryptor` (or a new
+   `EncryptedFileReader`) backed by `bao::decode::SliceDecoder`, so
+   clients can request and verify any byte range of the plaintext.
+   This pairs naturally with the `ChunkProto.bao_proof` field already
+   in the proto schema.
+3. **Integration with the storage layer** — today
+   `recrypt-storage::chunking` has its own flat Merkle-ish
+   verification via a manifest of per-chunk Blake3 hashes. Once Bao
+   streaming is live, that verification layer is redundant: Bao's
+   outboard gives a stronger guarantee (1024-byte leaves, O(log n)
+   proofs, random access) over the same ciphertext. The storage
+   chunking should probably be reduced to "split into 4 MiB blobs for
+   S3 dedup", with integrity delegated to the Bao layer. See
+   [architecture.md §6](architecture.md#6-known-gaps-in-the-deeper-per-topic-docs).
+
+---
+
 ## References
 
 - [Bao specification](https://github.com/oconnor663/bao/blob/master/docs/spec.md)
