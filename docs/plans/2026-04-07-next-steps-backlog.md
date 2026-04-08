@@ -397,6 +397,22 @@ pre-audit pass.
 
 ---
 
+## Keyspace / Grant sprint (forthcoming)
+
+Placeholder for the next sprint after production-readiness. Scope
+will cover reworking recipient PRE public-key discovery now that
+`pre_pk` has been removed from `AccountRecord`: PRE pubkeys are
+capability artifacts, not identity. The sprint will promote the
+existing `AccessGrant` / `Capability` scaffolding in
+`crates/identikey-storage-auth/src/{grant.rs,capability.rs}` into a
+first-class `GrantStore` (in-memory impl already landed; SQLite impl
+pending) wired into `AppState`, add keyspace-scoped PRE key bundles
+attached to grants, and re-enable `recrypt-cli share create` against
+the new flow. No backwards-compat shim with the old `pre_pk`-on-account
+shape — the wire protocol break is intentional.
+
+---
+
 ## How to use this document
 
 When a question comes up mid-sprint that sounds like "shouldn't we

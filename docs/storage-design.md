@@ -46,7 +46,7 @@ GET /storage/{blake3_hash}
   no re-signing: the blob is byte-identical on every backend, so its
   identifier is identical on every backend. Any component holding the
   hash can fetch from any provider without a lookup step. `ProviderIndex`
-  in `identikey-storage-auth` maps `file_hash → [provider_urls]` for
+  in `recrypt-storage` maps `file_hash → [provider_urls]` for
   exactly this reason.
 - **Cacheability.** Immutable by hash → infinite cache TTL, cheap
   deduplication at CDN / browser / client levels.
@@ -69,11 +69,12 @@ recrypt; it should not be cited as a motivation.
 
 ### 2. Separation of Concerns
 
-| Service          | Responsibility                    | Trust Level                  |
-| ---------------- | --------------------------------- | ---------------------------- |
-| Auth Service     | Identity, ownership, capabilities | Trusted                      |
-| Recryption Proxy | Key transformation                | Semi-trusted (self-hostable) |
-| S3 Storage       | Blob storage                      | Untrusted (just bytes)       |
+| Service            | Responsibility                    | Trust Level                  |
+| ------------------ | --------------------------------- | ---------------------------- |
+| Auth Service       | Identity, ownership, capabilities | Trusted                      |
+| Storage Service    | Provider registry, blob location   | Trusted (part of auth layer) |
+| Recryption Proxy   | Key transformation                | Semi-trusted (self-hostable) |
+| S3 Storage         | Blob storage                      | Untrusted (just bytes)       |
 
 ### 3. Hosting Agility
 

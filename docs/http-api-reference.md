@@ -107,6 +107,7 @@ HTTP status:
 | 401    | `Unauthorized` / `SignatureInvalid`| Signature verification failed or caller unauthorized |
 | 404    | `NotFound`                         | Account, file, or share does not exist               |
 | 409    | `Conflict`                         | Resource already exists                              |
+| 429    | `TooManyRequests`                  | Rate limit exceeded; retry after backoff             |
 | 500    | `Internal`                         | Server-side failure (storage, serialization, crypto) |
 
 ---
@@ -116,7 +117,8 @@ HTTP status:
 ### 2.1 Health & nonce (public)
 
 #### `GET /health`
-Returns server health. Takes no auth. Response body:
+Returns server health. Takes no auth. Rate limiting does not apply to this endpoint.
+Response body:
 
 ```json
 { "status": "ok", "version": "0.1.0" }
@@ -133,6 +135,26 @@ Issues a fresh nonce. Takes no auth. Response body:
 ```
 
 `expires_at` is Unix seconds.
+
+---
+
+### 2.1a Rate limiting
+
+All endpoints except `GET /health` are subject to rate limiting via `tower-governor`.
+
+**Per-IP rate limiting (global):**
+- 30 requests/second per IP address
+- Burst capacity: 60 requests
+
+**Per-fingerprint rate limiting (authenticated endpoints only):**
+- 100 requests/second per public key fingerprint (from `X-Public-Key` header)
+- Burst capacity: 200 requests
+
+When a rate limit is exceeded, the server returns HTTP `429 Too Many Requests`.
+The response includes `Retry-After` headers indicating how long to wait before retrying.
+
+These limits are configurable via `recrypt-server.toml` or environment variables
+(see §5 for details).
 
 ---
 
@@ -400,15 +422,37 @@ local_path = "/var/lib/recrypt"  # for backend = "local"
 s3_bucket  = "my-bucket"         # for backend = "s3"
 s3_endpoint = "https://s3.example.com"
 
+[persistence]
+backend = "memory"            # "memory" | "sqlite"
+sqlite_path = "/var/lib/recrypt.db"  # for backend = "sqlite"
+
 [nonce]
 window_secs = 300             # replay window (seconds)
 
+[rate_limit]
+per_ip_rps = 30               # per-IP requests/second
+per_ip_burst = 60             # per-IP burst capacity
+per_fingerprint_rps = 100     # per-fingerprint requests/second (auth endpoints)
+per_fingerprint_burst = 200   # per-fingerprint burst capacity
+
 pre_backend = "lattice"       # "mock" | "lattice"
 ```
+
+Environment variable mapping (use `__` for nested keys):
+- `RECRYPT_HOST`, `RECRYPT_PORT`
+- `RECRYPT_STORAGE__BACKEND`, `RECRYPT_STORAGE__S3_BUCKET`, etc.
+- `RECRYPT_PERSISTENCE__BACKEND`, `RECRYPT_PERSISTENCE__SQLITE_PATH`
+- `RECRYPT_NONCE__WINDOW_SECS`
+- `RECRYPT_RATE_LIMIT__PER_IP_RPS`, `RECRYPT_RATE_LIMIT__PER_FINGERPRINT_RPS`, etc.
+- `RECRYPT_PRE_BACKEND`
 
 Notes:
 
 - `pre_backend = "mock"` is fast but **not secure** — test-only.
 - `pre_backend = "lattice"` takes ~2 minutes to initialize on startup and
   requires OpenFHE to be linked (`brew install libomp` on macOS).
-- Storage backend `memory` is volatile and only appropriate for tests.
+- `persistence.backend = "memory"` is volatile and only appropriate for tests.
+- `persistence.backend = "sqlite"` uses `tokio-rusqlite` in WAL mode for
+  production deployments. All stores share a single unified `recrypt.db` file.
+- Secrets (S3 access keys) are set via environment variables only, never
+  committed to `recrypt-server.toml`.

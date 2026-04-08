@@ -292,14 +292,34 @@ grants. It is **trusted**. Capabilities are forgery-resistant via multi-sig.
     messages).
   - Nonce-based replay prevention — timestamp + UUID, 5-minute replay window
     (configurable).
+  - Rate limiting via `tower-governor` — per-IP (30 req/s, burst 60) and
+    per-fingerprint (100 req/s, burst 200) limiting. `GET /health` exempt.
 
-- **State:** `AppState` composing `Arc<dyn BlobStorage>`, `Arc<dyn
-  OwnershipStore>`, `Arc<dyn ProviderIndex>`, `AccountStore`, `ShareStore`,
-  `NonceStore`, and the configured `PreBackend`.
+- **Persistent state:** Four trait-backed stores with in-memory and SQLite
+  implementations:
+  - `AccountStore` — account registration and lookup (from
+    `identikey-storage-auth`).
+  - `ShareStore` — share policy creation/deletion/listing (local to
+    `recrypt-server`).
+  - `NonceStore` — replay prevention with periodic GC (local to
+    `recrypt-server`).
+  - `ProviderIndex` — file location registry (from `recrypt-storage`).
+
+  At startup, `AppState::from_config(&config).await` selects in-memory or
+  SQLite backends based on `config.persistence.backend`. SQLite uses
+  `tokio-rusqlite` in WAL mode with a single unified `recrypt.db` shared
+  across crates.
+
+- **Configuration:** Layered via `figment`: defaults → `recrypt-server.toml`
+  → `RECRYPT_*` env vars (double-underscore for nesting) → CLI flags.
+
+- **State:** `AppState` composing `Arc<dyn AccountStore>`, `Arc<dyn
+  ShareStore>`, `Arc<dyn NonceStore>`, `Arc<dyn BlobStorage>`, `Arc<dyn
+  OwnershipStore>`, `Arc<dyn ProviderIndex>`, and the configured `PreBackend`.
 
 **Does NOT own:** key generation, encryption/decryption of plaintext (it never
-sees plaintext), user secret keys, or persistent databases (in-memory for MVP,
-trait-ready for SQL backends).
+sees plaintext), user secret keys, or authorization policy (delegated to
+`OwnershipStore`).
 
 **Trust posture:** the server is **semi-trusted**. It holds:
 - recrypt keys (client-generated, uploaded by delegator);
