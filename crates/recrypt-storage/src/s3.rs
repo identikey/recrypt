@@ -7,7 +7,7 @@ use aws_sdk_s3::primitives::ByteStream;
 use blake3::Hash;
 
 use crate::error::{StorageError, StorageResult};
-use crate::traits::{ChunkStorage, hash_from_base58, hash_to_base58, raw_hash_to_base58};
+use crate::traits::{BlobStorage, hash_from_base58, hash_to_base58, raw_hash_to_base58};
 
 /// Algorithm prefix for Blake3 hashes (enables future hash agility)
 const HASH_ALG_PREFIX: &str = "b3";
@@ -17,7 +17,7 @@ const HASH_ALG_PREFIX: &str = "b3";
 /// Bucket structure:
 /// ```text
 /// {bucket}/
-///   chunks/b3/{hash_base58}
+///   blob/b3/{hash_base58}
 /// ```
 pub struct S3Storage {
     client: Client,
@@ -31,7 +31,7 @@ impl S3Storage {
         Self {
             client,
             bucket: bucket.into(),
-            prefix: "chunks".into(),
+            prefix: "blob".into(),
         }
     }
 
@@ -118,7 +118,7 @@ impl S3Storage {
 }
 
 #[async_trait]
-impl ChunkStorage for S3Storage {
+impl BlobStorage for S3Storage {
     async fn put(&self, hash: &Hash, data: &[u8]) -> StorageResult<()> {
         // Verify hash before upload
         let computed = blake3::hash(data);
@@ -352,7 +352,7 @@ impl ChunkStorage for S3Storage {
             if let Some(contents) = response.contents {
                 for obj in contents {
                     if let Some(key) = obj.key {
-                        // Extract hash from key: "chunks/b3/{hash_base58}"
+                        // Extract hash from key: "blob/b3/{hash_base58}"
                         if let Some(hash_b58) = key.strip_prefix(&full_prefix)
                             && let Some(hash) = hash_from_base58(hash_b58)
                         {
@@ -369,159 +369,6 @@ impl ChunkStorage for S3Storage {
         }
 
         Ok(hashes)
-    }
-}
-
-// ── Orphan GC ─────────────────────────────────────────────────────────────────
-
-#[cfg(feature = "s3")]
-impl S3Storage {
-    /// Scan S3 storage for orphaned objects and optionally delete them.
-    ///
-    /// Lists all objects under `{prefix}/b3/`, extracts hashes by stripping the
-    /// prefix and the optional `.obao` suffix, then base58-decodes. Deduplicates
-    /// ciphertext + outboard pairs per hash before checking metadata and age.
-    ///
-    /// Key-parsing logic:
-    /// 1. Strip `"{prefix}/b3/"` from the object key.
-    /// 2. If the remainder ends with `.obao`, strip that suffix — it's an outboard.
-    /// 3. Base58-decode the remaining string to obtain the 32-byte hash.
-    /// 4. Keys that don't parse are silently skipped (defensive).
-    pub async fn gc_orphans(
-        &self,
-        metadata: &dyn crate::gc::MetadataIndex,
-        opts: crate::gc::GcOptions,
-    ) -> StorageResult<crate::gc::GcReport> {
-        use std::collections::HashMap;
-        use std::time::{Duration, SystemTime};
-
-        let now = SystemTime::now();
-        let full_prefix = format!("{}/{}/", self.prefix, HASH_ALG_PREFIX);
-        let mut continuation_token: Option<String> = None;
-
-        // Key: hash bytes; Value: (ciphertext_size, outboard_size, last_modified_of_ciphertext)
-        let mut seen: HashMap<[u8; 32], (u64, u64, SystemTime)> = HashMap::new();
-
-        loop {
-            let mut req = self
-                .client
-                .list_objects_v2()
-                .bucket(&self.bucket)
-                .prefix(&full_prefix);
-
-            if let Some(token) = continuation_token.take() {
-                req = req.continuation_token(token);
-            }
-
-            let resp = req
-                .send()
-                .await
-                .map_err(|e| StorageError::Backend(format!("S3 LIST failed during GC: {e}")))?;
-
-            if let Some(contents) = resp.contents {
-                for obj in contents {
-                    let key = match obj.key {
-                        Some(k) => k,
-                        None => continue,
-                    };
-                    let size = obj.size.unwrap_or(0) as u64;
-                    // Convert S3 DateTime (seconds since epoch) to SystemTime.
-                    let last_modified: SystemTime = obj
-                        .last_modified
-                        .map(|dt| {
-                            let secs = dt.secs().max(0) as u64;
-                            SystemTime::UNIX_EPOCH + Duration::from_secs(secs)
-                        })
-                        .unwrap_or(SystemTime::UNIX_EPOCH);
-
-                    // Strip prefix. Remaining: `{b58}` or `{b58}.obao`.
-                    let suffix = match key.strip_prefix(&full_prefix) {
-                        Some(s) => s,
-                        None => continue,
-                    };
-
-                    let (b58, is_outboard) = if let Some(b) = suffix.strip_suffix(".obao") {
-                        (b, true)
-                    } else {
-                        (suffix, false)
-                    };
-
-                    let hash = match hash_from_base58(b58) {
-                        Some(h) => *h.as_bytes(),
-                        None => continue, // skip unrecognised keys defensively
-                    };
-
-                    let entry = seen.entry(hash).or_insert((0, 0, last_modified));
-                    if is_outboard {
-                        entry.1 += size;
-                    } else {
-                        entry.0 += size;
-                        // Use ciphertext's last_modified as canonical age.
-                        entry.2 = last_modified;
-                    }
-                }
-            }
-
-            match resp.next_continuation_token {
-                Some(token) => continuation_token = Some(token),
-                None => break,
-            }
-        }
-
-        // Evaluate each unique hash.
-        let mut report = crate::gc::GcReport::default();
-
-        for (hash_bytes, (ct_size, ob_size, last_modified)) in seen {
-            report.scanned += 1;
-
-            let age = now
-                .duration_since(last_modified)
-                .unwrap_or(Duration::ZERO);
-            if age < opts.max_upload_lifetime {
-                continue;
-            }
-
-            if metadata.has_metadata(&hash_bytes).await? {
-                continue;
-            }
-
-            let b58 = raw_hash_to_base58(&hash_bytes);
-            let ct_key = format!("{}{}", full_prefix, b58);
-            let ob_key = format!("{}{}.obao", full_prefix, b58);
-
-            report.orphans_found += 1;
-            report.bytes_reclaimed += ct_size + ob_size;
-            report.deleted_keys.push(ct_key.clone());
-            if ob_size > 0 {
-                report.deleted_keys.push(ob_key.clone());
-            }
-
-            if !opts.dry_run {
-                self.client
-                    .delete_object()
-                    .bucket(&self.bucket)
-                    .key(&ct_key)
-                    .send()
-                    .await
-                    .map_err(|e| {
-                        StorageError::Backend(format!("S3 DELETE ciphertext failed: {e}"))
-                    })?;
-
-                if ob_size > 0 {
-                    self.client
-                        .delete_object()
-                        .bucket(&self.bucket)
-                        .key(&ob_key)
-                        .send()
-                        .await
-                        .map_err(|e| {
-                            StorageError::Backend(format!("S3 DELETE outboard failed: {e}"))
-                        })?;
-                }
-            }
-        }
-
-        Ok(report)
     }
 }
 

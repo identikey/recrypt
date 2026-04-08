@@ -6,7 +6,7 @@ use recrypt_core::pre::{
     BackendId, PreBackend,
     backends::{LatticeBackend, MockBackend},
 };
-use recrypt_storage::{ChunkStorage, InMemoryStorage, LocalFileStorage};
+use recrypt_storage::{BlobStorage, InMemoryStorage, LocalFileStorage};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -15,7 +15,7 @@ use tokio::sync::RwLock;
 #[derive(Clone)]
 #[allow(dead_code)] // Will be used by route handlers
 pub struct AppState {
-    pub storage: Arc<dyn ChunkStorage>,
+    pub storage: Arc<dyn BlobStorage>,
     pub ownership: Arc<dyn OwnershipStore>,
     pub providers: Arc<dyn ProviderIndex>,
     pub accounts: Arc<RwLock<AccountStore>>,
@@ -150,7 +150,7 @@ impl NonceStore {
 impl AppState {
     pub async fn new(config: &Config) -> anyhow::Result<Self> {
         // Build storage backend
-        let storage: Arc<dyn ChunkStorage> = match config.storage.backend.as_str() {
+        let storage: Arc<dyn BlobStorage> = match config.storage.backend.as_str() {
             "local" => {
                 let path = config
                     .storage

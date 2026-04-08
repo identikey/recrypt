@@ -292,8 +292,8 @@ Issues a fresh nonce. Takes no auth. Response body:
         { "algorithm": "ML-DSA-87", "signature": "<base64>" }
       ]
     },
-    "ciphertext_url": "https://storage.example.com/chunks/b3/...",
-    "outboard_url": "https://storage.example.com/chunks/b3/....obao"
+    "ciphertext_url": "https://storage.example.com/blob/b3/...",
+    "outboard_url": "https://storage.example.com/blob/b3/....obao"
   }
   ```
 

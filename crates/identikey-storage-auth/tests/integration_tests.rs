@@ -7,7 +7,7 @@ use identikey_storage_auth::{
 use recrypt_core::sign::{SigningKeys, VerifyingKeys};
 use recrypt_ffi::ed25519::ed25519_keygen;
 use recrypt_ffi::liboqs::{PqAlgorithm, pq_keygen};
-use recrypt_storage::{ChunkStorage, InMemoryStorage};
+use recrypt_storage::{BlobStorage, InMemoryStorage};
 
 fn test_keys() -> (SigningKeys, VerifyingKeys, PublicKeyFingerprint) {
     let ed_kp = ed25519_keygen();
@@ -51,7 +51,7 @@ async fn test_full_upload_flow() {
     ownership.register(&owner_fp, &file_hash).await.unwrap();
 
     // 3. Register provider location
-    let provider_url = "https://minio.local:9000/recrypt/chunks/b3/".to_string();
+    let provider_url = "https://minio.local:9000/recrypt/blob/b3/".to_string();
     providers.register(&file_hash, &provider_url).await.unwrap();
 
     // Verify

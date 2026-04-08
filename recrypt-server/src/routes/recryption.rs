@@ -56,7 +56,7 @@ pub struct RecryptionShareResponse {
     /// See [`SignatureJson`] for the security note on what this authenticates.
     pub signature: Option<SignatureJson>,
     /// URL the client GETs to fetch the bulk ciphertext.
-    /// Format: `{storage_base_url}/chunks/b3/{base58(bao_hash)}`
+    /// Format: `{storage_base_url}/blob/b3/{base58(bao_hash)}`
     pub ciphertext_url: String,
     /// URL for the bao-tree outboard sibling (`.obao`).
     /// Empty string when the file is ≤ 16 KiB (no outboard stored).
@@ -269,12 +269,12 @@ pub async fn get_recrypted_share(
     let bao_hash_b58 = bs58::encode(&encrypted.bao_hash).into_string();
 
     // Build storage URLs.
-    // Format: {storage_base_url}/chunks/b3/{base58(bao_hash)}
+    // Format: {storage_base_url}/blob/b3/{base58(bao_hash)}
     // Pre-signed URLs are a follow-up (see design doc §8.7). The current threat
     // model accepts that anyone with the bao_hash can fetch the ciphertext, since
     // plaintext is protected by the recrypted wrapped_key_for_recipient.
     let storage_base = build_storage_base_url(&state);
-    let ciphertext_url = format!("{}/chunks/b3/{}", storage_base, bao_hash_b58);
+    let ciphertext_url = format!("{}/blob/b3/{}", storage_base, bao_hash_b58);
     // Outboard URL: empty string signals the client not to fetch it (file ≤ 16 KiB).
     // The server cannot know at this point whether an outboard exists without an
     // extra storage lookup; instead we always provide the URL and the client can
@@ -282,7 +282,7 @@ pub async fn get_recrypted_share(
     // could store this flag in SharePolicy. For now, emit the URL unconditionally;
     // clients that get 404 on .obao treat it as no outboard. This is consistent
     // with how put_with_outboard skips the .obao PUT for small files.
-    let outboard_url = format!("{}/chunks/b3/{}.obao", storage_base, bao_hash_b58);
+    let outboard_url = format!("{}/blob/b3/{}.obao", storage_base, bao_hash_b58);
 
     // Pass through original signature (covers original wrapped_key || bao_hash)
     let signature = encrypted.signature.map(|sig| SignatureJson {

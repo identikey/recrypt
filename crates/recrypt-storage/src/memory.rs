@@ -2,24 +2,22 @@
 
 use std::collections::HashMap;
 use std::sync::RwLock;
-use std::time::SystemTime;
 
 use async_trait::async_trait;
 use blake3::Hash;
 
 use crate::error::{StorageError, StorageResult};
-use crate::traits::{ChunkStorage, hash_to_base58, raw_hash_to_base58};
+use crate::traits::{BlobStorage, hash_to_base58, raw_hash_to_base58};
 
 /// In-memory storage for unit tests
 ///
 /// Thread-safe via `RwLock`. Not persistent — data lost on drop.
 ///
-/// Each chunk entry stores `(data, inserted_at)` so that GC can age-filter
-/// orphans. The `outboards` map is keyed by `"{base58(hash)}.obao"`.
+/// The `outboards` map is keyed by `"{base58(hash)}.obao"`.
 #[derive(Default)]
 pub struct InMemoryStorage {
-    /// Keyed by Blake3 hash; value is `(ciphertext, inserted_at)`.
-    chunks: RwLock<HashMap<Hash, (Vec<u8>, SystemTime)>>,
+    /// Keyed by Blake3 hash; value is ciphertext bytes.
+    blobs: RwLock<HashMap<Hash, Vec<u8>>>,
     /// Outboard blobs keyed by `"{base58(hash)}.obao"`
     outboards: RwLock<HashMap<String, Vec<u8>>>,
 }
@@ -29,9 +27,9 @@ impl InMemoryStorage {
         Self::default()
     }
 
-    /// Number of stored chunks
+    /// Number of stored blobs
     pub fn len(&self) -> usize {
-        self.chunks.read().unwrap().len()
+        self.blobs.read().unwrap().len()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -40,46 +38,23 @@ impl InMemoryStorage {
 
     /// Total bytes stored (ciphertext only, excludes outboards)
     pub fn total_size(&self) -> usize {
-        self.chunks
+        self.blobs
             .read()
             .unwrap()
             .values()
-            .map(|(v, _)| v.len())
+            .map(|v| v.len())
             .sum()
     }
 
-    /// Clear all stored chunks and outboards
+    /// Clear all stored blobs and outboards
     pub fn clear(&self) {
-        self.chunks.write().unwrap().clear();
+        self.blobs.write().unwrap().clear();
         self.outboards.write().unwrap().clear();
-    }
-
-    /// Snapshot entries for GC use: returns `(hash, data_len, inserted_at)`.
-    ///
-    /// Releases the lock before returning so GC can do async work.
-    pub fn snapshot_entries(&self) -> Vec<(Hash, usize, SystemTime)> {
-        self.chunks
-            .read()
-            .unwrap()
-            .iter()
-            .map(|(hash, (data, ts))| (*hash, data.len(), *ts))
-            .collect()
-    }
-
-    /// Byte length of the outboard for a given hash, if present.
-    pub fn outboard_len(&self, hash: &Hash) -> usize {
-        let key = format!("{}.obao", hash_to_base58(hash));
-        self.outboards
-            .read()
-            .unwrap()
-            .get(&key)
-            .map(|v| v.len())
-            .unwrap_or(0)
     }
 }
 
 #[async_trait]
-impl ChunkStorage for InMemoryStorage {
+impl BlobStorage for InMemoryStorage {
     async fn put(&self, hash: &Hash, data: &[u8]) -> StorageResult<()> {
         let computed = blake3::hash(data);
         if computed != *hash {
@@ -89,33 +64,33 @@ impl ChunkStorage for InMemoryStorage {
             });
         }
 
-        self.chunks
+        self.blobs
             .write()
             .unwrap()
-            .insert(*hash, (data.to_vec(), SystemTime::now()));
+            .insert(*hash, data.to_vec());
         Ok(())
     }
 
     async fn get(&self, hash: &Hash) -> StorageResult<Vec<u8>> {
-        self.chunks
+        self.blobs
             .read()
             .unwrap()
             .get(hash)
-            .map(|(data, _)| data.clone())
+            .cloned()
             .ok_or_else(|| StorageError::NotFound(hash_to_base58(hash)))
     }
 
     async fn exists(&self, hash: &Hash) -> StorageResult<bool> {
-        Ok(self.chunks.read().unwrap().contains_key(hash))
+        Ok(self.blobs.read().unwrap().contains_key(hash))
     }
 
     async fn delete(&self, hash: &Hash) -> StorageResult<()> {
-        self.chunks.write().unwrap().remove(hash);
+        self.blobs.write().unwrap().remove(hash);
         Ok(())
     }
 
     async fn list(&self) -> StorageResult<Vec<Hash>> {
-        Ok(self.chunks.read().unwrap().keys().copied().collect())
+        Ok(self.blobs.read().unwrap().keys().copied().collect())
     }
 
     async fn put_with_outboard(
@@ -126,10 +101,10 @@ impl ChunkStorage for InMemoryStorage {
     ) -> StorageResult<()> {
         let b3_hash = blake3::Hash::from(*hash);
         let key = raw_hash_to_base58(hash);
-        self.chunks
+        self.blobs
             .write()
             .unwrap()
-            .insert(b3_hash, (ciphertext, SystemTime::now()));
+            .insert(b3_hash, ciphertext);
         if !outboard.is_empty() {
             self.outboards
                 .write()
@@ -146,11 +121,11 @@ impl ChunkStorage for InMemoryStorage {
         let b3_hash = blake3::Hash::from(*hash);
         let key = raw_hash_to_base58(hash);
         let ciphertext = self
-            .chunks
+            .blobs
             .read()
             .unwrap()
             .get(&b3_hash)
-            .map(|(data, _)| data.clone())
+            .cloned()
             .ok_or_else(|| StorageError::NotFound(key.clone()))?;
         let outboard = self
             .outboards
@@ -168,7 +143,7 @@ impl ChunkStorage for InMemoryStorage {
     ) -> StorageResult<()> {
         let b3_hash = blake3::Hash::from(*hash);
         let key = raw_hash_to_base58(hash);
-        self.chunks.write().unwrap().remove(&b3_hash);
+        self.blobs.write().unwrap().remove(&b3_hash);
         self.outboards
             .write()
             .unwrap()

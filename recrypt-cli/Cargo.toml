@@ -43,12 +43,10 @@ blake3 = "1"
 
 # Time formatting
 chrono = "0.4"
-humantime = "2"
 
 # Errors
 thiserror = "1"
 anyhow = "1"
-async-trait = "0.1"
 
 # Instrumentation
 tracing = "0.1"

@@ -69,7 +69,7 @@ Explicitly **out of scope**:
 | A3   | User ED25519 secret key            | Wallet file + OS keyring cache                   |       ●         |     ●     |      ●       |
 | A4   | User ML-DSA-87 secret key          | Wallet file + OS keyring cache                   |       ●         |     ●     |      ●       |
 | A5   | Recryption keys `rk(Alice→Bob)`    | Server in-memory store                          |       ○         |     ●     |      ●       |
-| A6   | File ciphertexts (`EncryptedFile`) | `ChunkStorage` (S3/local), server pass-through  |       ○         |     ●     |      ●       |
+| A6   | File ciphertexts (`EncryptedFile`) | `BlobStorage` (S3/local), server pass-through  |       ○         |     ●     |      ●       |
 | A7   | Ownership records                  | `OwnershipStore` (SQLite or in-memory)          |       ○         |     ●     |      ●       |
 | A8   | Share policies                     | Server in-memory store                          |       ◐         |     ●     |      ●       |
 | A9   | Wallet password                    | User memory / env var `RECRYPT_WALLET_PASSWORD` |       ●         |     ●     |      ○       |

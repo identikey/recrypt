@@ -27,7 +27,7 @@ aws s3api put-bucket-lifecycle-configuration \
         "ID": "abort-incomplete-multipart",
         "Status": "Enabled",
         "Filter": {
-          "Prefix": "chunks/b3/"
+          "Prefix": "blob/b3/"
         },
         "AbortIncompleteMultipartUpload": {
           "DaysAfterInitiation": 1
@@ -45,7 +45,7 @@ aws s3api put-bucket-lifecycle-configuration \
     <ID>abort-incomplete-multipart</ID>
     <Status>Enabled</Status>
     <Filter>
-      <Prefix>chunks/b3/</Prefix>
+      <Prefix>blob/b3/</Prefix>
     </Filter>
     <AbortIncompleteMultipartUpload>
       <DaysAfterInitiation>1</DaysAfterInitiation>
@@ -58,39 +58,13 @@ aws s3api put-bucket-lifecycle-configuration \
 
 - `DaysAfterInitiation` — number of days before an incomplete upload is aborted.
   Default: 1 (24 hours). Can be reduced to 0 for more aggressive cleanup.
-- `Prefix` — scopes the rule to the `chunks/b3/` prefix where encrypted file
+- `Prefix` — scopes the rule to the `blob/b3/` prefix where encrypted file
   objects live. Does not affect metadata or other buckets.
 
-### Orphan Garbage Collection
-
-Two layers of orphan cleanup work together:
-
-**Layer 1: Storage-level lifecycle rules** (covered above)
-Automatically cleans up incomplete multipart uploads after the grace period.
-
-**Layer 2: Application-level GC**
-
-Run `recrypt-cli admin gc` periodically (e.g., daily cron job) to clean up
-orphaned ciphertext and outboard objects:
-
-```bash
-# Dry run: report what would be deleted
-recrypt-cli admin gc --dry-run
-
-# Actually delete orphans
-recrypt-cli admin gc
-```
-
-The command:
-1. Scans all objects in the `chunks/b3/` prefix
-2. Checks if each object has a metadata record in the auth service
-3. Deletes orphaned ciphertext + outboard pairs (if no dry-run)
-
-**Operational workflow:**
-
-- Run dry-run first to verify the scan found the expected orphans
-- Combine with periodic cron: e.g., `0 2 * * * recrypt-cli admin gc >> /var/log/recrypt-gc.log 2>&1`
-- Monitor logs for unexpected orphan deletions
+> **Note:** Application-level GC (for orphaned fully-uploaded objects with no
+> metadata record) is a planned follow-up feature. It requires a real metadata
+> service client before it can safely delete data. The S3 lifecycle rule above
+> handles the incomplete-multipart-upload case without any application code.
 
 ---
 

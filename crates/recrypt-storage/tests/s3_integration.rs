@@ -5,7 +5,7 @@
 
 #![cfg(feature = "s3-tests")]
 
-use recrypt_storage::{ChunkStorage, S3Storage, StorageError};
+use recrypt_storage::{BlobStorage, S3Storage, StorageError};
 
 async fn setup() -> S3Storage {
     let storage = S3Storage::minio("recrypt-test").await.unwrap();

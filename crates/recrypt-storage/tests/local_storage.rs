@@ -1,6 +1,6 @@
 //! Integration tests for LocalFileStorage
 
-use recrypt_storage::{ChunkStorage, LocalFileStorage, StorageError};
+use recrypt_storage::{BlobStorage, LocalFileStorage, StorageError};
 use tempfile::TempDir;
 
 #[tokio::test]

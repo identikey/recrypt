@@ -262,8 +262,8 @@ async fn test_recryption_share_returns_control_plane_response() {
         "ciphertext_url must contain the bao_hash. url={ciphertext_url}, hash={bao_hash}"
     );
     assert!(
-        ciphertext_url.contains("chunks/b3/"),
-        "ciphertext_url must use chunks/b3/ prefix"
+        ciphertext_url.contains("blob/b3/"),
+        "ciphertext_url must use blob/b3/ prefix"
     );
 
     // 4. Must contain outboard_url

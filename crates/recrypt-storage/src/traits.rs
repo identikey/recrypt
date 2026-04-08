@@ -30,7 +30,7 @@ pub fn raw_hash_to_base58(hash: &[u8; 32]) -> String {
 /// All operations are keyed by Blake3 hash. Implementations must verify
 /// that stored data matches the provided hash (integrity guarantee).
 #[async_trait]
-pub trait ChunkStorage: Send + Sync {
+pub trait BlobStorage: Send + Sync {
     /// Store a chunk by its hash
     ///
     /// Implementations MUST verify that `blake3::hash(data) == hash`.
@@ -62,8 +62,8 @@ pub trait ChunkStorage: Send + Sync {
     // Each encrypted file is stored as two sibling objects keyed by the
     // Blake3 root hash of the ciphertext:
     //
-    //   chunks/b3/{base58(hash)}       — ciphertext blob
-    //   chunks/b3/{base58(hash)}.obao  — bao-tree outboard (omitted for ≤16 KiB)
+    //   blob/b3/{base58(hash)}       — ciphertext blob
+    //   blob/b3/{base58(hash)}.obao  — bao-tree outboard (omitted for ≤16 KiB)
     //
     // When `outboard` is empty the sibling `.obao` object is not stored.
     // `get_with_outboard` returns an empty `Vec` for the outboard in that case.
@@ -82,8 +82,8 @@ pub trait ChunkStorage: Send + Sync {
     /// If `outboard` is empty (file ≤ 16 KiB), the `.obao` sibling is skipped.
     ///
     /// Key format:
-    /// - Ciphertext: `chunks/b3/{base58(hash)}`
-    /// - Outboard:   `chunks/b3/{base58(hash)}.obao`
+    /// - Ciphertext: `blob/b3/{base58(hash)}`
+    /// - Outboard:   `blob/b3/{base58(hash)}.obao`
     async fn put_with_outboard(
         &self,
         hash: &[u8; 32],

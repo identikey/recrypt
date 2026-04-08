@@ -165,7 +165,7 @@ encrypted file: the ciphertext blob and (for blobs > 16 KiB) a sibling
 Bao outboard for streaming verification.
 
 ```
-s3://recrypt-storage/chunks/b3/
+s3://recrypt-storage/blob/b3/
   ├── 2DrjgbLkLvvE6wvQyYCe9XN2Xm9L8dT3FJgKr2HJvAP1          # ciphertext
   ├── 2DrjgbLkLvvE6wvQyYCe9XN2Xm9L8dT3FJgKr2HJvAP1.obao    # bao-tree outboard
   ├── 4Qn8kYr5pW3mVxN7tZ9aB2cD6eF8gH1jK4lM0nPqR3sU
@@ -176,13 +176,13 @@ s3://recrypt-storage/chunks/b3/
 ### Object Naming
 
 ```
-chunks/b3/{base58(blake3(ciphertext))}           # ciphertext blob
-chunks/b3/{base58(blake3(ciphertext))}.obao      # bao-tree outboard sibling (files > 16 KiB)
+blob/b3/{base58(blake3(ciphertext))}           # ciphertext blob
+blob/b3/{base58(blake3(ciphertext))}.obao      # bao-tree outboard sibling (files > 16 KiB)
 ```
 
 **Format rationale:**
 
-- **Flat namespace under `chunks/b3/`.** The BLAKE3 hash is the full identifier.
+- **Flat namespace under `blob/b3/`.** The BLAKE3 hash is the full identifier.
   The prefix enables future object-lifecycle rules (e.g., abort incomplete
   multipart uploads in this prefix).
 - **Base58 encoding** — ~31% shorter than hex, still human-readable, no
@@ -198,7 +198,7 @@ chunks/b3/{base58(blake3(ciphertext))}.obao      # bao-tree outboard sibling (fi
 
 ```rust
 #[async_trait]
-pub trait ChunkStorage: Send + Sync {
+pub trait BlobStorage: Send + Sync {
     /// Store ciphertext and outboard
     async fn put_with_outboard(
         &self,
@@ -218,13 +218,6 @@ pub trait ChunkStorage: Send + Sync {
 
     /// Delete both ciphertext and outboard
     async fn delete_with_outboard(&self, hash: &blake3::Hash) -> Result<()>;
-
-    /// List files and their metadata for GC
-    async fn gc_orphans(
-        &self,
-        metadata: &dyn MetadataIndex,
-        opts: GcOptions,
-    ) -> Result<GcReport>;
 }
 ```
 
@@ -240,44 +233,10 @@ pub trait ChunkStorage: Send + Sync {
 
 ### Orphan Garbage Collection
 
-Files can become orphaned if:
-- A metadata record is deleted but the storage objects remain.
-- An incomplete multipart upload is abandoned (e.g., client crash mid-upload).
-
-Recrypt provides two layers of cleanup:
-
-**Layer 1: Storage-level lifecycle rules**
-
-S3 buckets should have a lifecycle rule to abort incomplete multipart uploads
-after 24 hours. This is a standard S3 bucket configuration (not enforced by
-recrypt code); see the deployment guide for the exact XML rule and CLI command.
-
-**Layer 2: Application-level GC**
-
-The `recrypt-cli admin gc` command calls `ChunkStorage::gc_orphans`, which:
-
-1. Scans all objects in the `chunks/b3/` prefix.
-2. For each object, checks if a metadata record exists via the `MetadataIndex` trait.
-3. In `--dry-run` mode, reports orphans without deleting.
-4. Without `--dry-run`, deletes both `{hash}` and `{hash}.obao` (if present).
-
-```rust
-pub struct GcOptions {
-    pub max_upload_lifetime: Duration,  // age threshold for incomplete multiparts
-    pub dry_run: bool,
-}
-
-pub struct GcReport {
-    pub scanned: u64,
-    pub orphans_found: u64,
-    pub bytes_reclaimed: u64,
-    pub deleted_keys: Vec<blake3::Hash>,
-}
-```
-
-The `MetadataIndex` trait is a minimal interface that the storage layer uses
-to check if a file hash has a metadata record. Implementations exist for in-memory
-testing and SQLite-backed production use.
+S3 buckets have a lifecycle rule to abort incomplete multipart uploads after
+24 hours (see the deployment guide). Application-level GC for fully-uploaded
+orphaned objects (those with no metadata record) is a planned follow-up; it
+requires a real metadata service client before it can safely delete data.
 
 ### Implementations
 

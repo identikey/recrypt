@@ -14,13 +14,13 @@
 //! ## Example
 //!
 //! ```rust,ignore
-//! use recrypt_storage::{ChunkStorage, InMemoryStorage};
+//! use recrypt_storage::{BlobStorage, InMemoryStorage};
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     let storage = InMemoryStorage::new();
 //!
-//!     let data = b"Hello, chunks!";
+//!     let data = b"Hello, blobs!";
 //!     let hash = blake3::hash(data);
 //!
 //!     storage.put(&hash, data).await?;
@@ -40,11 +40,9 @@ mod memory;
 #[cfg(feature = "s3")]
 mod s3;
 
-pub mod gc;
-
 // Re-exports
 pub use error::{StorageError, StorageResult};
-pub use traits::{ChunkStorage, hash_from_base58, hash_to_base58};
+pub use traits::{BlobStorage, hash_from_base58, hash_to_base58};
 
 pub use local::LocalFileStorage;
 pub use memory::InMemoryStorage;

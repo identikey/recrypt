@@ -200,11 +200,11 @@ networking, FFI specifics, or the chunking of large files.
 
 **Owns:**
 
-- **`ChunkStorage` trait** — async, content-addressed by Blake3 hash, with
+- **`BlobStorage` trait** — async, content-addressed by Blake3 hash, with
   defense-in-depth hash verification on both `put` and `get`.
   `put / get / exists / delete / list`.
 - **Backends:** `InMemoryStorage` (tests), `LocalFileStorage` (filesystem,
-  `{root}/chunks/b3/{hash_base58}`), `S3Storage` (feature-gated `s3`, supports
+  `{root}/blob/b3/{hash_base58}`), `S3Storage` (feature-gated `s3`, supports
   S3 / Minio / Backblaze).
 - **`chunking` module:** `Chunk`, `ChunkManifest`, `split()`, `join()`,
   `store_chunked()`, `retrieve_chunked()`. `ChunkManifest` now derives
@@ -222,7 +222,7 @@ Blake3 hash. Content addressing makes blobs immutable by construction.
 **Depends on:** `blake3`, `bs58`, `tokio`, `async-trait`, `serde`,
 `aws-sdk-s3` (optional).
 
-**Downstream:** `recrypt-server` (via `Arc<dyn ChunkStorage>` in `AppState`),
+**Downstream:** `recrypt-server` (via `Arc<dyn BlobStorage>` in `AppState`),
 `identikey-storage-auth` (dev-dep for integration tests).
 
 ---
@@ -293,7 +293,7 @@ grants. It is **trusted**. Capabilities are forgery-resistant via multi-sig.
   - Nonce-based replay prevention — timestamp + UUID, 5-minute replay window
     (configurable).
 
-- **State:** `AppState` composing `Arc<dyn ChunkStorage>`, `Arc<dyn
+- **State:** `AppState` composing `Arc<dyn BlobStorage>`, `Arc<dyn
   OwnershipStore>`, `Arc<dyn ProviderIndex>`, `AccountStore`, `ShareStore`,
   `NonceStore`, and the configured `PreBackend`.
 
@@ -383,7 +383,7 @@ multi-signatures on anything it receives.
                            │                                      ┌──────────────┐   │
   4. files upload          │  POST /files    (body = ciphertext, ─▶│ recrypt-server│  │
                            │                   multi-sig + nonce) │              │   │
-                           │                                      │ ChunkStorage │   │
+                           │                                      │ BlobStorage │   │
                            │                                      │ OwnershipStore│  │
                            │                                      └──────┬───────┘   │
                            │                                             │           │

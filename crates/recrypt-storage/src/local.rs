@@ -7,15 +7,15 @@ use blake3::Hash;
 use tokio::fs;
 
 use crate::error::{StorageError, StorageResult};
-use crate::traits::{ChunkStorage, hash_from_base58, hash_to_base58, raw_hash_to_base58};
+use crate::traits::{BlobStorage, hash_from_base58, hash_to_base58, raw_hash_to_base58};
 
 /// Algorithm prefix for Blake3 hashes (enables future hash agility)
 const HASH_ALG_PREFIX: &str = "b3";
 
 /// Local filesystem storage
 ///
-/// Stores chunks as files named by their base58 hash with algorithm prefix.
-/// Structure: `{root}/chunks/b3/{hash_base58}`
+/// Stores blob as files named by their base58 hash with algorithm prefix.
+/// Structure: `{root}/blob/b3/{hash_base58}`
 pub struct LocalFileStorage {
     root: PathBuf,
 }
@@ -26,28 +26,28 @@ impl LocalFileStorage {
     /// Creates the directory structure if it doesn't exist.
     pub async fn new(root: impl AsRef<Path>) -> StorageResult<Self> {
         let root = root.as_ref().to_path_buf();
-        let chunks_dir = root.join("chunks").join(HASH_ALG_PREFIX);
-        fs::create_dir_all(&chunks_dir).await?;
+        let blob_dir = root.join("blob").join(HASH_ALG_PREFIX);
+        fs::create_dir_all(&blob_dir).await?;
         Ok(Self { root })
     }
 
     fn chunk_path(&self, hash: &Hash) -> PathBuf {
         self.root
-            .join("chunks")
+            .join("blob")
             .join(HASH_ALG_PREFIX)
             .join(hash_to_base58(hash))
     }
 
     fn outboard_path(&self, hash: &[u8; 32]) -> PathBuf {
         self.root
-            .join("chunks")
+            .join("blob")
             .join(HASH_ALG_PREFIX)
             .join(format!("{}.obao", raw_hash_to_base58(hash)))
     }
 }
 
 #[async_trait]
-impl ChunkStorage for LocalFileStorage {
+impl BlobStorage for LocalFileStorage {
     async fn put(&self, hash: &Hash, data: &[u8]) -> StorageResult<()> {
         let computed = blake3::hash(data);
         if computed != *hash {
@@ -98,10 +98,10 @@ impl ChunkStorage for LocalFileStorage {
     }
 
     async fn list(&self) -> StorageResult<Vec<Hash>> {
-        let chunks_dir = self.root.join("chunks").join(HASH_ALG_PREFIX);
+        let blob_dir = self.root.join("blob").join(HASH_ALG_PREFIX);
         let mut hashes = Vec::new();
 
-        let mut entries = fs::read_dir(&chunks_dir).await?;
+        let mut entries = fs::read_dir(&blob_dir).await?;
         while let Some(entry) = entries.next_entry().await? {
             if let Some(name) = entry.file_name().to_str()
                 && let Some(hash) = hash_from_base58(name)
