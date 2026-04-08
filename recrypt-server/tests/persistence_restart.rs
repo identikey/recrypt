@@ -59,7 +59,6 @@ async fn sqlite_persistence_survives_restart() {
         fingerprint: fp.to_base58(),
         ed25519_pk: ed25519_pk.clone(),
         ml_dsa_pk: vec![8u8; 64],
-        pre_pk: None,
         created_at: 100,
     };
     state

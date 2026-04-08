@@ -41,7 +41,6 @@ impl SqliteAccountStore {
                     fingerprint TEXT PRIMARY KEY,
                     ed25519_pk  BLOB NOT NULL,
                     ml_dsa_pk   BLOB NOT NULL,
-                    pre_pk      BLOB,
                     created_at  INTEGER NOT NULL
                 );
                 "#,
@@ -67,8 +66,7 @@ fn row_to_record(row: &rusqlite::Row<'_>) -> rusqlite::Result<AccountRecord> {
         fingerprint: row.get(0)?,
         ed25519_pk: row.get(1)?,
         ml_dsa_pk: row.get(2)?,
-        pre_pk: row.get(3)?,
-        created_at: row.get::<_, i64>(4)? as u64,
+        created_at: row.get::<_, i64>(3)? as u64,
     })
 }
 
@@ -80,13 +78,12 @@ impl AccountStore for SqliteAccountStore {
                 let tx = c.transaction()?;
                 tx.execute(
                     "INSERT OR REPLACE INTO accounts
-                     (fingerprint, ed25519_pk, ml_dsa_pk, pre_pk, created_at)
-                     VALUES (?, ?, ?, ?, ?)",
+                     (fingerprint, ed25519_pk, ml_dsa_pk, created_at)
+                     VALUES (?, ?, ?, ?)",
                     rusqlite::params![
                         record.fingerprint,
                         record.ed25519_pk,
                         record.ml_dsa_pk,
-                        record.pre_pk,
                         record.created_at as i64,
                     ],
                 )?;
@@ -102,7 +99,7 @@ impl AccountStore for SqliteAccountStore {
         self.conn
             .call(move |c| {
                 let mut stmt = c.prepare(
-                    "SELECT fingerprint, ed25519_pk, ml_dsa_pk, pre_pk, created_at
+                    "SELECT fingerprint, ed25519_pk, ml_dsa_pk, created_at
                      FROM accounts WHERE fingerprint = ?",
                 )?;
                 let mut rows = stmt.query([fp])?;
@@ -142,7 +139,6 @@ mod tests {
             fingerprint: fp.to_base58(),
             ed25519_pk: pk,
             ml_dsa_pk: vec![seed; 64],
-            pre_pk: Some(vec![seed; 16]),
             created_at: 100,
         }
     }
@@ -163,7 +159,6 @@ mod tests {
         assert_eq!(got.fingerprint, r.fingerprint);
         assert_eq!(got.ed25519_pk, r.ed25519_pk);
         assert_eq!(got.ml_dsa_pk, r.ml_dsa_pk);
-        assert_eq!(got.pre_pk, r.pre_pk);
         assert_eq!(got.created_at, r.created_at);
     }
 }

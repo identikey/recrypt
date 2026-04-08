@@ -12,9 +12,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize)]
 pub struct CreateAccountRequest {
-    pub ed25519_pk: String,     // base58
-    pub ml_dsa_pk: String,      // base58
-    pub pre_pk: Option<String>, // base58, optional
+    pub ed25519_pk: String, // base58
+    pub ml_dsa_pk: String,  // base58
 }
 
 #[derive(Serialize)]
@@ -22,7 +21,6 @@ pub struct AccountResponse {
     pub fingerprint: String,
     pub ed25519_pk: String,
     pub ml_dsa_pk: String,
-    pub pre_pk: Option<String>,
     pub created_at: u64,
 }
 
@@ -41,12 +39,6 @@ pub async fn create_account(
     let ml_dsa_pk = bs58::decode(&body.ml_dsa_pk)
         .into_vec()
         .map_err(|_| ServerError::BadRequest("Invalid base58 in ml_dsa_pk".into()))?;
-    let pre_pk = body
-        .pre_pk
-        .as_ref()
-        .map(|s| bs58::decode(s).into_vec())
-        .transpose()
-        .map_err(|_| ServerError::BadRequest("Invalid base58 in pre_pk".into()))?;
 
     // Compute fingerprint from ED25519 public key
     let fingerprint = compute_fingerprint(&ed25519_pk);
@@ -60,11 +52,8 @@ pub async fn create_account(
 
     // Build message to verify
     let message = format!(
-        "CREATE:{}:{}:{}:{}",
-        body.ed25519_pk,
-        body.ml_dsa_pk,
-        body.pre_pk.as_deref().unwrap_or(""),
-        sig_headers.nonce
+        "CREATE:{}:{}:{}",
+        body.ed25519_pk, body.ml_dsa_pk, sig_headers.nonce
     );
 
     // Verify signature
@@ -91,7 +80,6 @@ pub async fn create_account(
         fingerprint: fingerprint.clone(),
         ed25519_pk: ed25519_pk.clone(),
         ml_dsa_pk: ml_dsa_pk.clone(),
-        pre_pk: pre_pk.clone(),
         created_at: now,
     };
 
@@ -107,7 +95,6 @@ pub async fn create_account(
             fingerprint,
             ed25519_pk: body.ed25519_pk,
             ml_dsa_pk: body.ml_dsa_pk,
-            pre_pk: body.pre_pk,
             created_at: now,
         }),
     ))
@@ -131,10 +118,6 @@ pub async fn get_account(
         fingerprint: account.fingerprint.clone(),
         ed25519_pk: bs58::encode(&account.ed25519_pk).into_string(),
         ml_dsa_pk: bs58::encode(&account.ml_dsa_pk).into_string(),
-        pre_pk: account
-            .pre_pk
-            .as_ref()
-            .map(|pk| bs58::encode(pk).into_string()),
         created_at: account.created_at,
     }))
 }

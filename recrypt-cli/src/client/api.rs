@@ -42,17 +42,13 @@ impl ApiClient {
         let request_body = RegisterRequest {
             ed25519_pk: identity.ed25519.public.clone(),
             ml_dsa_pk: identity.ml_dsa.public.clone(),
-            pre_pk: Some(identity.pre.public.clone()),
         };
 
         let nonce = self.fetch_nonce().await?;
 
         let message = format!(
-            "CREATE:{}:{}:{}:{}",
-            request_body.ed25519_pk,
-            request_body.ml_dsa_pk,
-            request_body.pre_pk.as_deref().unwrap_or(""),
-            nonce
+            "CREATE:{}:{}:{}",
+            request_body.ed25519_pk, request_body.ml_dsa_pk, nonce
         );
 
         let auth =
@@ -301,7 +297,6 @@ impl ApiClient {
 struct RegisterRequest {
     ed25519_pk: String,
     ml_dsa_pk: String,
-    pre_pk: Option<String>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -309,7 +304,6 @@ pub struct RegisterResponse {
     pub fingerprint: String,
     pub ed25519_pk: String,
     pub ml_dsa_pk: String,
-    pub pre_pk: Option<String>,
     pub created_at: u64,
 }
 
@@ -318,7 +312,6 @@ pub struct AccountInfo {
     pub fingerprint: String,
     pub ed25519_pk: String,
     pub ml_dsa_pk: String,
-    pub pre_pk: Option<String>,
     pub created_at: u64,
 }
 

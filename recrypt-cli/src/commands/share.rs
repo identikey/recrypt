@@ -4,8 +4,6 @@ use colored::Colorize;
 use serde::Serialize;
 use std::fs;
 
-use recrypt_core::pre::{PreBackend, PublicKey, SecretKey};
-
 use super::helpers::{resolve_identity, resolve_server_url};
 use super::Context;
 use crate::client::ApiClient;
@@ -56,72 +54,15 @@ pub async fn run(action: ShareCommand, ctx: &Context) -> Result<()> {
     }
 }
 
-async fn create(file_hash: String, to_fingerprint: String, ctx: &Context) -> Result<()> {
-    let wallet = Wallet::load(ctx.wallet_override.as_deref())?;
-    let config = Config::load()?;
-
-    let identity_name = resolve_identity(ctx, &wallet)?;
-    let identity = wallet
-        .data
-        .identities
-        .get(&identity_name)
-        .ok_or_else(|| anyhow::anyhow!("Identity '{identity_name}' not found"))?;
-
-    let server_url = resolve_server_url(ctx, &config)?;
-
-    // Fetch recipient's account to get their PRE public key
-    let client = ApiClient::new(server_url);
-    let recipient_account = client
-        .get_account(&to_fingerprint)
-        .await
-        .context("Failed to fetch recipient account")?;
-
-    // Parse keys using the identity's stored backend
-    let my_backend_id = identity.pre_backend;
-    let my_pre_sk_bytes = bs58::decode(&identity.pre.secret)
-        .into_vec()
-        .context("Failed to decode my PRE secret key")?;
-
-    let recipient_pre_pk_str = recipient_account
-        .pre_pk
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("Recipient has no PRE public key"))?;
-
-    let recipient_pre_pk_bytes = bs58::decode(recipient_pre_pk_str)
-        .into_vec()
-        .context("Failed to decode recipient PRE public key")?;
-
-    // Both keys must use the same backend for recryption to work
-    // TODO: In the future, we might support cross-backend recryption via key translation
-    let my_pre_sk = SecretKey::new(my_backend_id, my_pre_sk_bytes);
-    let recipient_pre_pk = PublicKey::new(my_backend_id, recipient_pre_pk_bytes);
-
-    // Create backend and generate recrypt key
-    let backend = super::create_backend_from_id(my_backend_id)?;
-    let recrypt_key = backend
-        .generate_recrypt_key(&my_pre_sk, &recipient_pre_pk)
-        .context("Failed to generate recrypt key")?;
-
-    // Create share
-    let response = client
-        .create_share(
-            identity,
-            file_hash.clone(),
-            to_fingerprint.clone(),
-            recrypt_key.to_bytes(), // Serialize recrypt key
-            my_backend_id,          // Pass backend ID for server-side recrypt
-        )
-        .await?;
-
-    if ctx.json_output {
-        print_json(&response)?;
-    } else {
-        print_success(format!("Created share for {to_fingerprint}"));
-        println!("  {}: {}", "Share ID".dimmed(), response.share_id);
-        println!("  {}: {}", "File Hash".dimmed(), file_hash);
-    }
-
-    Ok(())
+async fn create(_file_hash: String, _to_fingerprint: String, _ctx: &Context) -> Result<()> {
+    // NOTE: `pre_pk` was removed from `AccountRecord` — PRE public keys are
+    // capability artifacts, not identity. The share flow will be reworked to
+    // source the recipient's PRE public key from a Keyspace/Grant capability
+    // in a forthcoming sprint. Until then, sharing is disabled.
+    anyhow::bail!(
+        "Sharing is temporarily disabled: recipient PRE public keys are no longer \
+         stored on account records. Pending the Keyspace/Grant sprint."
+    )
 }
 
 async fn list(filter_from: bool, filter_to: bool, ctx: &Context) -> Result<()> {

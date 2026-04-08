@@ -15,7 +15,6 @@ pub struct AccountRecord {
     pub fingerprint: String,
     pub ed25519_pk: Vec<u8>,
     pub ml_dsa_pk: Vec<u8>,
-    pub pre_pk: Option<Vec<u8>>,
     pub created_at: u64,
 }
 
@@ -73,7 +72,6 @@ mod tests {
             fingerprint: format!("fp-{seed}"),
             ed25519_pk: vec![seed; 32],
             ml_dsa_pk: vec![seed; 64],
-            pre_pk: None,
             created_at: 1,
         }
     }

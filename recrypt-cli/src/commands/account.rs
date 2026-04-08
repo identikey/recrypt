@@ -95,9 +95,6 @@ async fn show(fingerprint_override: Option<String>, ctx: &Context) -> Result<()>
             "ML-DSA Key".dimmed(),
             truncate(&account.ml_dsa_pk, 32)
         );
-        if let Some(ref pre_pk) = account.pre_pk {
-            println!("  {}: {}", "PRE Key".dimmed(), truncate(pre_pk, 32));
-        }
         println!(
             "  {}: {}",
             "Created".dimmed(),

@@ -59,7 +59,7 @@ pub use account::{AccountRecord, AccountStore, InMemoryAccountStore};
 pub use capability::{Capability, Operation};
 pub use error::{AuthError, AuthResult};
 pub use fingerprint::PublicKeyFingerprint;
-pub use grant::AccessGrant;
+pub use grant::{AccessGrant, GrantId, GrantStore, InMemoryGrantStore};
 pub use ownership::OwnershipStore;
 
 pub use memory::InMemoryOwnershipStore;
