@@ -7,7 +7,7 @@ description = "Authorization layer for content-addressed storage"
 
 [features]
 default = []
-sqlite = ["rusqlite"]
+sqlite = ["rusqlite", "tokio-rusqlite"]
 
 [dependencies]
 # Workspace
@@ -22,10 +22,12 @@ blake3 = "1"
 bs58.workspace = true
 
 # Serialization
+serde = { version = "1", features = ["derive"] }
 serde_json.workspace = true
 
 # SQLite (optional)
 rusqlite = { workspace = true, optional = true }
+tokio-rusqlite = { workspace = true, optional = true }
 
 [dev-dependencies]
 recrypt-ffi = { path = "../recrypt-ffi" }

@@ -1,7 +1,7 @@
 # Production Readiness: Persistence, Boundaries, Config, Rate Limiting
 
 **Date:** 2026-04-07
-**Status:** 📋 Proposed — awaiting implementation
+**Status:** ✅ Implemented
 **Phase:** 8 (Documentation & Deployment) / pre-9
 **Depends on:** none (can land before or alongside
 [bao-streaming-and-storage-simplification](2026-04-06-bao-streaming-and-storage-simplification.md))
@@ -400,7 +400,7 @@ the latter). Pre-1.0 schema churn is acceptable.
   - [recrypt-server/src/state.rs](../../recrypt-server/src/state.rs)
   - [recrypt-server/src/routes/](../../recrypt-server/src/routes/)
 - Existing SQLite patterns in `identikey-storage-auth`:
-  - [crates/identikey-storage-auth/src/sqlite.rs](../../crates/identikey-storage-auth/src/sqlite.rs)
+  - [crates/identikey-storage-auth/src/sqlite/](../../crates/identikey-storage-auth/src/sqlite/)
 - [`tokio-rusqlite` docs](https://docs.rs/tokio-rusqlite)
 - [`figment` docs](https://docs.rs/figment)
 - [`tower-governor` docs](https://docs.rs/tower_governor)
@@ -408,3 +408,15 @@ the latter). Pre-1.0 schema churn is acceptable.
   - [2026-04-06-bao-streaming-and-storage-simplification.md](2026-04-06-bao-streaming-and-storage-simplification.md)
   - [2026-04-07-group-sharing.md](2026-04-07-group-sharing.md) (next)
   - [2026-04-07-next-steps-backlog.md](2026-04-07-next-steps-backlog.md) (backlog)
+
+---
+
+## 7. Changelog
+
+During implementation, the following execution decisions were made:
+
+- **tokio-rusqlite:** Bumped from 0.5 to 0.7 for improved async integration
+- **rusqlite:** Bumped from 0.32 to 0.37 for compatibility with tokio-rusqlite 0.7
+- **tower_governor:** Bumped from 0.4 to 0.7 for enhanced rate-limiting features
+- **Nonce GC lifecycle:** Implemented via Drop guard on `NonceGcHandle` held by `AppState`. The tokio interval task (60s period calling `nonces.gc_expired()`) aborts cleanly when the last `AppState` clone drops.
+- **SQLite file layout:** Single unified `recrypt.db` chosen (Question 5.3 resolved). All three stores (`AccountStore`, `ShareStore`, `NonceStore`) share ONE `tokio_rusqlite::Connection`. Auth service `OwnershipStore` and `ProviderIndex` coordinate schema across crates with a shared `schema_version` table for migrations.

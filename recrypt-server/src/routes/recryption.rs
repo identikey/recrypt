@@ -92,18 +92,26 @@ pub async fn create_share(
 
     // Look up sender's account
     let sender_account = {
-        let accounts = state.accounts.read().await;
-        accounts
+        let fp = identikey_storage_auth::PublicKeyFingerprint::from_base58(&from_fingerprint)
+            .ok_or_else(|| ServerError::BadRequest("Invalid fingerprint".into()))?;
+        state
             .accounts
-            .get(&from_fingerprint)
+            .get(&fp)
+            .await
+            .map_err(|e| ServerError::Internal(format!("AccountStore error: {e}")))?
             .ok_or_else(|| ServerError::NotFound("Sender account not found".into()))?
-            .clone()
     };
 
     // Verify recipient exists
     {
-        let accounts = state.accounts.read().await;
-        if !accounts.accounts.contains_key(&body.to_fingerprint) {
+        let to_fp = identikey_storage_auth::PublicKeyFingerprint::from_base58(&body.to_fingerprint)
+            .ok_or_else(|| ServerError::BadRequest("Invalid recipient fingerprint".into()))?;
+        if !state
+            .accounts
+            .exists(&to_fp)
+            .await
+            .map_err(|e| ServerError::Internal(format!("AccountStore error: {e}")))?
+        {
             return Err(ServerError::NotFound("Recipient account not found".into()));
         }
     }
@@ -167,10 +175,7 @@ pub async fn create_share(
         created_at: now,
     };
 
-    {
-        let mut shares = state.shares.write().await;
-        shares.shares.insert(share_id.clone(), policy);
-    }
+    state.shares.create(policy).await?;
 
     Ok((
         StatusCode::CREATED,
@@ -199,14 +204,11 @@ pub async fn get_recrypted_share(
     let requester_fingerprint = sig_headers.fingerprint.clone();
 
     // Look up share
-    let policy = {
-        let shares = state.shares.read().await;
-        shares
-            .shares
-            .get(&share_id)
-            .ok_or_else(|| ServerError::NotFound("Share not found".into()))?
-            .clone()
-    };
+    let policy = state
+        .shares
+        .get(&share_id)
+        .await?
+        .ok_or_else(|| ServerError::NotFound("Share not found".into()))?;
 
     // Verify requester is the intended recipient
     if policy.to_fingerprint != requester_fingerprint {
@@ -217,12 +219,14 @@ pub async fn get_recrypted_share(
 
     // Look up requester's account for signature verification
     let requester_account = {
-        let accounts = state.accounts.read().await;
-        accounts
+        let fp = identikey_storage_auth::PublicKeyFingerprint::from_base58(&requester_fingerprint)
+            .ok_or_else(|| ServerError::BadRequest("Invalid fingerprint".into()))?;
+        state
             .accounts
-            .get(&requester_fingerprint)
+            .get(&fp)
+            .await
+            .map_err(|e| ServerError::Internal(format!("AccountStore error: {e}")))?
             .ok_or_else(|| ServerError::NotFound("Requester account not found".into()))?
-            .clone()
     };
 
     // Verify request signature
@@ -328,14 +332,11 @@ pub async fn revoke_share(
     let requester_fingerprint = sig_headers.fingerprint.clone();
 
     // Look up share
-    let policy = {
-        let shares = state.shares.read().await;
-        shares
-            .shares
-            .get(&share_id)
-            .ok_or_else(|| ServerError::NotFound("Share not found".into()))?
-            .clone()
-    };
+    let policy = state
+        .shares
+        .get(&share_id)
+        .await?
+        .ok_or_else(|| ServerError::NotFound("Share not found".into()))?;
 
     // Verify requester is the owner
     if policy.from_fingerprint != requester_fingerprint {
@@ -346,12 +347,14 @@ pub async fn revoke_share(
 
     // Look up requester's account
     let requester_account = {
-        let accounts = state.accounts.read().await;
-        accounts
+        let fp = identikey_storage_auth::PublicKeyFingerprint::from_base58(&requester_fingerprint)
+            .ok_or_else(|| ServerError::BadRequest("Invalid fingerprint".into()))?;
+        state
             .accounts
-            .get(&requester_fingerprint)
+            .get(&fp)
+            .await
+            .map_err(|e| ServerError::Internal(format!("AccountStore error: {e}")))?
             .ok_or_else(|| ServerError::NotFound("Account not found".into()))?
-            .clone()
     };
 
     // Verify signature
@@ -367,10 +370,7 @@ pub async fn revoke_share(
     )?;
 
     // Remove share
-    {
-        let mut shares = state.shares.write().await;
-        shares.shares.remove(&share_id);
-    }
+    state.shares.delete(&share_id).await?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -394,12 +394,14 @@ pub async fn list_shares(
 
     // Look up account
     let account = {
-        let accounts = state.accounts.read().await;
-        accounts
+        let fp = identikey_storage_auth::PublicKeyFingerprint::from_base58(&fingerprint)
+            .ok_or_else(|| ServerError::BadRequest("Invalid fingerprint".into()))?;
+        state
             .accounts
-            .get(&fingerprint)
+            .get(&fp)
+            .await
+            .map_err(|e| ServerError::Internal(format!("AccountStore error: {e}")))?
             .ok_or_else(|| ServerError::NotFound("Account not found".into()))?
-            .clone()
     };
 
     // Verify signature
@@ -411,14 +413,14 @@ pub async fn list_shares(
         &account.ml_dsa_pk,
     )?;
 
-    // Filter shares
-    let shares = state.shares.read().await;
-    let outgoing: Vec<ShareInfo> = shares
+    // Filter shares via the trait
+    let outgoing: Vec<ShareInfo> = state
         .shares
-        .iter()
-        .filter(|(_, policy)| policy.from_fingerprint == fingerprint)
-        .map(|(id, policy)| ShareInfo {
-            share_id: id.clone(),
+        .list_outgoing(&fingerprint)
+        .await?
+        .into_iter()
+        .map(|policy| ShareInfo {
+            share_id: policy.id.clone(),
             from_fingerprint: policy.from_fingerprint.clone(),
             to_fingerprint: policy.to_fingerprint.clone(),
             file_hash: bs58::encode(policy.file_hash.as_bytes()).into_string(),
@@ -426,12 +428,13 @@ pub async fn list_shares(
         })
         .collect();
 
-    let incoming: Vec<ShareInfo> = shares
+    let incoming: Vec<ShareInfo> = state
         .shares
-        .iter()
-        .filter(|(_, policy)| policy.to_fingerprint == fingerprint)
-        .map(|(id, policy)| ShareInfo {
-            share_id: id.clone(),
+        .list_incoming(&fingerprint)
+        .await?
+        .into_iter()
+        .map(|policy| ShareInfo {
+            share_id: policy.id.clone(),
             from_fingerprint: policy.from_fingerprint.clone(),
             to_fingerprint: policy.to_fingerprint.clone(),
             file_hash: bs58::encode(policy.file_hash.as_bytes()).into_string(),

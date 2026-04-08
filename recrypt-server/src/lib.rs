@@ -3,5 +3,7 @@
 pub mod config;
 pub mod error;
 pub mod middleware;
+pub mod nonces;
 pub mod routes;
+pub mod shares;
 pub mod state;

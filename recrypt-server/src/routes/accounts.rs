@@ -1,12 +1,13 @@
 use crate::error::{ServerError, ServerResult};
 use crate::middleware::{extract_signature_headers, verify_multisig};
-use crate::state::{Account, AppState};
+use crate::state::AppState;
 use axum::http::HeaderMap;
 use axum::{
     Json,
     extract::{Path, State},
     http::StatusCode,
 };
+use identikey_storage_auth::{AccountRecord, PublicKeyFingerprint};
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize)]
@@ -70,11 +71,14 @@ pub async fn create_account(
     verify_multisig(message.as_bytes(), &sig_headers, &ed25519_pk, &ml_dsa_pk)?;
 
     // Check for conflict
+    let fp = PublicKeyFingerprint::from_public_key(&ed25519_pk);
+    if state
+        .accounts
+        .exists(&fp)
+        .await
+        .map_err(|e| ServerError::Internal(format!("AccountStore error: {e}")))?
     {
-        let accounts = state.accounts.read().await;
-        if accounts.accounts.contains_key(&fingerprint) {
-            return Err(ServerError::Conflict("Account already exists".into()));
-        }
+        return Err(ServerError::Conflict("Account already exists".into()));
     }
 
     // Create account
@@ -83,7 +87,7 @@ pub async fn create_account(
         .unwrap()
         .as_secs();
 
-    let account = Account {
+    let record = AccountRecord {
         fingerprint: fingerprint.clone(),
         ed25519_pk: ed25519_pk.clone(),
         ml_dsa_pk: ml_dsa_pk.clone(),
@@ -91,10 +95,11 @@ pub async fn create_account(
         created_at: now,
     };
 
-    {
-        let mut accounts = state.accounts.write().await;
-        accounts.accounts.insert(fingerprint.clone(), account);
-    }
+    state
+        .accounts
+        .register(record)
+        .await
+        .map_err(|e| ServerError::Internal(format!("AccountStore error: {e}")))?;
 
     Ok((
         StatusCode::CREATED,
@@ -113,10 +118,13 @@ pub async fn get_account(
     State(state): State<AppState>,
     Path(fingerprint): Path<String>,
 ) -> ServerResult<Json<AccountResponse>> {
-    let accounts = state.accounts.read().await;
-    let account = accounts
+    let fp = PublicKeyFingerprint::from_base58(&fingerprint)
+        .ok_or_else(|| ServerError::BadRequest("Invalid fingerprint".into()))?;
+    let account = state
         .accounts
-        .get(&fingerprint)
+        .get(&fp)
+        .await
+        .map_err(|e| ServerError::Internal(format!("AccountStore error: {e}")))?
         .ok_or_else(|| ServerError::NotFound("Account not found".into()))?;
 
     Ok(Json(AccountResponse {

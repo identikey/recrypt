@@ -65,4 +65,4 @@ pub use ownership::OwnershipStore;
 pub use memory::InMemoryOwnershipStore;
 
 #[cfg(feature = "sqlite")]
-pub use sqlite::SqliteOwnershipStore;
+pub use sqlite::{SqliteAccountStore, SqliteOwnershipStore};

@@ -13,8 +13,10 @@ impl TestServer {
             host: "127.0.0.1".into(),
             port: 0, // OS assigns port
             storage: Default::default(),
+            persistence: Default::default(),
             nonce: Default::default(),
             pre_backend: "mock".into(),
+            rate_limit: Default::default(),
         };
 
         let state = recrypt_server::state::AppState::new(&config).await.unwrap();
@@ -24,7 +26,12 @@ impl TestServer {
         let addr = listener.local_addr().unwrap();
 
         tokio::spawn(async move {
-            axum::serve(listener, app).await.unwrap();
+            axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .await
+            .unwrap();
         });
 
         // Give server a moment to start

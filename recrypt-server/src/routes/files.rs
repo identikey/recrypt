@@ -29,12 +29,14 @@ pub async fn upload_file(
 
     // Look up uploader's account
     let account = {
-        let accounts = state.accounts.read().await;
-        accounts
+        let fp = identikey_storage_auth::PublicKeyFingerprint::from_base58(&sig_headers.fingerprint)
+            .ok_or_else(|| ServerError::BadRequest("Invalid fingerprint".into()))?;
+        state
             .accounts
-            .get(&sig_headers.fingerprint)
+            .get(&fp)
+            .await
+            .map_err(|e| ServerError::Internal(format!("AccountStore error: {e}")))?
             .ok_or_else(|| ServerError::NotFound("Account not found".into()))?
-            .clone()
     };
 
     // Compute hash
@@ -130,12 +132,14 @@ pub async fn delete_file(
 
     // Look up account
     let account = {
-        let accounts = state.accounts.read().await;
-        accounts
+        let fp = identikey_storage_auth::PublicKeyFingerprint::from_base58(&sig_headers.fingerprint)
+            .ok_or_else(|| ServerError::BadRequest("Invalid fingerprint".into()))?;
+        state
             .accounts
-            .get(&sig_headers.fingerprint)
+            .get(&fp)
+            .await
+            .map_err(|e| ServerError::Internal(format!("AccountStore error: {e}")))?
             .ok_or_else(|| ServerError::NotFound("Account not found".into()))?
-            .clone()
     };
 
     // Verify ownership

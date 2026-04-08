@@ -1,155 +1,58 @@
 use crate::config::Config;
-use identikey_storage_auth::{InMemoryOwnershipStore, OwnershipStore};
+use crate::nonces::{InMemoryNonceStore, NonceStore, SqliteNonceStore};
+use crate::shares::{InMemoryShareStore, ShareStore, SqliteShareStore};
+use identikey_storage_auth::{
+    AccountStore, InMemoryAccountStore, InMemoryOwnershipStore, OwnershipStore,
+    SqliteAccountStore,
+};
 use recrypt_core::pre::{
-    BackendId, PreBackend,
+    PreBackend,
     backends::{LatticeBackend, MockBackend},
 };
 use recrypt_storage::{
     BlobStorage, InMemoryProviderIndex, InMemoryStorage, LocalFileStorage, ProviderIndex,
 };
-use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use std::time::Duration;
+use tokio::task::JoinHandle;
 
-/// Shared application state
+// Re-export so existing route handlers (`use crate::state::SharePolicy`) keep working.
+pub use crate::shares::SharePolicy;
+
+/// Shared application state.
 #[derive(Clone)]
-#[allow(dead_code)] // Will be used by route handlers
+#[allow(dead_code)]
 pub struct AppState {
     pub storage: Arc<dyn BlobStorage>,
     pub ownership: Arc<dyn OwnershipStore>,
     pub providers: Arc<dyn ProviderIndex>,
-    pub accounts: Arc<RwLock<AccountStore>>,
-    pub shares: Arc<RwLock<ShareStore>>,
-    pub nonces: Arc<RwLock<NonceStore>>,
+    pub accounts: Arc<dyn AccountStore>,
+    pub shares: Arc<dyn ShareStore>,
+    pub nonces: Arc<dyn NonceStore>,
     pub config: Arc<Config>,
-    /// PRE backend for recryption ops (initialized once at startup, thread-safe after)
+    /// PRE backend (immutable after startup).
     pub pre_backend: Arc<dyn PreBackend + Send + Sync>,
+    /// Background nonce-GC task handle. Wrapped in `Arc` so `AppState: Clone`.
+    /// GC task lifecycle: tied to AppState; aborts on drop via JoinHandle.
+    pub nonce_gc: Arc<NonceGcHandle>,
 }
 
-/// In-memory account storage (Phase 5 MVP)
-#[allow(dead_code)] // Will be used by route handlers
-pub struct AccountStore {
-    pub accounts: HashMap<String, Account>, // fingerprint -> account
-}
+/// Drop guard that aborts the nonce-GC task when the last `AppState` clone is
+/// dropped.
+pub struct NonceGcHandle(JoinHandle<()>);
 
-#[derive(Clone, Debug)]
-#[allow(dead_code)] // Will be used by route handlers
-pub struct Account {
-    pub fingerprint: String,
-    pub ed25519_pk: Vec<u8>,
-    pub ml_dsa_pk: Vec<u8>,
-    pub pre_pk: Option<Vec<u8>>,
-    pub created_at: u64,
-}
-
-/// Share policy storage
-#[allow(dead_code)] // Will be used by route handlers
-pub struct ShareStore {
-    pub shares: HashMap<String, SharePolicy>, // share_id -> policy
-}
-
-#[derive(Clone, Debug)]
-#[allow(dead_code)] // Will be used by route handlers
-pub struct SharePolicy {
-    pub id: String,
-    pub from_fingerprint: String,
-    pub to_fingerprint: String,
-    pub file_hash: blake3::Hash,
-    pub recrypt_key: Vec<u8>,
-    pub backend_id: BackendId,
-    pub created_at: u64,
-}
-
-/// Nonce tracking for replay prevention
-#[allow(dead_code)] // Will be used by middleware
-pub struct NonceStore {
-    pub used: HashSet<String>,
-    pub window_secs: u64,
-}
-
-impl Default for AccountStore {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl AccountStore {
-    pub fn new() -> Self {
-        Self {
-            accounts: HashMap::new(),
-        }
-    }
-}
-
-impl Default for ShareStore {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl ShareStore {
-    pub fn new() -> Self {
-        Self {
-            shares: HashMap::new(),
-        }
-    }
-}
-
-impl NonceStore {
-    pub fn new(window_secs: u64) -> Self {
-        Self {
-            used: HashSet::new(),
-            window_secs,
-        }
-    }
-
-    /// Validate nonce format and freshness
-    #[allow(dead_code)] // Will be used by middleware
-    pub fn validate(&self, nonce: &str) -> bool {
-        // Format: "{unix_ms}:{uuid}"
-        let parts: Vec<&str> = nonce.split(':').collect();
-        if parts.len() != 2 {
-            return false;
-        }
-
-        let ts_ms: u64 = match parts[0].parse() {
-            Ok(t) => t,
-            Err(_) => return false,
-        };
-
-        let now_ms = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64;
-
-        // Check within window
-        let window_ms = self.window_secs * 1000;
-        if now_ms > ts_ms + window_ms {
-            return false;
-        } // Too old
-        if ts_ms > now_ms + 60_000 {
-            return false;
-        } // Future (clock skew tolerance: 1 min)
-
-        true
-    }
-
-    /// Check if nonce was already used
-    #[allow(dead_code)] // Will be used by middleware
-    pub fn is_used(&self, nonce: &str) -> bool {
-        self.used.contains(nonce)
-    }
-
-    /// Mark nonce as used
-    #[allow(dead_code)] // Will be used by middleware
-    pub fn mark_used(&mut self, nonce: String) {
-        self.used.insert(nonce);
+impl Drop for NonceGcHandle {
+    fn drop(&mut self) {
+        self.0.abort();
     }
 }
 
 impl AppState {
-    pub async fn new(config: &Config) -> anyhow::Result<Self> {
-        // Build storage backend
+    /// Construct application state from a loaded config. Picks in-memory or
+    /// SQLite-backed stores based on `config.persistence.backend`. Mock PRE
+    /// backend always uses in-memory stores regardless of config (tests).
+    pub async fn from_config(config: &Config) -> anyhow::Result<Self> {
+        // ----- Storage backend (blobs) -----
         let storage: Arc<dyn BlobStorage> = match config.storage.backend.as_str() {
             "local" => {
                 let path = config
@@ -162,22 +65,14 @@ impl AppState {
             _ => Arc::new(InMemoryStorage::new()),
         };
 
-        // For MVP, use in-memory auth stores
-        let ownership: Arc<dyn OwnershipStore> = Arc::new(InMemoryOwnershipStore::new());
-        let providers: Arc<dyn ProviderIndex> = Arc::new(InMemoryProviderIndex::new());
-
-        // Initialize PRE backend (slow for lattice, do once at startup)
-        // SECURITY: Never silently downgrade - fail hard if requested backend unavailable
-        let pre_backend: Arc<dyn PreBackend + Send + Sync> = match config
-            .pre_backend
-            .to_lowercase()
-            .as_str()
-        {
+        // ----- PRE backend -----
+        let pre_backend_kind = config.pre_backend.to_lowercase();
+        let pre_backend: Arc<dyn PreBackend + Send + Sync> = match pre_backend_kind.as_str() {
             "lattice" | "pq" | "post-quantum" => {
                 if !LatticeBackend::is_available() {
                     anyhow::bail!(
                         "FATAL: Lattice backend requested but OpenFHE not available. \
-                             Build with `--features openfhe` or use `pre_backend = \"mock\"` for testing."
+                         Build with `--features openfhe` or use `pre_backend = \"mock\"` for testing."
                     );
                 }
                 tracing::info!("Initializing lattice PRE backend (this may take ~2 min)...");
@@ -191,23 +86,97 @@ impl AppState {
                 tracing::warn!("Using mock PRE backend - NOT FOR PRODUCTION USE");
                 Arc::new(MockBackend)
             }
-            other => {
-                anyhow::bail!(
-                    "Unknown PRE backend '{}'. Valid options: 'lattice', 'mock'",
-                    other
-                );
-            }
+            other => anyhow::bail!(
+                "Unknown PRE backend '{}'. Valid options: 'lattice', 'mock'",
+                other
+            ),
         };
+
+        // ----- Persistence selection -----
+        // Sqlite is selected whenever explicitly configured. Default ("memory")
+        // keeps the in-memory stores regardless of PRE backend.
+        let want_sqlite = config.persistence.backend == "sqlite";
+
+        let (accounts, shares, nonces): (
+            Arc<dyn AccountStore>,
+            Arc<dyn ShareStore>,
+            Arc<dyn NonceStore>,
+        ) = if want_sqlite {
+            // Single shared SQLite connection — Open Question 5.3: one unified recrypt.db.
+            let path = config
+                .persistence
+                .sqlite_path
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("sqlite_path is not valid UTF-8"))?;
+            tracing::info!("Opening SQLite persistence at {}", path);
+            let conn = tokio_rusqlite::Connection::open(path)
+                .await
+                .map_err(|e| anyhow::anyhow!("failed to open sqlite db: {e}"))?;
+            // WAL mode for concurrent readers.
+            conn.call(|c| {
+                c.pragma_update(None, "journal_mode", "WAL")?;
+                Ok::<_, rusqlite::Error>(())
+            })
+            .await
+            .map_err(|e| anyhow::anyhow!("failed to set WAL: {e}"))?;
+            let conn = Arc::new(conn);
+
+            let accounts = Arc::new(SqliteAccountStore::new(conn.clone()).await?);
+            let shares = Arc::new(
+                SqliteShareStore::new(conn.clone())
+                    .await
+                    .map_err(|e| anyhow::anyhow!("share store init: {e}"))?,
+            );
+            let nonces = Arc::new(
+                SqliteNonceStore::new(conn)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("nonce store init: {e}"))?,
+            );
+            (accounts, shares, nonces)
+        } else {
+            (
+                Arc::new(InMemoryAccountStore::new()),
+                Arc::new(InMemoryShareStore::new()),
+                Arc::new(InMemoryNonceStore::new()),
+            )
+        };
+
+        // Auth/storage bookkeeping that has no SQLite swap yet.
+        let ownership: Arc<dyn OwnershipStore> = Arc::new(InMemoryOwnershipStore::new());
+        let providers: Arc<dyn ProviderIndex> = Arc::new(InMemoryProviderIndex::new());
+
+        // ----- Spawn background nonce GC -----
+        // GC task lifecycle: tied to AppState; aborts on drop via JoinHandle.
+        let gc_nonces = nonces.clone();
+        let handle = tokio::spawn(async move {
+            let mut tick = tokio::time::interval(Duration::from_secs(60));
+            // First tick fires immediately; skip it.
+            tick.tick().await;
+            loop {
+                tick.tick().await;
+                match gc_nonces.gc_expired().await {
+                    Ok(n) if n > 0 => tracing::debug!("nonce gc removed {n} expired entries"),
+                    Ok(_) => {}
+                    Err(e) => tracing::warn!("nonce gc error: {e}"),
+                }
+            }
+        });
 
         Ok(Self {
             storage,
             ownership,
             providers,
-            accounts: Arc::new(RwLock::new(AccountStore::new())),
-            shares: Arc::new(RwLock::new(ShareStore::new())),
-            nonces: Arc::new(RwLock::new(NonceStore::new(config.nonce.window_secs))),
+            accounts,
+            shares,
+            nonces,
             config: Arc::new(config.clone()),
             pre_backend,
+            nonce_gc: Arc::new(NonceGcHandle(handle)),
         })
+    }
+
+    /// Backwards-compatible alias for [`AppState::from_config`].
+    pub async fn new(config: &Config) -> anyhow::Result<Self> {
+        Self::from_config(config).await
     }
 }

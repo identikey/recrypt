@@ -5,7 +5,9 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 mod config;
 mod error;
 mod middleware;
+mod nonces;
 mod routes;
+mod shares;
 mod state;
 
 #[tokio::main]
@@ -23,7 +25,7 @@ async fn main() -> anyhow::Result<()> {
     let config = config::Config::load()?;
 
     // Build app state
-    let state = state::AppState::new(&config).await?;
+    let state = state::AppState::from_config(&config).await?;
 
     // Build router
     let app = routes::router(state);
@@ -33,7 +35,11 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Starting recrypt-server on {}", addr);
 
     let listener = TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
 
     Ok(())
 }

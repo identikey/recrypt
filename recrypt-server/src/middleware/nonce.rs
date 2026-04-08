@@ -1,5 +1,6 @@
 use crate::error::ServerError;
 use crate::middleware::auth::extract_signature_headers;
+use crate::nonces;
 use crate::state::AppState;
 use axum::{
     extract::{Request, State},
@@ -7,33 +8,25 @@ use axum::{
     response::Response,
 };
 
-/// Middleware that validates nonce freshness and marks as used
+/// Middleware that validates nonce freshness/format and atomically marks it used.
 pub async fn validate_nonce(
     State(state): State<AppState>,
     request: Request,
     next: Next,
 ) -> Result<Response, ServerError> {
     let headers = extract_signature_headers(request.headers())?;
+    let window = state.config.nonce.window_secs;
 
-    // Validate nonce format and freshness
-    {
-        let nonces = state.nonces.read().await;
-        if !nonces.validate(&headers.nonce) {
-            return Err(ServerError::NonceInvalid);
-        }
-        if nonces.is_used(&headers.nonce) {
-            return Err(ServerError::NonceInvalid);
-        }
+    if !nonces::validate_format(&headers.nonce, window) {
+        return Err(ServerError::NonceInvalid);
+    }
+    let expires_at = nonces::nonce_expiry_secs(&headers.nonce, window);
+
+    // Atomically claim the nonce. `false` means the nonce was already used.
+    let first_use = state.nonces.mark_used(&headers.nonce, expires_at).await?;
+    if !first_use {
+        return Err(ServerError::NonceInvalid);
     }
 
-    // Run the handler
-    let response = next.run(request).await;
-
-    // Mark nonce as used (only if request succeeded)
-    if response.status().is_success() {
-        let mut nonces = state.nonces.write().await;
-        nonces.mark_used(headers.nonce);
-    }
-
-    Ok(response)
+    Ok(next.run(request).await)
 }

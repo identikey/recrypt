@@ -40,8 +40,8 @@ aws-sdk-s3 = "1"
 aws-config = "1"
 
 # Auth service (Phase 4b)
-rusqlite = { version = "0.32", features = ["bundled"] }
-tokio-rusqlite = "0.5"
+rusqlite = { version = "0.37", features = ["bundled"] }
+tokio-rusqlite = "0.7"
 serde_json = "1"
 
 # Config & server middleware (Phase 8)
