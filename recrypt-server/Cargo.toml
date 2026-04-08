@@ -41,7 +41,11 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 
 # Config
-figment = { version = "0.10", features = ["toml", "env"] }
+figment.workspace = true
+
+# Rate limiting
+tower_governor.workspace = true
+http = "1"
 
 # Crypto (for fingerprint handling)
 blake3 = "1"

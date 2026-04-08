@@ -1,0 +1,30 @@
+# recrypt-server configuration
+#
+# Secrets (S3 keys, signing secrets) should come from environment variables,
+# NOT this file. Env vars use the `RECRYPT_` prefix with `__` for nesting:
+#   RECRYPT_PORT=8080
+#   RECRYPT_PERSISTENCE__BACKEND=sqlite
+#   RECRYPT_RATE_LIMIT__PER_IP_RPS=100
+
+host = "127.0.0.1"
+port = 7222
+pre_backend = "mock"  # "mock" | "lattice"
+
+[storage]
+backend = "memory"    # "memory" | "local" | "s3"
+# local_path = "/var/lib/recrypt/blobs"
+# s3_bucket = "recrypt-blobs"
+# s3_endpoint = "http://localhost:9000"
+
+[persistence]
+backend = "memory"    # "memory" | "sqlite"
+sqlite_path = "recrypt-server.db"
+
+[nonce]
+window_secs = 300
+
+[rate_limit]
+per_ip_rps = 50
+per_ip_burst = 100
+per_fingerprint_rps = 20
+per_fingerprint_burst = 40
