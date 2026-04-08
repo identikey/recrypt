@@ -41,19 +41,6 @@ pub fn init_schema(conn: &Connection) -> AuthResult<()> {
         CREATE INDEX IF NOT EXISTS idx_grants_grantee 
             ON access_grants(grantee_fingerprint);
 
-        -- Provider index
-        CREATE TABLE IF NOT EXISTS provider_locations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            file_hash BLOB NOT NULL,
-            provider_url TEXT NOT NULL,
-            created_at INTEGER NOT NULL,
-            UNIQUE(file_hash, provider_url)
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_locations_file 
-            ON provider_locations(file_hash);
-        CREATE INDEX IF NOT EXISTS idx_locations_provider 
-            ON provider_locations(provider_url);
     "#,
     )?;
 

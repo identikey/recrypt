@@ -8,6 +8,7 @@ license.workspace = true
 default = []
 s3 = ["aws-sdk-s3", "aws-config"]
 s3-tests = ["s3"]
+sqlite = ["rusqlite"]
 
 [dependencies]
 # Workspace
@@ -23,6 +24,9 @@ serde = { version = "1.0", features = ["derive"] }
 # S3 (optional)
 aws-sdk-s3 = { workspace = true, optional = true }
 aws-config = { workspace = true, optional = true }
+
+# SQLite (optional)
+rusqlite = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

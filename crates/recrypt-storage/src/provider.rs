@@ -1,4 +1,7 @@
-//! In-memory provider index
+//! Provider index: where files are stored
+//!
+//! Tracks file locations across storage providers, enabling hosting agility
+//! (files can be moved between providers without breaking references).
 
 use std::collections::{HashMap, HashSet};
 use std::sync::RwLock;
@@ -6,8 +9,46 @@ use std::sync::RwLock;
 use async_trait::async_trait;
 use blake3::Hash;
 
-use crate::error::{AuthError, AuthResult};
-use crate::provider::{ProviderIndex, ProviderUrl};
+use crate::error::{StorageError, StorageResult};
+
+/// A storage provider URL
+pub type ProviderUrl = String;
+
+/// Tracks file locations across storage providers
+#[async_trait]
+pub trait ProviderIndex: Send + Sync {
+    /// Register a file's location
+    ///
+    /// A file can be stored at multiple providers for redundancy.
+    async fn register(&self, file_hash: &Hash, provider_url: &ProviderUrl) -> StorageResult<()>;
+
+    /// Look up all locations for a file
+    async fn lookup(&self, file_hash: &Hash) -> StorageResult<Vec<ProviderUrl>>;
+
+    /// Update a file's location (migration)
+    async fn update_location(
+        &self,
+        file_hash: &Hash,
+        old_url: &ProviderUrl,
+        new_url: &ProviderUrl,
+    ) -> StorageResult<()>;
+
+    /// Remove a location (file deleted from provider)
+    async fn remove_location(
+        &self,
+        file_hash: &Hash,
+        provider_url: &ProviderUrl,
+    ) -> StorageResult<()>;
+
+    /// Remove all locations for a file
+    async fn unregister(&self, file_hash: &Hash) -> StorageResult<()>;
+
+    /// Check if a file has any registered locations
+    async fn exists(&self, file_hash: &Hash) -> StorageResult<bool>;
+
+    /// List all files at a provider (for provider management)
+    async fn list_at_provider(&self, provider_url: &ProviderUrl) -> StorageResult<Vec<Hash>>;
+}
 
 /// In-memory provider index for testing
 #[derive(Default)]
@@ -34,7 +75,7 @@ impl InMemoryProviderIndex {
 
 #[async_trait]
 impl ProviderIndex for InMemoryProviderIndex {
-    async fn register(&self, file_hash: &Hash, provider_url: &ProviderUrl) -> AuthResult<()> {
+    async fn register(&self, file_hash: &Hash, provider_url: &ProviderUrl) -> StorageResult<()> {
         let mut locations = self.locations.write().unwrap();
         locations
             .entry(*file_hash)
@@ -43,7 +84,7 @@ impl ProviderIndex for InMemoryProviderIndex {
         Ok(())
     }
 
-    async fn lookup(&self, file_hash: &Hash) -> AuthResult<Vec<ProviderUrl>> {
+    async fn lookup(&self, file_hash: &Hash) -> StorageResult<Vec<ProviderUrl>> {
         let locations = self.locations.read().unwrap();
         match locations.get(file_hash) {
             Some(urls) => Ok(urls.iter().cloned().collect()),
@@ -56,7 +97,7 @@ impl ProviderIndex for InMemoryProviderIndex {
         file_hash: &Hash,
         old_url: &ProviderUrl,
         new_url: &ProviderUrl,
-    ) -> AuthResult<()> {
+    ) -> StorageResult<()> {
         let mut locations = self.locations.write().unwrap();
 
         if let Some(urls) = locations.get_mut(file_hash) {
@@ -64,7 +105,7 @@ impl ProviderIndex for InMemoryProviderIndex {
             urls.insert(new_url.clone());
             Ok(())
         } else {
-            Err(AuthError::FileNotFound(file_hash.to_string()))
+            Err(StorageError::NotFound(file_hash.to_string()))
         }
     }
 
@@ -72,7 +113,7 @@ impl ProviderIndex for InMemoryProviderIndex {
         &self,
         file_hash: &Hash,
         provider_url: &ProviderUrl,
-    ) -> AuthResult<()> {
+    ) -> StorageResult<()> {
         let mut locations = self.locations.write().unwrap();
 
         if let Some(urls) = locations.get_mut(file_hash) {
@@ -84,12 +125,12 @@ impl ProviderIndex for InMemoryProviderIndex {
         Ok(())
     }
 
-    async fn unregister(&self, file_hash: &Hash) -> AuthResult<()> {
+    async fn unregister(&self, file_hash: &Hash) -> StorageResult<()> {
         self.locations.write().unwrap().remove(file_hash);
         Ok(())
     }
 
-    async fn exists(&self, file_hash: &Hash) -> AuthResult<bool> {
+    async fn exists(&self, file_hash: &Hash) -> StorageResult<bool> {
         let locations = self.locations.read().unwrap();
         Ok(locations
             .get(file_hash)
@@ -97,7 +138,7 @@ impl ProviderIndex for InMemoryProviderIndex {
             .unwrap_or(false))
     }
 
-    async fn list_at_provider(&self, provider_url: &ProviderUrl) -> AuthResult<Vec<Hash>> {
+    async fn list_at_provider(&self, provider_url: &ProviderUrl) -> StorageResult<Vec<Hash>> {
         let locations = self.locations.read().unwrap();
         Ok(locations
             .iter()

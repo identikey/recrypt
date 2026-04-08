@@ -42,12 +42,12 @@
 //! }
 //! ```
 
+mod account;
 mod capability;
 mod error;
 mod fingerprint;
 mod grant;
 mod ownership;
-mod provider;
 
 pub mod memory;
 
@@ -55,14 +55,14 @@ pub mod memory;
 pub mod sqlite;
 
 // Re-exports
+pub use account::{AccountRecord, AccountStore, InMemoryAccountStore};
 pub use capability::{Capability, Operation};
 pub use error::{AuthError, AuthResult};
 pub use fingerprint::PublicKeyFingerprint;
 pub use grant::AccessGrant;
 pub use ownership::OwnershipStore;
-pub use provider::ProviderIndex;
 
-pub use memory::{InMemoryOwnershipStore, InMemoryProviderIndex};
+pub use memory::InMemoryOwnershipStore;
 
 #[cfg(feature = "sqlite")]
-pub use sqlite::{SqliteOwnershipStore, SqliteProviderIndex};
+pub use sqlite::SqliteOwnershipStore;

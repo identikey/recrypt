@@ -1,12 +1,12 @@
 use crate::config::Config;
-use identikey_storage_auth::{
-    InMemoryOwnershipStore, InMemoryProviderIndex, OwnershipStore, ProviderIndex,
-};
+use identikey_storage_auth::{InMemoryOwnershipStore, OwnershipStore};
 use recrypt_core::pre::{
     BackendId, PreBackend,
     backends::{LatticeBackend, MockBackend},
 };
-use recrypt_storage::{BlobStorage, InMemoryStorage, LocalFileStorage};
+use recrypt_storage::{
+    BlobStorage, InMemoryProviderIndex, InMemoryStorage, LocalFileStorage, ProviderIndex,
+};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;

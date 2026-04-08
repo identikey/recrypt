@@ -1,13 +1,13 @@
 //! Integration tests: auth + storage working together
 
 use identikey_storage_auth::{
-    AccessGrant, Capability, InMemoryOwnershipStore, InMemoryProviderIndex, Operation,
-    OwnershipStore, ProviderIndex, PublicKeyFingerprint,
+    AccessGrant, Capability, InMemoryOwnershipStore, Operation, OwnershipStore,
+    PublicKeyFingerprint,
 };
 use recrypt_core::sign::{SigningKeys, VerifyingKeys};
 use recrypt_ffi::ed25519::ed25519_keygen;
 use recrypt_ffi::liboqs::{PqAlgorithm, pq_keygen};
-use recrypt_storage::{BlobStorage, InMemoryStorage};
+use recrypt_storage::{BlobStorage, InMemoryProviderIndex, InMemoryStorage, ProviderIndex};
 
 fn test_keys() -> (SigningKeys, VerifyingKeys, PublicKeyFingerprint) {
     let ed_kp = ed25519_keygen();

@@ -32,6 +32,7 @@
 //! ```
 
 mod error;
+mod provider;
 mod traits;
 
 mod local;
@@ -40,8 +41,12 @@ mod memory;
 #[cfg(feature = "s3")]
 mod s3;
 
+#[cfg(feature = "sqlite")]
+mod sqlite_provider;
+
 // Re-exports
 pub use error::{StorageError, StorageResult};
+pub use provider::{InMemoryProviderIndex, ProviderIndex, ProviderUrl};
 pub use traits::{BlobStorage, hash_from_base58, hash_to_base58};
 
 pub use local::LocalFileStorage;
@@ -49,3 +54,6 @@ pub use memory::InMemoryStorage;
 
 #[cfg(feature = "s3")]
 pub use s3::S3Storage;
+
+#[cfg(feature = "sqlite")]
+pub use sqlite_provider::SqliteProviderIndex;

@@ -1,4 +1,4 @@
-//! SQLite provider index
+//! SQLite-backed provider index
 
 use std::sync::Mutex;
 
@@ -6,9 +6,28 @@ use async_trait::async_trait;
 use blake3::Hash;
 use rusqlite::Connection;
 
-use super::schema::init_schema;
-use crate::error::AuthResult;
+use crate::error::{StorageError, StorageResult};
 use crate::provider::{ProviderIndex, ProviderUrl};
+
+const SCHEMA: &str = r#"
+CREATE TABLE IF NOT EXISTS provider_locations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    file_hash BLOB NOT NULL,
+    provider_url TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    UNIQUE(file_hash, provider_url)
+);
+
+CREATE INDEX IF NOT EXISTS idx_locations_file
+    ON provider_locations(file_hash);
+CREATE INDEX IF NOT EXISTS idx_locations_provider
+    ON provider_locations(provider_url);
+"#;
+
+fn init_schema(conn: &Connection) -> StorageResult<()> {
+    conn.execute_batch(SCHEMA)?;
+    Ok(())
+}
 
 /// SQLite-backed provider index
 pub struct SqliteProviderIndex {
@@ -17,7 +36,7 @@ pub struct SqliteProviderIndex {
 
 impl SqliteProviderIndex {
     /// Open or create a database at the given path
-    pub fn open(path: &str) -> AuthResult<Self> {
+    pub fn open(path: &str) -> StorageResult<Self> {
         let conn = Connection::open(path)?;
         init_schema(&conn)?;
         Ok(Self {
@@ -26,7 +45,7 @@ impl SqliteProviderIndex {
     }
 
     /// Create an in-memory database (for testing)
-    pub fn in_memory() -> AuthResult<Self> {
+    pub fn in_memory() -> StorageResult<Self> {
         let conn = Connection::open_in_memory()?;
         init_schema(&conn)?;
         Ok(Self {
@@ -44,7 +63,7 @@ impl SqliteProviderIndex {
 
 #[async_trait]
 impl ProviderIndex for SqliteProviderIndex {
-    async fn register(&self, file_hash: &Hash, provider_url: &ProviderUrl) -> AuthResult<()> {
+    async fn register(&self, file_hash: &Hash, provider_url: &ProviderUrl) -> StorageResult<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "INSERT OR IGNORE INTO provider_locations (file_hash, provider_url, created_at) VALUES (?, ?, ?)",
@@ -53,7 +72,7 @@ impl ProviderIndex for SqliteProviderIndex {
         Ok(())
     }
 
-    async fn lookup(&self, file_hash: &Hash) -> AuthResult<Vec<ProviderUrl>> {
+    async fn lookup(&self, file_hash: &Hash) -> StorageResult<Vec<ProviderUrl>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt =
             conn.prepare("SELECT provider_url FROM provider_locations WHERE file_hash = ?")?;
@@ -73,7 +92,7 @@ impl ProviderIndex for SqliteProviderIndex {
         file_hash: &Hash,
         old_url: &ProviderUrl,
         new_url: &ProviderUrl,
-    ) -> AuthResult<()> {
+    ) -> StorageResult<()> {
         let conn = self.conn.lock().unwrap();
         let updated = conn.execute(
             "UPDATE provider_locations SET provider_url = ? WHERE file_hash = ? AND provider_url = ?",
@@ -81,7 +100,7 @@ impl ProviderIndex for SqliteProviderIndex {
         )?;
 
         if updated == 0 {
-            return Err(crate::error::AuthError::FileNotFound(file_hash.to_string()));
+            return Err(StorageError::NotFound(file_hash.to_string()));
         }
         Ok(())
     }
@@ -90,7 +109,7 @@ impl ProviderIndex for SqliteProviderIndex {
         &self,
         file_hash: &Hash,
         provider_url: &ProviderUrl,
-    ) -> AuthResult<()> {
+    ) -> StorageResult<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "DELETE FROM provider_locations WHERE file_hash = ? AND provider_url = ?",
@@ -99,7 +118,7 @@ impl ProviderIndex for SqliteProviderIndex {
         Ok(())
     }
 
-    async fn unregister(&self, file_hash: &Hash) -> AuthResult<()> {
+    async fn unregister(&self, file_hash: &Hash) -> StorageResult<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "DELETE FROM provider_locations WHERE file_hash = ?",
@@ -108,7 +127,7 @@ impl ProviderIndex for SqliteProviderIndex {
         Ok(())
     }
 
-    async fn exists(&self, file_hash: &Hash) -> AuthResult<bool> {
+    async fn exists(&self, file_hash: &Hash) -> StorageResult<bool> {
         let conn = self.conn.lock().unwrap();
         let count: i64 = conn.query_row(
             "SELECT COUNT(*) FROM provider_locations WHERE file_hash = ?",
@@ -118,7 +137,7 @@ impl ProviderIndex for SqliteProviderIndex {
         Ok(count > 0)
     }
 
-    async fn list_at_provider(&self, provider_url: &ProviderUrl) -> AuthResult<Vec<Hash>> {
+    async fn list_at_provider(&self, provider_url: &ProviderUrl) -> StorageResult<Vec<Hash>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt =
             conn.prepare("SELECT file_hash FROM provider_locations WHERE provider_url = ?")?;

@@ -24,4 +24,8 @@ pub enum StorageError {
 
     #[error("Chunk too large: {size} bytes (max {max})")]
     TooLarge { size: usize, max: usize },
+
+    #[cfg(feature = "sqlite")]
+    #[error("Database error: {0}")]
+    Database(#[from] rusqlite::Error),
 }
