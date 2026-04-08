@@ -443,110 +443,71 @@ multi-signatures on anything it receives.
 
 ---
 
-## 6. Known gaps in the deeper per-topic docs
+## 6. Outstanding follow-ups
 
-Surfaced while compiling this overview. Items marked ✅ were addressed
-during this doc pass; items marked 🚧 are follow-ups for Phase 8/9.
+Remaining work after the Phase 8 documentation pass. The big-ticket items
+all live in dedicated plan docs; the rest are small doc and code tidy-ups.
 
-### Resolved during this doc pass
-- ✅ [wire-protocol.md](wire-protocol.md) rewritten from the current proto
-  schema — `RecryptKeyProto`, `CapabilityProto.issuer_fingerprint`,
-  `FileMetadata.backend`, `KeyMaterialProto` layout, and the status of
-  streaming verification are all now documented correctly.
-- ✅ [http-api-reference.md](http-api-reference.md) created. It includes the
-  exact canonical signature-message strings (`CREATE:`, `UPLOAD:`, `DELETE:`,
-  `SHARE:`, `DOWNLOAD:`, `REVOKE:`, `LIST_SHARES:`) with the encoding of every
-  substituted field. All 7 strings were verified to match between
-  `recrypt-cli/src/client/auth.rs` and the corresponding server-side verifier
-  in `recrypt-server/src/routes/*` and `middleware/auth.rs`.
-- ✅ [threat-model.md](threat-model.md) stub created with assets, trust
-  boundaries, adversary models (Adv-S/P/N/C/Q), and open questions. Needs a
-  disciplined adversarial pass before the Phase 9 security audit.
-- ✅ [storage-design.md](storage-design.md) updated to document
-  `ChunkManifest`'s new serde derivation and base58 blake3 helpers, and to
-  flag the chunking/Bao convergence question.
-- ✅ [verification-architecture.md](verification-architecture.md) now has a
-  "Current status" section stating plainly what's wired in
-  (`blake3(ciphertext) == bao_hash` full-file check — correct because the Bao
-  root equals plain Blake3 over the data) and what's not yet wired in
-  (streaming decoder against the `bao_outboard`, slice verification).
-- ✅ Removed the stale `#[allow(dead_code)] // Used in Phase 2.3+` comment on
-  `RecryptKey::bytes` in `recrypt-core/src/pre/keys.rs`.
-- ✅ Added `hash_algorithm` validation in
-  `recrypt-storage::chunking::join()` — manifests declaring a non-Blake3
-  algorithm are now rejected rather than silently re-verified with Blake3.
-- ✅ Removed the dead `recrypt-proto::bao_stream` module. It was never called
-  outside its own tests; its `verify()` happened to work (the Bao root equals
-  plain Blake3 over the data) but was presented as if it were walking the
-  outboard tree, which it wasn't. Fresh streaming implementation will use the
-  `bao` crate's real API directly — see follow-ups below.
+### Major
 
-### Streaming verification — planned next work 🚧
-This is the main outstanding correctness-adjacent item. Today the
-`bao_outboard` field is computed at encryption time, stored in every
-`EncryptedFile`, and signed transitively via `bao_hash`, but is **not
-consumed** during decryption. Full-file integrity is still guaranteed by
-the `blake3(ciphertext) == bao_hash` check, but we get none of the
-streaming / slice benefits that motivated carrying the outboard in the
-first place.
+- **Streaming verification + storage simplification** —
+  [plans/2026-04-06-bao-streaming-and-storage-simplification.md](plans/2026-04-06-bao-streaming-and-storage-simplification.md).
+  Moves us from buffer-everything to `bao-tree` 16 KiB chunk groups with
+  sibling `.obao` objects, deletes `ChunkManifest`, adds
+  `HybridEncryptor::{encrypt_streaming, decrypt_streaming, decrypt_range}`,
+  and splits the recryption proxy's control plane from its data plane so
+  group-member downloads don't funnel bulk bytes through the proxy. This
+  is the next substantial implementation sprint.
 
-The plan is:
+- **Deployment guide** (Phase 8, not started). Needs to cover
+  `brew install libomp`, Minio/S3 setup, running the server, TLS
+  termination via reverse proxy, backend selection (mock vs lattice), and
+  operational concerns (recrypt key storage, nonce store GC, GC of
+  orphaned S3 objects from aborted uploads).
 
-1. Wire `bao::decode::Decoder::new_outboard` into
-   `HybridEncryptor::decrypt` so decryption *reads* the ciphertext
-   through the Bao decoder with the stored outboard, catching tampering
-   mid-stream rather than after buffering.
-2. Expose a `bao::decode::SliceDecoder`-backed API for random-access,
-   range-verified reads. The proto already carries a `ChunkProto.bao_proof`
-   field for this.
-3. Once (1) and (2) exist, collapse the integrity role of
-   `recrypt-storage::chunking::ChunkManifest` into Bao. The storage
-   chunking should remain as a 4 MiB storage-layout concern (S3
-   multipart alignment, dedup) but should not re-verify what Bao
-   already verifies. `ChunkManifest.file_hash` is bit-identical to
-   `EncryptedFile.bao_hash` today — one authoritative root is enough.
+- **Threat-model adversarial pass** before the Phase 9 security audit.
+  The structure in [threat-model.md](threat-model.md) is in place; it
+  needs a disciplined walkthrough filling in the remaining TODOs and
+  pressure-testing each adversary model.
 
-See [verification-architecture.md §Current status](verification-architecture.md#current-status)
-for the implementation notes.
+### Minor doc tidy-ups
 
-### `docs/hybrid-encryption-architecture.md` & `recrypt-core/src/lib.rs` 🚧
-- The lib.rs rustdoc does not mention why `KeyMaterial` is always 96 bytes
-  (fixed to match `LatticeBackend::max_plaintext_size()`).
-- No explanation of **why `plaintext_hash` is encrypted inside `wrapped_key`**
-  (metadata confidentiality).
-- `non-determinism.md` is referenced but not prominent in the rustdoc.
+- **`recrypt-core/src/lib.rs` rustdoc** — add the "why 96 bytes" note
+  for `KeyMaterial` (tied to `LatticeBackend::max_plaintext_size()`),
+  the metadata-confidentiality rationale for encrypting `plaintext_hash`
+  inside `wrapped_key`, and a more prominent pointer to
+  `non-determinism.md` in a Testing section.
 
-### `docs/wire-protocol.md` — follow-ups 🚧
-- `MultiFormat` is only fully implemented for `EncryptedFile`.
-  `PublicKeyBundle`, `SecretKeyBundle`, `RecryptKeyProto`, and
-  `CapabilityProto` would all benefit from full JSON implementations, not
-  just proto + armor.
+- **`MultiFormat` JSON coverage** — currently only `EncryptedFile` has a
+  full JSON impl. `PublicKeyBundle`, `SecretKeyBundle`, `RecryptKeyProto`,
+  and `CapabilityProto` would benefit from full JSON implementations
+  (not just proto + armor).
 
-### `docs/plans/2026-01-06-phase-4b-storage-auth.md` 🚧
-- Phase 4b plan describes Postgres as "future scale"; the implementation only
-  ships SQLite. The trait design is Postgres-ready but this deferral is not
-  recorded anywhere.
-- "Metadata storage" was listed TBD in the plan and is still unresolved in
-  code — there is no explicit home for file metadata beyond `FileMetadata`
-  fields carried inside uploads.
-- SQLite schema (`schema.rs`) is commented but has no design doc counterpart.
+- **Phase 4b auth service gaps** in
+  [plans/2026-01-06-phase-4b-storage-auth.md](plans/2026-01-06-phase-4b-storage-auth.md):
+  Postgres backend is "future scale" but not recorded as a deferral;
+  metadata-storage location was TBD in the plan and is still unresolved;
+  the SQLite schema has no design-doc counterpart.
 
-### `docs/plans/2026-01-07-phase-5-recryption-proxy.md` 🚧
-- Plan calls for **tower rate limiting**; not implemented. Either implement
-  it or record it as an explicit deferral.
-- TLS termination is out of scope (expected — nginx/reverse proxy), but the
-  deployment doc should say this explicitly once it exists.
-- The canonical signature-message strings *are* now documented in
-  [http-api-reference.md §1.3](http-api-reference.md#13-canonical-signature-message-format),
-  so this item is resolved; just make sure future route changes update that
-  table.
+- **Phase 5 recryption proxy gaps** in
+  [plans/2026-01-07-phase-5-recryption-proxy.md](plans/2026-01-07-phase-5-recryption-proxy.md):
+  tower rate limiting is called for but not implemented (either implement
+  or record as explicit deferral); TLS termination is expected to live at
+  a reverse proxy but that should be stated in the deployment guide.
 
-### `docs/plans/2026-01-14-phase-6b-secure-credential-storage.md` 🚧
-- Wallet `lock` / `unlock` commands are marked as deferred. Infrastructure
-  exists (`CredentialProvider`). Track as a known follow-up.
+- **Wallet `lock` / `unlock` commands** deferred in Phase 6b.
+  `CredentialProvider` infrastructure exists; the CLI commands don't.
 
-### Still missing 🚧
-- **Deployment guide** (Phase 8). Not started. Should cover:
-  `brew install libomp`, Minio/S3 setup, running the server, TLS termination
-  via reverse proxy, backend selection, operational concerns (recrypt key
-  storage, nonce store GC).
+### Future research
+
+- **Non-transferable / obliviously delegatable proxy recryption** —
+  making the proxy cryptographically unable to misdirect recrypted
+  output to the wrong recipient. See
+  [plans/2026-04-06-bao-streaming-and-storage-simplification.md §11.5](plans/2026-04-06-bao-streaming-and-storage-simplification.md).
+  Eliminates the main residual trust assumption on the recryption proxy.
+
+- **XChaCha20-Poly1305 vs raw XChaCha20.** Trade-off between defense in
+  depth (Poly1305 gives an independent AEAD integrity check) and the
+  streaming/range properties we rely on (Poly1305 is a linear MAC over
+  the whole ciphertext). See the same plan doc §8.6 for the design
+  tradeoff. Worth resolving before Phase 9 audit.

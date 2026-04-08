@@ -32,18 +32,40 @@
 
 ### 1. Content-Addressed Storage (IPFS-style)
 
-Files are referenced by their **Blake3 hash**, not by path or user namespace:
+Files are referenced by their **BLAKE3 hash**, not by path or user namespace:
 
 ```
 GET /storage/{blake3_hash}
 ```
 
-**Benefits:**
+**Benefits (in order of importance for recrypt):**
 
-- **Hosting agility:** Move files between providers; hash stays the same
-- **Deduplication:** Identical content stored once
-- **Integrity:** Hash proves content authenticity
-- **Cacheability:** Immutable by hash → infinite cache TTL
+- **Backend agility (the real reason).** The blob's identity equals its
+  content hash. Migrating from S3 to Backblaze to local disk to an
+  iroh-blobs peer network requires no rename, no metadata rewrite, and
+  no re-signing: the blob is byte-identical on every backend, so its
+  identifier is identical on every backend. Any component holding the
+  hash can fetch from any provider without a lookup step. `ProviderIndex`
+  in `identikey-storage-auth` maps `file_hash → [provider_urls]` for
+  exactly this reason.
+- **Cacheability.** Immutable by hash → infinite cache TTL, cheap
+  deduplication at CDN / browser / client levels.
+- **Retry idempotency.** An interrupted upload retries to the same S3
+  key; the second PUT is a no-op.
+- **iroh interop.** The 32-byte BLAKE3 root we use as a storage key is
+  bit-identical to the blob ID iroh-blobs uses for the same bytes. If we
+  later want to serve or fetch files through an iroh peer network, the
+  content addresses are already compatible.
+- **Signed integrity is cheap to verify.** Combined with a signature
+  over `wrapped_key || bao_hash`, the storage key *is* the signed root.
+  A recipient knows which bytes they expect before fetching.
+
+**Non-benefit (historical):** Cross-user or same-user deduplication.
+Every `HybridEncryptor::encrypt` call generates fresh random XChaCha20
+material, so identical plaintexts never produce identical ciphertexts.
+Chunk-level dedup finds zero collisions in practice. This was an
+inherited assumption from IPFS-style designs and does not apply to
+recrypt; it should not be cited as a motivation.
 
 ### 2. Separation of Concerns
 
@@ -138,35 +160,39 @@ Storage layer verifies:
 
 ### Bucket Structure
 
-Single bucket, content-addressed by algorithm-prefixed hash:
+Single bucket, content-addressed by BLAKE3 hash. Two objects per
+encrypted file: the ciphertext blob and (for blobs > 16 KiB) a sibling
+Bao outboard for streaming verification.
 
 ```
 s3://recrypt-storage/
-  ├── chunks/
-  │   └── b3/                              # Blake3 algorithm prefix
-  │       ├── 2DrjgbLkLvvE6wvQyYCe9XN2Xm9L8dT3FJgKr2HJvAP1
-  │       ├── 4Qn8kYr5pW3mVxN7tZ9aB2cD6eF8gH1jK4lM0nPqR3sU
-  │       └── ...
-  └── metadata/  (if storing metadata in S3)
-      └── b3/
-          ├── {file_hash_base58}.meta
-          └── ...
+  ├── 2DrjgbLkLvvE6wvQyYCe9XN2Xm9L8dT3FJgKr2HJvAP1          # ciphertext
+  ├── 2DrjgbLkLvvE6wvQyYCe9XN2Xm9L8dT3FJgKr2HJvAP1.obao    # bao-tree outboard
+  ├── 4Qn8kYr5pW3mVxN7tZ9aB2cD6eF8gH1jK4lM0nPqR3sU
+  ├── 4Qn8kYr5pW3mVxN7tZ9aB2cD6eF8gH1jK4lM0nPqR3sU.obao
+  └── ...
 ```
 
 ### Object Naming
 
 ```
-chunks/{algorithm}/{hash_base58}
-
-Example:
-chunks/b3/2DrjgbLkLvvE6wvQyYCe9XN2Xm9L8dT3FJgKr2HJvAP1
+{base58(blake3(ciphertext))}           # ciphertext blob
+{base58(blake3(ciphertext))}.obao      # bao-tree outboard sibling (files > 16 KiB)
 ```
 
 **Format rationale:**
 
-- `b3` prefix = Blake3 (enables future hash algorithm agility)
-- Base58 encoding = ~31% shorter than hex, still human-readable
-- No ambiguous characters (0/O, 1/l excluded)
+- **Flat namespace.** The BLAKE3 hash is the full identifier. No
+  `chunks/`, `b3/`, or other prefix — we're not planning to swap hash
+  algorithms (BLAKE3 is baked into our signed integrity chain), so
+  algorithm-prefix agility is flexibility we'll never use.
+- **Base58 encoding** — ~31% shorter than hex, still human-readable, no
+  ambiguous characters (0/O, 1/l excluded).
+- **`.obao` suffix** matches the iroh-blobs convention for sibling
+  outboard objects. Interop-friendly.
+- **Small files (≤ 16 KiB) skip the outboard entirely.** A single
+  Bao chunk group = the BLAKE3 root, so no verification tree is needed.
+  Matches iroh-blobs' "no outboard for small blobs" optimization.
 
 ### Storage Trait
 

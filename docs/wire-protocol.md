@@ -291,6 +291,33 @@ multi-signature. The outboard itself is not directly signed, but because it
 is checked *against* the signed root, any tampering with it causes
 verification to fail.
 
+**Important nuance on what the "MAC" actually is.** Raw BLAKE3 and raw Bao
+are unkeyed hashes — by themselves they provide integrity only against a
+passive observer. An active attacker who tampers with the ciphertext can
+trivially recompute both `bao_hash` and `bao_outboard` over the tampered
+bytes and the decoder will happily verify the result. What makes this
+construction a real authenticator is the **MultiSig over `wrapped_key ||
+bao_hash`**: the signature is the key, and once the signature is verified
+against the sender's public key, the whole downstream Bao tree
+verification inherits that authentication.
+
+There is a second, independent integrity mechanism that catches failures
+in the first: `plaintext_hash` inside `KeyMaterial` (§2.4) is a BLAKE3
+hash of the plaintext, carried inside `wrapped_key`. After decryption the
+recipient checks `blake3(decrypted) == plaintext_hash`. This field is
+itself unforgeable because it lives inside the PRE-encrypted `wrapped_key`;
+tampering with it requires breaking the PRE scheme. It's a post-decryption
+backstop, not a pre-decryption authenticator, but it catches failure modes
+where signature verification is somehow bypassed.
+
+**Critical operational rule:** always verify the signature *before*
+decryption. If decryption happens before (or without) signature
+verification, an active attacker can feed chosen ciphertext into XChaCha20
+and the raw cipher has no way to reject it. `plaintext_hash` will
+eventually catch it, but only after the bad bytes have flowed through. See
+[plans/2026-04-06-bao-streaming-and-storage-simplification.md §12](plans/2026-04-06-bao-streaming-and-storage-simplification.md#12-integrity-chain-whats-the-mac-exactly)
+for a full walkthrough of the integrity chain.
+
 ### 4.2 Current implementation status
 
 | Capability                                                    | Status     |

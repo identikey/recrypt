@@ -235,11 +235,22 @@ message FileChunk {
 
 ## Security Properties
 
-1. **Integrity:** Any modification detected immediately
-2. **Streaming:** Don't need full file to verify partial content
-3. **Random access:** Can verify arbitrary slices
-4. **Collision resistance:** 128-bit security (256-bit hash, birthday bound)
-5. **Deterministic:** Same file always produces same root hash
+1. **Integrity** — against an active attacker, *only when the root hash
+   is signed*. Bare BLAKE3 / Bao over ciphertext is an unkeyed hash;
+   without a signature binding the root to an authenticated sender,
+   integrity holds against passive observers only. In recrypt, the
+   `MultiSig` over `wrapped_key || bao_hash` is what turns the Bao tree
+   into a real authenticator. Always verify the signature *before*
+   decryption. See
+   [plans/2026-04-06-bao-streaming-and-storage-simplification.md §12](plans/2026-04-06-bao-streaming-and-storage-simplification.md#12-integrity-chain-whats-the-mac-exactly)
+   for a careful walkthrough of the integrity chain.
+2. **Streaming** — don't need full file to verify partial content.
+3. **Random access** — can verify arbitrary slices via the outboard
+   tree; proof size is O(log n) per range.
+4. **Collision resistance** — 128-bit security against BLAKE3 collisions
+   (256-bit hash, birthday bound).
+5. **Deterministic** — same bytes always produce the same root hash.
+   This is what enables content addressing across storage backends.
 
 ---
 

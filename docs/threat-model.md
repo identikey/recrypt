@@ -7,6 +7,35 @@
 
 ---
 
+## 0. Product framing
+
+Recrypt's distinguishing product is **fine-grained, revocable group sharing
+without a trusted server** — "Signal meets Dropbox". The threat model has
+to make sense in that context, so a quick framing:
+
+- A user encrypts a file once to their own public key.
+- Sharing with another user means generating a recrypt key (client-side,
+  using the sharer's secret key and the recipient's public key) and
+  uploading it to the recryption proxy. The recrypt key is a
+  transformation key, not a decryption key — see Adv-P in §4 for details.
+- The proxy transforms the ~1 KB `wrapped_key` on demand when the
+  recipient requests the file. The ~1 GB ciphertext passes through
+  byte-for-byte and is verified client-side against a signed BLAKE3
+  Merkle tree root.
+- **Revocation is a DELETE** at the proxy. The recrypt key goes away; the
+  proxy can no longer produce a wrapped key the revoked user can decrypt.
+  No bulk re-encryption required. This is the central operational
+  property that proxy recryption gives us over every "encrypt once per
+  recipient" scheme.
+- Groups scale as O(1) in bulk data (one ciphertext, one outboard,
+  independent of group size) and O(N) only in small recrypt keys stored
+  at the proxy.
+
+This framing is the *reason* each of the adversary models below matters
+the way it does. A compromised proxy is a big deal because the proxy is
+what group sharing runs through. An untrusted storage provider is
+expected because the design target is "no trusted cloud".
+
 ## 1. System-in-scope
 
 Recrypt is a quantum-resistant proxy recryption system for secure, revocable
@@ -39,7 +68,7 @@ Explicitly **out of scope**:
 | A2   | User PRE secret key                | Wallet file + OS keyring cache                   |       ●         |     ●     |      ●       |
 | A3   | User ED25519 secret key            | Wallet file + OS keyring cache                   |       ●         |     ●     |      ●       |
 | A4   | User ML-DSA-87 secret key          | Wallet file + OS keyring cache                   |       ●         |     ●     |      ●       |
-| A5   | Recryption keys (Alice→Bob)        | Server in-memory store                          |       ◐         |     ●     |      ●       |
+| A5   | Recryption keys `rk(Alice→Bob)`    | Server in-memory store                          |       ○         |     ●     |      ●       |
 | A6   | File ciphertexts (`EncryptedFile`) | `ChunkStorage` (S3/local), server pass-through  |       ○         |     ●     |      ●       |
 | A7   | Ownership records                  | `OwnershipStore` (SQLite or in-memory)          |       ○         |     ●     |      ●       |
 | A8   | Share policies                     | Server in-memory store                          |       ◐         |     ●     |      ●       |
@@ -48,10 +77,16 @@ Explicitly **out of scope**:
 
 Legend: ● high, ◐ medium, ○ low.
 
-**TODO:** Confirm the classifications. In particular: is A5 really only medium
-confidentiality? A recryption key leaks nothing about plaintext or about the
-recipient's secret key, but it does grant (for its lifetime) the ability to
-transform Alice's ciphertexts into ones Bob can read. Argue this carefully.
+**Note on A5 classification:** recryption keys are **low confidentiality**.
+A recrypt key `rk(Alice → Bob)` leaks nothing about plaintext, nothing
+about Alice's or Bob's secret keys (unidirectionality property of BFV PRE),
+and nothing about the contents of any ciphertext Alice has encrypted. It
+does grant, for its lifetime, the ability to transform Alice's ciphertexts
+into ones Bob can decrypt — but only if both the source ciphertext and a
+way to deliver the output to Bob exist, both of which are already covered
+by other controls (access control on `/files/{hash}`, signed download
+requests at `/recryption/share/{id}/file`). Losing a recrypt key to an
+attacker who cannot also breach those controls gains them nothing.
 
 ---
 
@@ -125,35 +160,64 @@ download? Trace it end-to-end.
 ---
 
 ### Adv-P: Malicious / compromised recryption proxy
-**Capabilities:** everything Adv-S can do, plus access to recryption keys,
-share policies, public keys, Blake3 file hashes, access patterns, and the
-ability to refuse or forge HTTP responses.
 
-**Assumed unable to:** compromise any client; observe any client's wallet or
-plaintext; forge ED25519 or ML-DSA-87 signatures.
+**What the proxy holds:**
+- Recryption keys `rk(Alice → Bob)` for every active share. **These are
+  transformation keys, not decryption keys.** A recrypt key enables the
+  proxy to transform `Enc(pk_Alice, m)` into `Enc(pk_Bob, m)` without
+  learning `m`, and without holding either party's secret key.
+- Share policies (who shares what with whom, expiry, operations).
+- Public keys and Blake3 file hashes.
+- Access patterns and request metadata.
 
-**Recrypt's defense:**
-- Client-side encryption + key material confidentiality (proxy never sees
-  plaintext or user secret keys)
-- Multi-signature on every state-changing request (proxy cannot forge
-  ownership transfers, uploads, deletes, shares, revokes)
-- The recryption transform is *information-theoretically* limited: the
-  proxy's recryption key can transform *Alice's* wrapped keys, but cannot
-  produce Bob-encrypted ciphertexts for arbitrary plaintexts without Alice's
-  cooperation.
+**What the proxy *cannot* do, cryptographically:**
+- Decrypt `Enc(pk_Alice, m)` to recover `m`. No secret key, no decryption
+  capability.
+- Decrypt `Enc(pk_Bob, m)` either.
+- Derive `sk_Alice` or `sk_Bob` from any recrypt key. Recrypt keys are
+  one-way constructions from the delegator's secret key and the
+  recipient's public key.
+- Forge a new `rk(X → Y)` for pairs it doesn't have keys for — recrypt
+  key generation requires `sk_X`, which lives only on the delegator's
+  client.
+- Collude with Bob to recover `sk_Alice`. This is the **unidirectionality
+  property** of BFV proxy recryption: `rk(Alice → Bob)` gives Bob+proxy
+  the ability to transform Alice's ciphertexts, but provably not to
+  extract `sk_Alice`. (Transitivity in the other direction — can the
+  collusion transform *arbitrary* Alice-encrypted ciphertexts Bob
+  acquires? — is a known PRE limitation and is accepted in our model.)
 
-**Residual risk:**
-- **Share-policy enforcement is trusted.** A malicious proxy can serve a
-  recrypted file to *anyone* (not just the intended recipient) because
-  possession of the recryption key is sufficient to complete the transform.
-  **Mitigation:** require recipient to authenticate before download, and
-  revoke recrypt keys promptly on revocation.
-- **Metadata leakage.** The proxy sees who shares what with whom, and when.
-- **Availability.** The proxy can refuse service or selectively censor.
+**What the proxy *can* do (residual risks):**
+- **Refuse service.** Availability attack. Unavoidable — the proxy is
+  the one doing the transform.
+- **Misdirect a recrypted output.** The cryptographic recrypt transform
+  doesn't bind the recipient identity; the application layer does,
+  via the `DOWNLOAD:{requester_fingerprint}:{share_id}:{nonce}` signed
+  request that the proxy is trusted to verify before serving. A
+  malicious proxy could serve a recrypted ciphertext to anyone who
+  asks. **This is the policy-enforcement trust assumption.**
+- **Leak metadata.** Who shares what with whom, when, and how often.
+- **Selectively censor.** Refuse to serve specific requests.
 
-**TODO:** Write down a clear statement of what "semi-trusted" means for the
-proxy. Is the security claim: "proxy cannot read plaintext and cannot forge
-signatures, but must be trusted to enforce policy"? That's the DRAFT claim.
+**What "semi-trusted" means for the recryption proxy** (formal
+statement):
+
+> *The proxy is trusted to correctly enforce share access policies. It
+> is not trusted with plaintext confidentiality: plaintext is
+> cryptographically out of reach of the proxy, regardless of its
+> behavior.*
+
+Equivalently: the proxy's honesty affects *access control*, not
+*confidentiality*. A fully malicious proxy can withhold access or
+misdirect it, but cannot read user data.
+
+**Path to a fully untrusted proxy (future work):** it is possible in
+principle to make the recrypt transform bind to a live, signed request
+from the intended recipient, such that the proxy's output is only
+usable by that specific signer. This eliminates the misdirection risk
+and leaves only availability and metadata as residual proxy
+capabilities. Out of scope today; tracked as Phase 10+ research in
+[plans/2026-04-06-bao-streaming-and-storage-simplification.md §11.5](plans/2026-04-06-bao-streaming-and-storage-simplification.md).
 
 ---
 
