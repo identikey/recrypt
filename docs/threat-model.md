@@ -287,14 +287,37 @@ what breaks if the assumption is broken.
 
 ---
 
+## 5.5 Dependencies
+
+Two additional cryptographic assumptions introduced in Phase 8:
+
+1. **`bao-tree` integrity assumption** (new) — the `bao-tree` crate (v0.16)
+   implements BLAKE3 Merkle tree construction with 16 KiB chunk groups per
+   `BlockSize::from_chunk_log(4)`. Maintained by `n0-computer` (the iroh team),
+   used in production by iroh-blobs. Cryptographic security rests on BLAKE3
+   collision resistance (well-studied, widely deployed). The novelty is layout
+   and chunk alignment, not the underlying construction. Should be in scope for
+   Phase 9 security audit as a third-party-dependency review item.
+
+2. **Outboard sibling tampering** (architectural) — if the storage provider
+   corrupts the `.obao` sibling object, every verification fails. This is a
+   denial-of-service, not a confidentiality or integrity break — the client
+   cannot be fooled into accepting bad ciphertext, only into rejecting good
+   ciphertext. File availability is impacted, but confidentiality is preserved.
+
+3. **Outboard substitution across files** (architectural) — a malicious storage
+   provider could serve file B's outboard in response to a request for file A's
+   outboard. The decoder will fail verification because the signed `bao_hash`
+   from the metadata envelope won't match what bao-tree reconstructs from the
+   wrong outboard + ciphertext. This is caught by the existing multi-signature;
+   no new mitigation needed.
+
+---
+
 ## 6. Known limitations and open questions
 
 - **Share-policy enforcement is a trust-in-proxy assumption**, not a
   cryptographic guarantee. See Adv-P.
-- **Bao outboard verification on download** — verify it is actually performed
-  end-to-end and that a malicious storage backend cannot feed us a coherent
-  but attacker-chosen ciphertext. *Currently `bao_stream.rs` has TODO markers
-  suggesting the verification is not yet complete; needs audit.*
 - **Signature payload is `wrapped_key || bao_hash`** — does this bind to the
   recipient? If not, a malicious proxy could re-use a signed `EncryptedFile`
   across multiple share recipients without detection. *Needs analysis.*

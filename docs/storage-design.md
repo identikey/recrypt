@@ -165,7 +165,7 @@ encrypted file: the ciphertext blob and (for blobs > 16 KiB) a sibling
 Bao outboard for streaming verification.
 
 ```
-s3://recrypt-storage/
+s3://recrypt-storage/chunks/b3/
   ├── 2DrjgbLkLvvE6wvQyYCe9XN2Xm9L8dT3FJgKr2HJvAP1          # ciphertext
   ├── 2DrjgbLkLvvE6wvQyYCe9XN2Xm9L8dT3FJgKr2HJvAP1.obao    # bao-tree outboard
   ├── 4Qn8kYr5pW3mVxN7tZ9aB2cD6eF8gH1jK4lM0nPqR3sU
@@ -176,78 +176,108 @@ s3://recrypt-storage/
 ### Object Naming
 
 ```
-{base58(blake3(ciphertext))}           # ciphertext blob
-{base58(blake3(ciphertext))}.obao      # bao-tree outboard sibling (files > 16 KiB)
+chunks/b3/{base58(blake3(ciphertext))}           # ciphertext blob
+chunks/b3/{base58(blake3(ciphertext))}.obao      # bao-tree outboard sibling (files > 16 KiB)
 ```
 
 **Format rationale:**
 
-- **Flat namespace.** The BLAKE3 hash is the full identifier. No
-  `chunks/`, `b3/`, or other prefix — we're not planning to swap hash
-  algorithms (BLAKE3 is baked into our signed integrity chain), so
-  algorithm-prefix agility is flexibility we'll never use.
+- **Flat namespace under `chunks/b3/`.** The BLAKE3 hash is the full identifier.
+  The prefix enables future object-lifecycle rules (e.g., abort incomplete
+  multipart uploads in this prefix).
 - **Base58 encoding** — ~31% shorter than hex, still human-readable, no
   ambiguous characters (0/O, 1/l excluded).
 - **`.obao` suffix** matches the iroh-blobs convention for sibling
   outboard objects. Interop-friendly.
 - **Small files (≤ 16 KiB) skip the outboard entirely.** A single
-  Bao chunk group = the BLAKE3 root, so no verification tree is needed.
-  Matches iroh-blobs' "no outboard for small blobs" optimization.
+  Bao chunk group (16 KiB) = the BLAKE3 root, so no verification tree is needed.
+  A `GET` for the `.obao` sibling returns 404, and the client treats this as
+  "no outboard needed".
 
-### Storage Trait
+### Storage Trait: Two-Object API
 
 ```rust
 #[async_trait]
 pub trait ChunkStorage: Send + Sync {
-    /// Store chunk by its hash
-    async fn put(&self, hash: &blake3::Hash, data: &[u8]) -> Result<()>;
+    /// Store ciphertext and outboard
+    async fn put_with_outboard(
+        &self,
+        hash: &blake3::Hash,
+        ciphertext: impl AsyncRead + Unpin,
+        outboard: &[u8],  // empty for files ≤ 16 KiB
+    ) -> Result<()>;
 
-    /// Retrieve chunk by hash
-    async fn get(&self, hash: &blake3::Hash) -> Result<Vec<u8>>;
+    /// Retrieve ciphertext and outboard separately
+    async fn get_with_outboard(
+        &self,
+        hash: &blake3::Hash,
+    ) -> Result<(
+        Box<dyn AsyncRead + Unpin>,     // ciphertext
+        Box<dyn AsyncRead + AsyncSeek + Unpin>, // outboard or empty
+    )>;
 
-    /// Check if chunk exists
-    async fn exists(&self, hash: &blake3::Hash) -> Result<bool>;
+    /// Delete both ciphertext and outboard
+    async fn delete_with_outboard(&self, hash: &blake3::Hash) -> Result<()>;
 
-    /// Delete chunk
-    async fn delete(&self, hash: &blake3::Hash) -> Result<()>;
+    /// List files and their metadata for GC
+    async fn gc_orphans(
+        &self,
+        metadata: &dyn MetadataIndex,
+        opts: GcOptions,
+    ) -> Result<GcReport>;
 }
 ```
 
-### ChunkManifest
+**Key design:**
 
-`crates/recrypt-storage/src/chunking.rs` provides a flat manifest for files
-that have been split into content-addressed 4 MiB (default) chunks:
+- **Outboard is optional.** `put_with_outboard` accepts an empty outboard
+  byte slice for files ≤ 16 KiB; it skips the `.obao` PUT entirely in
+  that case.
+- **No per-chunk dedup.** Every call to `encrypt_streaming` uses fresh random
+  symmetric key material, so identical plaintexts never produce identical
+  ciphertexts. Per-call random keys eliminate any chunk-level dedup benefit.
+  The storage layer stores full files identified by their ciphertext hash.
+
+### Orphan Garbage Collection
+
+Files can become orphaned if:
+- A metadata record is deleted but the storage objects remain.
+- An incomplete multipart upload is abandoned (e.g., client crash mid-upload).
+
+Recrypt provides two layers of cleanup:
+
+**Layer 1: Storage-level lifecycle rules**
+
+S3 buckets should have a lifecycle rule to abort incomplete multipart uploads
+after 24 hours. This is a standard S3 bucket configuration (not enforced by
+recrypt code); see the deployment guide for the exact XML rule and CLI command.
+
+**Layer 2: Application-level GC**
+
+The `recrypt-cli admin gc` command calls `ChunkStorage::gc_orphans`, which:
+
+1. Scans all objects in the `chunks/b3/` prefix.
+2. For each object, checks if a metadata record exists via the `MetadataIndex` trait.
+3. In `--dry-run` mode, reports orphans without deleting.
+4. Without `--dry-run`, deletes both `{hash}` and `{hash}.obao` (if present).
 
 ```rust
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ChunkManifest {
-    pub hash_algorithm: String,          // "blake3", validated on join()
-    #[serde(with = "blake3_base58")]
-    pub file_hash: Hash,                 // Blake3 of the full file
-    pub total_size: u64,
-    #[serde(with = "vec_blake3_base58")]
-    pub chunk_hashes: Vec<Hash>,         // one hash per 4 MiB chunk
-    pub chunk_size: usize,
+pub struct GcOptions {
+    pub max_upload_lifetime: Duration,  // age threshold for incomplete multiparts
+    pub dry_run: bool,
+}
+
+pub struct GcReport {
+    pub scanned: u64,
+    pub orphans_found: u64,
+    pub bytes_reclaimed: u64,
+    pub deleted_keys: Vec<blake3::Hash>,
 }
 ```
 
-The manifest is JSON-serializable (Blake3 hashes serialize as base58
-strings via custom `serde` helpers). `join()` validates that
-`manifest.hash_algorithm == "blake3"` before attempting verification —
-a manifest claiming a different algorithm is rejected rather than
-silently re-verified with Blake3.
-
-**Note — chunking vs Bao (convergence pending).** The per-chunk Blake3
-hashes in the manifest provide integrity on top of the storage layer,
-but once streaming Bao verification lands in `recrypt-core` (see
-[verification-architecture.md](verification-architecture.md)), the
-manifest's integrity role becomes redundant: Bao's outboard gives
-finer-grained leaves (1024 B), O(log n) proofs, and random access over
-the same ciphertext. The likely endgame is that `ChunkManifest` shrinks
-to a pure storage-layout concern (split into 4 MiB blobs for S3
-multipart/dedup), with all integrity delegated to Bao. Until then the
-two layers coexist; `manifest.file_hash` and `EncryptedFile.bao_hash`
-compute the same 32-byte value over the same bytes.
+The `MetadataIndex` trait is a minimal interface that the storage layer uses
+to check if a file hash has a metadata record. Implementations exist for in-memory
+testing and SQLite-backed production use.
 
 ### Implementations
 

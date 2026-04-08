@@ -443,71 +443,76 @@ multi-signatures on anything it receives.
 
 ---
 
-## 6. Outstanding follow-ups
+## 6. Completed and active plans
 
-Remaining work after the Phase 8 documentation pass. The big-ticket items
-all live in dedicated plan docs; the rest are small doc and code tidy-ups.
+### Recently completed (Phase 8)
 
-### Major
+1. **[2026-04-06 — Bao streaming + storage simplification](plans/2026-04-06-bao-streaming-and-storage-simplification.md)** ✅
+   Replaced bare `bao` with `bao-tree` at 16 KiB chunk groups. Moved the
+   Bao outboard out of `EncryptedFileProto` into a sibling S3 object.
+   Implemented `HybridEncryptor::{encrypt_streaming, decrypt_streaming,
+   decrypt_range}`. Deleted `recrypt-storage::chunking::ChunkManifest`
+   (zero dedup benefit, fully subsumed by Bao). Split the
+   recryption proxy's control plane from its data plane so group-member
+   downloads don't funnel bulk bytes through the proxy.
 
-- **Streaming verification + storage simplification** —
-  [plans/2026-04-06-bao-streaming-and-storage-simplification.md](plans/2026-04-06-bao-streaming-and-storage-simplification.md).
-  Moves us from buffer-everything to `bao-tree` 16 KiB chunk groups with
-  sibling `.obao` objects, deletes `ChunkManifest`, adds
-  `HybridEncryptor::{encrypt_streaming, decrypt_streaming, decrypt_range}`,
-  and splits the recryption proxy's control plane from its data plane so
-  group-member downloads don't funnel bulk bytes through the proxy. This
-  is the next substantial implementation sprint.
+### Critical path (Phase 9+)
 
-- **Deployment guide** (Phase 8, not started). Needs to cover
-  `brew install libomp`, Minio/S3 setup, running the server, TLS
-  termination via reverse proxy, backend selection (mock vs lattice), and
-  operational concerns (recrypt key storage, nonce store GC, GC of
-  orphaned S3 objects from aborted uploads).
+Outstanding work is tracked in dedicated plan
+docs under [plans/](plans/). Two sprints are queued, in order:
 
-- **Threat-model adversarial pass** before the Phase 9 security audit.
-  The structure in [threat-model.md](threat-model.md) is in place; it
-  needs a disciplined walkthrough filling in the remaining TODOs and
-  pressure-testing each adversary model.
+2. **[2026-04-07 — Production readiness](plans/2026-04-07-production-readiness.md)**
+   Trait-backed state stores with SQLite-default / in-memory-for-tests
+   implementations via `tokio-rusqlite` + WAL. Boundary refactor:
+   `AccountStore` moves to `identikey-storage-auth`, `ProviderIndex`
+   moves to `recrypt-storage`. Env-var config via `figment`. Drop-in
+   `tower-governor` rate limiting. This is the "make it real" sprint —
+   turns the prototype into something you can actually run.
 
-### Minor doc tidy-ups
+3. **[2026-04-07 — Group sharing](plans/2026-04-07-group-sharing.md)**
+   The "Signal meets Dropbox" value-prop sprint. `Group` abstraction
+   with batch add/remove of members and files, canonical `GROUP_*`
+   signature messages with `files_digest` / `members_digest` binding,
+   per-group mutex for atomicity, CLI commands. Depends on the
+   persistence layer from sprint 2.
 
-- **`recrypt-core/src/lib.rs` rustdoc** — add the "why 96 bytes" note
-  for `KeyMaterial` (tied to `LatticeBackend::max_plaintext_size()`),
-  the metadata-confidentiality rationale for encrypting `plaintext_hash`
-  inside `wrapped_key`, and a more prominent pointer to
-  `non-determinism.md` in a Testing section.
+Sprints 1 and 2 are independent and can land in either order (or
+concurrently). Sprint 3 depends on sprint 2 for trait-backed
+persistence.
 
-- **`MultiFormat` JSON coverage** — currently only `EncryptedFile` has a
-  full JSON impl. `PublicKeyBundle`, `SecretKeyBundle`, `RecryptKeyProto`,
-  and `CapabilityProto` would benefit from full JSON implementations
-  (not just proto + armor).
+### Deferred work
 
-- **Phase 4b auth service gaps** in
-  [plans/2026-01-06-phase-4b-storage-auth.md](plans/2026-01-06-phase-4b-storage-auth.md):
-  Postgres backend is "future scale" but not recorded as a deferral;
-  metadata-storage location was TBD in the plan and is still unresolved;
-  the SQLite schema has no design-doc counterpart.
+Everything not in one of the three sprints above is tracked in the
+backlog:
 
-- **Phase 5 recryption proxy gaps** in
-  [plans/2026-01-07-phase-5-recryption-proxy.md](plans/2026-01-07-phase-5-recryption-proxy.md):
-  tower rate limiting is called for but not implemented (either implement
-  or record as explicit deferral); TLS termination is expected to live at
-  a reverse proxy but that should be stated in the deployment guide.
+**[2026-04-07 — Next steps backlog](plans/2026-04-07-next-steps-backlog.md)**
 
-- **Wallet `lock` / `unlock` commands** deferred in Phase 6b.
-  `CredentialProvider` infrastructure exists; the CLI commands don't.
+Major items:
 
-### Future research
+- **Discoverability, sync, and indexes** — per-user file index,
+  group-level feeds, notifications, watched folders, background sync
+  client. The "feels like Dropbox" polish layer.
+- **Plaintext layer** — client-side plaintext content addressing,
+  folder/path metadata, search.
+- **Multi-device + account recovery** — delegated to the identikey
+  codebase, which specializes in key recovery systems. Recrypt will
+  consume its APIs rather than build its own.
+- **Deployment guide + Mjolnir integration** — operational
+  documentation and deployment orchestration, picked up after
+  production-readiness lands.
+- **Threat-model adversarial pass** — deferred until Phase 9 security
+  audit kickoff, when it will be done as one focused pass.
+- **XChaCha20-Poly1305 vs raw XChaCha20** — defense-in-depth decision
+  before Phase 9 audit. See
+  [2026-04-06 §8.6](plans/2026-04-06-bao-streaming-and-storage-simplification.md).
+- **Non-transferable proxy recryption** — make the proxy
+  cryptographically unable to misdirect recrypted output. Research
+  direction for Phase 10+. See
+  [2026-04-06 §11.5](plans/2026-04-06-bao-streaming-and-storage-simplification.md).
+- **Group sharing v2** — admin roles, read/write membership, invite
+  flow, nested groups, group-owned files. Deferred from the MVP group
+  plan.
+- **API stability, `MultiFormat` JSON coverage, contributing guide,
+  rustdoc polish** — small doc and API-hygiene items.
 
-- **Non-transferable / obliviously delegatable proxy recryption** —
-  making the proxy cryptographically unable to misdirect recrypted
-  output to the wrong recipient. See
-  [plans/2026-04-06-bao-streaming-and-storage-simplification.md §11.5](plans/2026-04-06-bao-streaming-and-storage-simplification.md).
-  Eliminates the main residual trust assumption on the recryption proxy.
-
-- **XChaCha20-Poly1305 vs raw XChaCha20.** Trade-off between defense in
-  depth (Poly1305 gives an independent AEAD integrity check) and the
-  streaming/range properties we rely on (Poly1305 is a linear MAC over
-  the whole ciphertext). See the same plan doc §8.6 for the design
-  tradeoff. Worth resolving before Phase 9 audit.
+See the backlog doc for full context on each entry.

@@ -267,7 +267,7 @@ Issues a fresh nonce. Takes no auth. Response body:
   ```
   The `share_id` is `bs58(blake3("{from}:{to}:{file_hash}"))`.
 
-#### `GET /recryption/share/{id}/file` — Download recrypted file
+#### `GET /recryption/share/{id}` — Download recrypted metadata + storage URLs
 
 - **Auth:** required. Canonical message:
   `DOWNLOAD:{requester_fingerprint}:{share_id}:{nonce}`.
@@ -275,19 +275,40 @@ Issues a fresh nonce. Takes no auth. Response body:
   `to_fingerprint`.
 - **Server side transform:**
   1. Look up the share policy, backend, and recrypt key.
-  2. Fetch the ciphertext blob from `ChunkStorage`.
-  3. Deserialize as protobuf `EncryptedFileProto` →
-     `recrypt_core::EncryptedFile`.
-  4. Call `HybridEncryptor::recrypt(&recrypt_key, &encrypted)` — this
-     transforms **only** `wrapped_key`; `ciphertext`, `bao_hash`, and
-     `bao_outboard` are forwarded byte-for-byte.
-  5. Reserialize to protobuf and return the bytes.
-- **Response: 200 OK**
-  - `Content-Type: application/octet-stream`
-  - `X-Recrypted: true`
-  - `X-Backend: mock | lattice`
-  - `X-Share-Id: <base58>`
-  - body: recrypted protobuf `EncryptedFileProto`
+  2. Fetch the metadata (`EncryptedFileProto`) from storage.
+  3. Call `HybridEncryptor::recrypt(&recrypt_key, &wrapped_key)` — transforms
+     **only** the `wrapped_key`; all other fields (including `bao_hash`) are
+     unchanged.
+  4. Return the recrypted wrapped key, bao hash, signature, and direct storage URLs
+     for ciphertext and outboard fetch.
+- **Response: 200 OK (JSON)**
+  ```json
+  {
+    "wrapped_key_for_recipient": "<base64 recrypted CiphertextProto>",
+    "bao_hash": "<base58 32-byte BLAKE3 root>",
+    "signature": {
+      "ed25519_signature": "<base64>",
+      "pq_signatures": [
+        { "algorithm": "ML-DSA-87", "signature": "<base64>" }
+      ]
+    },
+    "ciphertext_url": "https://storage.example.com/chunks/b3/...",
+    "outboard_url": "https://storage.example.com/chunks/b3/....obao"
+  }
+  ```
+
+**Client-side steps after receiving this response:**
+
+1. Verify `signature` over the original `wrapped_key || bao_hash` (the signature
+   commits to the original unwrapped key, not the recrypted one).
+2. Fetch ciphertext from `ciphertext_url` (HTTP Range requests supported).
+3. Fetch outboard from `outboard_url`; if 404, treat as "no outboard" (file ≤ 16 KiB).
+4. Call `HybridEncryptor::decrypt_streaming(bob_sk, ciphertext, outboard, plaintext_out)`.
+
+**Note on signature:** The signature in the response covers the *original*
+`wrapped_key` from Alice's envelope, not the recrypted output. The recrypted
+wrapped key is authenticated by the PRE scheme itself + a post-decryption check
+of `plaintext_hash` inside the decrypted key material.
 
 #### `DELETE /recryption/share/{id}` — Revoke share
 

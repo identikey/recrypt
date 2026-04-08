@@ -98,17 +98,22 @@ message CiphertextProto {
 
 ```protobuf
 message EncryptedFileProto {
-    uint32              version      = 1;   // format version (currently 2)
+    uint32              version      = 1;   // format version (currently 3)
     CiphertextProto     wrapped_key  = 2;   // PRE-encrypted KeyMaterial
     bytes               bao_hash     = 3;   // 32-byte Bao root over ciphertext
-    bytes               bao_outboard = 4;   // Bao verification tree (~1% of ciphertext)
-    bytes               ciphertext   = 5;   // XChaCha20-encrypted data
-    MultiSignatureProto signature    = 6;   // signs (wrapped_key || bao_hash)
+    bytes               ciphertext   = 4;   // XChaCha20-encrypted data
+    MultiSignatureProto signature    = 5;   // signs (wrapped_key || bao_hash)
 }
 ```
 
-See §4 for the role of `bao_hash` + `bao_outboard` and the current status of
-streaming verification.
+**Version 3 change:** The outboard has moved out of the envelope. For files
+> 16 KiB, it is stored as a sibling object in S3-compatible storage (key
+suffix `.obao`), fetched separately, and kept out-of-band during verification.
+Files ≤ 16 KiB contain no outboard (single Bao chunk group = root). This is
+a breaking wire-format change from v2; no stored v2 data exists anywhere, so
+field numbers were renumbered rather than reserved.
+
+See §4 for the role of `bao_hash` and the verification architecture.
 
 ### 2.4 Key material — documentary only (never transmitted)
 
