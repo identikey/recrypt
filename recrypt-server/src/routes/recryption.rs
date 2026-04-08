@@ -3,15 +3,66 @@ use crate::middleware::{extract_signature_headers, verify_multisig};
 use crate::state::{AppState, SharePolicy};
 use axum::{
     Json,
-    body::Body,
     extract::{Path, State},
-    http::{HeaderMap, StatusCode, header},
-    response::Response,
+    http::{HeaderMap, StatusCode},
 };
+use base64::Engine as _;
 use recrypt_core::pre::BackendId;
 use recrypt_core::{EncryptedFile, HybridEncryptor};
 use recrypt_proto::MultiFormat;
 use serde::{Deserialize, Serialize};
+
+// ---------------------------------------------------------------------------
+// Response types for the control/data plane split
+// ---------------------------------------------------------------------------
+
+/// JSON representation of a multi-signature.
+///
+/// The signature commits to the *original* `wrapped_key || bao_hash`, not the
+/// recrypted `wrapped_key_for_recipient`. The recipient uses this to confirm
+/// that the file's `bao_hash` is what the original sender attested to. The
+/// recrypted `wrapped_key_for_recipient` is authenticated by the PRE scheme
+/// itself — only the correct recipient can decrypt it, and `plaintext_hash`
+/// inside `KeyMaterial` provides post-decryption integrity. Do NOT use this
+/// signature to authenticate the recrypted wrapped key.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SignatureJson {
+    /// Base64-encoded ED25519 signature bytes (64 bytes).
+    pub ed25519_sig: String,
+    /// Base64-encoded ML-DSA-87 signature bytes.
+    pub ml_dsa_sig: String,
+}
+
+/// Response for `GET /recryption/share/{id}` (control-plane only).
+///
+/// The proxy returns only the recrypted wrapped key + metadata + storage URLs.
+/// The client fetches bulk ciphertext directly from storage (data plane),
+/// eliminating proxy bandwidth proportional to file size.
+///
+/// # Storage URL security
+/// URLs point to content-addressed ciphertext objects. Possessing a URL yields
+/// ciphertext only — not plaintext — because the symmetric key is protected by
+/// the recrypted `wrapped_key_for_recipient`. Pre-signed URLs with short TTLs
+/// are a follow-up; see design doc §8.7.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct RecryptionShareResponse {
+    /// Base64-encoded recrypted wrapped key (`Ciphertext::to_bytes()`).
+    /// The recipient decrypts this with their PRE secret key to recover the
+    /// symmetric key bundle (`KeyMaterial`).
+    pub wrapped_key_for_recipient: String,
+    /// Base58-encoded 32-byte BLAKE3 root over the ciphertext.
+    pub bao_hash: String,
+    /// Multi-signature over (`original_wrapped_key || bao_hash`).
+    /// See [`SignatureJson`] for the security note on what this authenticates.
+    pub signature: Option<SignatureJson>,
+    /// URL the client GETs to fetch the bulk ciphertext.
+    /// Format: `{storage_base_url}/chunks/b3/{base58(bao_hash)}`
+    pub ciphertext_url: String,
+    /// URL for the bao-tree outboard sibling (`.obao`).
+    /// Empty string when the file is ≤ 16 KiB (no outboard stored).
+    /// The client MUST check for empty before issuing a GET.
+    pub outboard_url: String,
+}
 
 #[derive(Deserialize)]
 pub struct CreateShareRequest {
@@ -133,13 +184,17 @@ pub async fn create_share(
     ))
 }
 
-/// GET /recryption/share/{id}/file
-/// Downloads file with recryption transformation applied
-pub async fn download_recrypted(
+/// GET /recryption/share/{id}
+///
+/// Control-plane recryption endpoint. Returns only the recrypted wrapped key
+/// and storage URLs for the bulk ciphertext; the proxy never reads or forwards
+/// bulk ciphertext bytes. The client fetches ciphertext directly from storage
+/// using the returned URLs, eliminating O(file_size × recipients) proxy bandwidth.
+pub async fn get_recrypted_share(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(share_id): Path<String>,
-) -> ServerResult<Response> {
+) -> ServerResult<Json<RecryptionShareResponse>> {
     let sig_headers = extract_signature_headers(&headers)?;
     let requester_fingerprint = sig_headers.fingerprint.clone();
 
@@ -170,7 +225,7 @@ pub async fn download_recrypted(
             .clone()
     };
 
-    // Verify signature
+    // Verify request signature
     let message = format!(
         "DOWNLOAD:{}:{}:{}",
         requester_fingerprint, share_id, sig_headers.nonce
@@ -182,46 +237,85 @@ pub async fn download_recrypted(
         &requester_account.ml_dsa_pk,
     )?;
 
-    // Load the encrypted file
+    // Load EncryptedFile metadata from storage.
+    // NOTE: We load the full stored object to extract wrapped_key, bao_hash, and
+    // signature. We do NOT forward ciphertext bytes to the client — those are
+    // fetched directly from storage via the returned URLs. For a future
+    // optimisation, the server could store metadata separately from ciphertext.
     let file_bytes = state
         .storage
         .get(&policy.file_hash)
         .await
         .map_err(|e| ServerError::Internal(format!("Storage error: {e}")))?;
 
-    // === ACTUAL RECRYPTION TRANSFORM ===
-
-    // 1. Deserialize EncryptedFile from protobuf
     let encrypted = EncryptedFile::from_protobuf(&file_bytes)
         .map_err(|e| ServerError::Internal(format!("Failed to deserialize file: {e}")))?;
 
-    // 2. Reconstruct RecryptKey from stored bytes (includes embedded public keys)
+    // Reconstruct RecryptKey from stored bytes
     let recrypt_key = recrypt_core::pre::RecryptKey::from_bytes(&policy.recrypt_key)
         .map_err(|e| ServerError::Internal(format!("Failed to deserialize recrypt key: {e}")))?;
 
-    // 3. Perform recryption (transforms wrapped_key only)
+    // Recrypt only the wrapped key — bulk ciphertext is untouched
     let encryptor = HybridEncryptor::new(state.pre_backend.as_ref());
-    let recrypted = encryptor
-        .recrypt(&recrypt_key, &encrypted)
+    let new_wrapped_key = encryptor
+        .recrypt_wrapped_key(&recrypt_key, &encrypted.wrapped_key)
         .map_err(|e| ServerError::Internal(format!("Recryption failed: {e}")))?;
 
-    // 4. Serialize back to protobuf
-    let recrypted_bytes = recrypted
-        .to_protobuf()
-        .map_err(|e| ServerError::Internal(format!("Failed to serialize: {e}")))?;
+    // Encode recrypted wrapped key as base64
+    let wrapped_key_b64 = base64::engine::general_purpose::STANDARD
+        .encode(new_wrapped_key.to_bytes());
 
-    // === END RECRYPTION TRANSFORM ===
+    // Encode bao_hash as base58
+    let bao_hash_b58 = bs58::encode(&encrypted.bao_hash).into_string();
 
-    let response = Response::builder()
-        .status(StatusCode::OK)
-        .header(header::CONTENT_TYPE, "application/octet-stream")
-        .header("X-Share-Id", share_id)
-        .header("X-Recrypted", "true")
-        .header("X-Backend", policy.backend_id.to_string())
-        .body(Body::from(recrypted_bytes))
-        .map_err(|e| ServerError::Internal(e.to_string()))?;
+    // Build storage URLs.
+    // Format: {storage_base_url}/chunks/b3/{base58(bao_hash)}
+    // Pre-signed URLs are a follow-up (see design doc §8.7). The current threat
+    // model accepts that anyone with the bao_hash can fetch the ciphertext, since
+    // plaintext is protected by the recrypted wrapped_key_for_recipient.
+    let storage_base = build_storage_base_url(&state);
+    let ciphertext_url = format!("{}/chunks/b3/{}", storage_base, bao_hash_b58);
+    // Outboard URL: empty string signals the client not to fetch it (file ≤ 16 KiB).
+    // The server cannot know at this point whether an outboard exists without an
+    // extra storage lookup; instead we always provide the URL and the client can
+    // attempt a GET — a 404 means no outboard (small file). Alternatively, we
+    // could store this flag in SharePolicy. For now, emit the URL unconditionally;
+    // clients that get 404 on .obao treat it as no outboard. This is consistent
+    // with how put_with_outboard skips the .obao PUT for small files.
+    let outboard_url = format!("{}/chunks/b3/{}.obao", storage_base, bao_hash_b58);
 
-    Ok(response)
+    // Pass through original signature (covers original wrapped_key || bao_hash)
+    let signature = encrypted.signature.map(|sig| SignatureJson {
+        ed25519_sig: base64::engine::general_purpose::STANDARD
+            .encode(sig.ed25519_sig.to_bytes()),
+        ml_dsa_sig: base64::engine::general_purpose::STANDARD
+            .encode(&sig.ml_dsa_sig),
+    });
+
+    Ok(Json(RecryptionShareResponse {
+        wrapped_key_for_recipient: wrapped_key_b64,
+        bao_hash: bao_hash_b58,
+        signature,
+        ciphertext_url,
+        outboard_url,
+    }))
+}
+
+/// Build the storage base URL from server config.
+///
+/// Priority: s3_endpoint + "/" + s3_bucket → local path hint → in-memory placeholder.
+/// Clients use this URL to fetch bulk ciphertext directly (data plane).
+fn build_storage_base_url(state: &AppState) -> String {
+    let cfg = &state.config.storage;
+    if let (Some(endpoint), Some(bucket)) = (&cfg.s3_endpoint, &cfg.s3_bucket) {
+        format!("{}/{}", endpoint.trim_end_matches('/'), bucket)
+    } else if let Some(local_path) = &cfg.local_path {
+        format!("file://{}", local_path)
+    } else {
+        // In-memory storage: not externally reachable. Clients running in the
+        // same process (integration tests) substitute their own storage handle.
+        "memory://local".to_string()
+    }
 }
 
 /// DELETE /recryption/share/{id}

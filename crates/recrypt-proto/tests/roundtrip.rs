@@ -37,7 +37,7 @@ fn test_json_roundtrip() {
 
     // Serialize to JSON
     let json_str = encrypted.to_json().unwrap();
-    assert!(json_str.contains("\"version\": 2"));
+    assert!(json_str.contains("\"version\": 3"));
     assert!(json_str.contains("\"bao_hash\""));
 
     // Deserialize

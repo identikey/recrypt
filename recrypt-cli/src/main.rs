@@ -81,6 +81,11 @@ enum Commands {
         #[command(subcommand)]
         action: commands::wallet_cmd::WalletCommand,
     },
+    /// Operator administration commands
+    Admin {
+        #[command(subcommand)]
+        action: commands::admin::AdminCommand,
+    },
 }
 
 #[tokio::main]
@@ -121,5 +126,6 @@ async fn main() -> Result<()> {
         Commands::Share { action } => commands::share::run(action, &ctx).await,
         Commands::Config { action } => commands::config::run(action, &ctx).await,
         Commands::Wallet { action } => commands::wallet_cmd::run(action, &ctx).await,
+        Commands::Admin { action } => commands::admin::run(action, &ctx).await,
     }
 }

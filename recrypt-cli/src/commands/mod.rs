@@ -1,4 +1,5 @@
 pub mod account;
+pub mod admin;
 pub mod config;
 pub mod decrypt;
 pub mod encrypt;

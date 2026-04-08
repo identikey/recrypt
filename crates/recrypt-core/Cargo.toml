@@ -7,13 +7,17 @@ edition.workspace = true
 # Crypto primitives
 chacha20 = "0.9"                                            # XChaCha20 (192-bit nonce, no Poly1305)
 blake3 = { version = "1.5", features = ["traits-preview"] }
-bao = "0.12"                                                # Streaming verification
+bao-tree = { version = "0.16", default-features = false, features = ["validate", "tokio_fsm"] } # Blake3 verified streaming with chunk groups
+bytes = "1"
 rand = "0.8"
 rand_core = "0.6"
 
 # Error handling
 thiserror.workspace = true
 anyhow.workspace = true
+
+# Async runtime (used by streaming encrypt/decrypt API)
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "sync"] }
 
 # Secret zeroization
 zeroize = { version = "1.7", features = ["derive"] }
@@ -32,7 +36,7 @@ proptest = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-criterion = "0.5"
+criterion = { version = "0.5", features = ["async_tokio"] }
 
 [features]
 default = ["openfhe", "liboqs"]
@@ -42,4 +46,8 @@ proptest = ["dep:proptest"]
 
 [[bench]]
 name = "crypto_ops"
+harness = false
+
+[[bench]]
+name = "streaming"
 harness = false

@@ -22,6 +22,15 @@ pub enum CoreError {
 
     #[error("FFI error: {0}")]
     Ffi(#[from] recrypt_ffi::error::FfiError),
+
+    #[error("File too large: {size} bytes exceeds maximum of {max} bytes")]
+    FileTooLarge { size: u64, max: u64 },
+
+    #[error("Integrity check failed: ciphertext or outboard has been tampered with")]
+    IntegrityCheckFailed,
+
+    #[error("Range out of bounds: requested range exceeds plaintext size {plaintext_size}")]
+    RangeOutOfBounds { plaintext_size: u64 },
 }
 
 pub type CoreResult<T> = Result<T, CoreError>;

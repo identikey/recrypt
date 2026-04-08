@@ -23,10 +23,9 @@ pub fn router(state: AppState) -> Router {
         .route("/files/{hash}", delete(files::delete_file))
         .route("/recryption/share", post(recryption::create_share))
         .route(
-            "/recryption/share/{id}/file",
-            get(recryption::download_recrypted),
+            "/recryption/share/{id}",
+            get(recryption::get_recrypted_share).delete(recryption::revoke_share),
         )
-        .route("/recryption/share/{id}", delete(recryption::revoke_share))
         .route_layer(axum_middleware::from_fn_with_state(
             state.clone(),
             validate_nonce,

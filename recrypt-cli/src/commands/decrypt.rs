@@ -2,7 +2,8 @@ use anyhow::{Context as AnyhowContext, Result};
 use clap::Args;
 use indicatif::{ProgressBar, ProgressStyle};
 use serde::Serialize;
-use std::fs;
+use std::io::Cursor;
+use tokio::fs;
 
 use recrypt_core::HybridEncryptor;
 use recrypt_proto::MultiFormat;
@@ -40,13 +41,24 @@ pub async fn run(args: DecryptArgs, ctx: &Context) -> Result<()> {
     let backend_id = identity.pre_backend;
     let pre_sk = recrypt_core::pre::SecretKey::new(backend_id, pre_sk_bytes);
 
-    // Read encrypted file
-    let encrypted_bytes =
-        fs::read(&args.file).with_context(|| format!("Failed to read {}", args.file))?;
+    // Read encrypted file (protobuf envelope with ciphertext inline)
+    let encrypted_bytes = fs::read(&args.file)
+        .await
+        .with_context(|| format!("Failed to read {}", args.file))?;
 
-    // Deserialize
+    // Deserialize envelope
     let encrypted = recrypt_core::EncryptedFile::from_protobuf(&encrypted_bytes)
         .context("Failed to parse encrypted file (invalid format?)")?;
+
+    // Load outboard sibling if present (file > 16 KiB case)
+    let outboard_path = format!("{}.obao", args.file);
+    let outboard_bytes = match fs::read(&outboard_path).await {
+        Ok(data) => data,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+        Err(e) => {
+            return Err(e).with_context(|| format!("Failed to read outboard {outboard_path}"));
+        }
+    };
 
     // Create backend matching the identity
     let backend = super::create_backend_from_id(backend_id)?;
@@ -61,8 +73,18 @@ pub async fn run(args: DecryptArgs, ctx: &Context) -> Result<()> {
         None
     };
 
-    let plaintext = encryptor
-        .decrypt(&pre_sk, &encrypted)
+    // Decrypt using streaming API
+    let mut plaintext_buf: Vec<u8> = Vec::new();
+    encryptor
+        .decrypt_streaming(
+            &pre_sk,
+            &encrypted.wrapped_key,
+            &encrypted.bao_hash,
+            Cursor::new(&encrypted.ciphertext),
+            Cursor::new(&outboard_bytes),
+            &mut plaintext_buf,
+        )
+        .await
         .context("Decryption failed (wrong key or corrupted file?)")?;
 
     if let Some(pb) = &pb {
@@ -78,7 +100,9 @@ pub async fn run(args: DecryptArgs, ctx: &Context) -> Result<()> {
         }
     });
 
-    fs::write(&output_path, &plaintext)
+    let plaintext_len = plaintext_buf.len();
+    fs::write(&output_path, &plaintext_buf)
+        .await
         .with_context(|| format!("Failed to write {output_path}"))?;
 
     if ctx.json_output {
@@ -91,14 +115,12 @@ pub async fn run(args: DecryptArgs, ctx: &Context) -> Result<()> {
         print_json(&Output {
             input: args.file,
             output: output_path,
-            size: plaintext.len(),
+            size: plaintext_len,
         })?;
     } else {
         print_success(format!(
             "Decrypted {} → {} ({} bytes)",
-            args.file,
-            output_path,
-            plaintext.len()
+            args.file, output_path, plaintext_len
         ));
     }
 

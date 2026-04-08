@@ -33,7 +33,6 @@ impl MultiFormat for EncryptedFile {
             version: u32,
             wrapped_key: JsonCiphertext,
             bao_hash: String,
-            bao_outboard: String,
             ciphertext: String,
         }
 
@@ -45,14 +44,13 @@ impl MultiFormat for EncryptedFile {
         }
 
         let json = JsonEncryptedFile {
-            version: 2,
+            version: 3,
             wrapped_key: JsonCiphertext {
                 backend: format!("{:?}", self.wrapped_key.backend()),
                 level: self.wrapped_key.level() as u32,
                 data: bs58::encode(self.wrapped_key.as_bytes()).into_string(),
             },
             bao_hash: bs58::encode(self.bao_hash).into_string(),
-            bao_outboard: bs58::encode(&self.bao_outboard).into_string(),
             ciphertext: bs58::encode(&self.ciphertext).into_string(),
         };
 
@@ -66,7 +64,6 @@ impl MultiFormat for EncryptedFile {
             version: u32,
             wrapped_key: JsonCiphertext,
             bao_hash: String,
-            bao_outboard: String,
             ciphertext: String,
         }
 
@@ -79,9 +76,9 @@ impl MultiFormat for EncryptedFile {
 
         let json: JsonEncryptedFile = serde_json::from_str(s)?;
 
-        if json.version != 2 {
+        if json.version != 3 {
             return Err(ProtoError::VersionMismatch {
-                expected: 2,
+                expected: 3,
                 actual: json.version,
             });
         }
@@ -111,7 +108,6 @@ impl MultiFormat for EncryptedFile {
                 bs58::decode(&json.wrapped_key.data).into_vec()?,
             ),
             bao_hash,
-            bao_outboard: bs58::decode(&json.bao_outboard).into_vec()?,
             ciphertext: bs58::decode(&json.ciphertext).into_vec()?,
             signature: None, // JSON format doesn't include signature for now
         })
@@ -119,7 +115,7 @@ impl MultiFormat for EncryptedFile {
 
     fn to_armor(&self, _armor_type: ArmorType) -> ProtoResult<String> {
         let proto_bytes = self.to_protobuf()?;
-        let headers = [("Version", "2"), ("Format", "protobuf")];
+        let headers = [("Version", "3"), ("Format", "protobuf")];
         Ok(armor_encode(
             ArmorType::EncryptedFile,
             &headers,

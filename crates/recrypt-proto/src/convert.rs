@@ -61,10 +61,9 @@ impl TryFrom<proto::CiphertextProto> for Ciphertext {
 impl From<&EncryptedFile> for proto::EncryptedFileProto {
     fn from(ef: &EncryptedFile) -> Self {
         proto::EncryptedFileProto {
-            version: 2,
+            version: 3,
             wrapped_key: Some(proto::CiphertextProto::from(&ef.wrapped_key)),
             bao_hash: ef.bao_hash.to_vec(),
-            bao_outboard: ef.bao_outboard.clone(),
             ciphertext: ef.ciphertext.clone(),
             signature: ef.signature.as_ref().map(proto::MultiSignatureProto::from),
         }
@@ -89,7 +88,6 @@ impl TryFrom<proto::EncryptedFileProto> for EncryptedFile {
         Ok(EncryptedFile {
             wrapped_key: Ciphertext::try_from(wrapped_key)?,
             bao_hash: proto.bao_hash.try_into().unwrap(),
-            bao_outboard: proto.bao_outboard,
             ciphertext: proto.ciphertext,
             signature: proto.signature.map(MultiSig::try_from).transpose()?,
         })

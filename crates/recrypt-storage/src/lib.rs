@@ -40,7 +40,7 @@ mod memory;
 #[cfg(feature = "s3")]
 mod s3;
 
-pub mod chunking;
+pub mod gc;
 
 // Re-exports
 pub use error::{StorageError, StorageResult};

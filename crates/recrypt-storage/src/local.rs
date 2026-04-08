@@ -7,7 +7,7 @@ use blake3::Hash;
 use tokio::fs;
 
 use crate::error::{StorageError, StorageResult};
-use crate::traits::{ChunkStorage, hash_from_base58, hash_to_base58};
+use crate::traits::{ChunkStorage, hash_from_base58, hash_to_base58, raw_hash_to_base58};
 
 /// Algorithm prefix for Blake3 hashes (enables future hash agility)
 const HASH_ALG_PREFIX: &str = "b3";
@@ -36,6 +36,13 @@ impl LocalFileStorage {
             .join("chunks")
             .join(HASH_ALG_PREFIX)
             .join(hash_to_base58(hash))
+    }
+
+    fn outboard_path(&self, hash: &[u8; 32]) -> PathBuf {
+        self.root
+            .join("chunks")
+            .join(HASH_ALG_PREFIX)
+            .join(format!("{}.obao", raw_hash_to_base58(hash)))
     }
 }
 
@@ -104,5 +111,59 @@ impl ChunkStorage for LocalFileStorage {
         }
 
         Ok(hashes)
+    }
+
+    async fn put_with_outboard(
+        &self,
+        hash: &[u8; 32],
+        ciphertext: Vec<u8>,
+        outboard: Vec<u8>,
+    ) -> StorageResult<()> {
+        let b3_hash = blake3::Hash::from(*hash);
+        let ct_path = self.chunk_path(&b3_hash);
+        fs::write(&ct_path, &ciphertext).await?;
+        if !outboard.is_empty() {
+            let ob_path = self.outboard_path(hash);
+            fs::write(&ob_path, &outboard).await?;
+        }
+        Ok(())
+    }
+
+    async fn get_with_outboard(
+        &self,
+        hash: &[u8; 32],
+    ) -> StorageResult<(Vec<u8>, Vec<u8>)> {
+        let b3_hash = blake3::Hash::from(*hash);
+        let ct_path = self.chunk_path(&b3_hash);
+        let ciphertext = match fs::read(&ct_path).await {
+            Ok(data) => data,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Err(StorageError::NotFound(raw_hash_to_base58(hash)));
+            }
+            Err(e) => return Err(e.into()),
+        };
+        let ob_path = self.outboard_path(hash);
+        let outboard = match fs::read(&ob_path).await {
+            Ok(data) => data,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+            Err(e) => return Err(e.into()),
+        };
+        Ok((ciphertext, outboard))
+    }
+
+    async fn delete_with_outboard(
+        &self,
+        hash: &[u8; 32],
+    ) -> StorageResult<()> {
+        let b3_hash = blake3::Hash::from(*hash);
+        let ct_path = self.chunk_path(&b3_hash);
+        match fs::remove_file(&ct_path).await {
+            Ok(()) | Err(_) => {} // idempotent
+        }
+        let ob_path = self.outboard_path(hash);
+        match fs::remove_file(&ob_path).await {
+            Ok(()) | Err(_) => {} // idempotent — .obao may not exist
+        }
+        Ok(())
     }
 }

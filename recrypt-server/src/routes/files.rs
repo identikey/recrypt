@@ -55,10 +55,14 @@ pub async fn upload_file(
 
     let size = body.len();
 
-    // Store
+    // Store ciphertext using two-object API.
+    // The outboard is empty here: the client uploads raw ciphertext bytes.
+    // Clients that encrypt via encrypt_streaming may upload the outboard
+    // separately or embed it in the metadata; the server stores only what
+    // it receives.
     state
         .storage
-        .put(&hash, &body)
+        .put_with_outboard(hash.as_bytes(), body.to_vec(), Vec::new())
         .await
         .map_err(|e| ServerError::Internal(format!("Storage error: {e}")))?;
 
@@ -89,12 +93,18 @@ pub async fn download_file(
     let hash = hash_from_base58(&hash_str)
         .ok_or_else(|| ServerError::BadRequest("Invalid hash".into()))?;
 
-    let data = state.storage.get(&hash).await.map_err(|e| match e {
-        recrypt_storage::StorageError::NotFound(_) => {
-            ServerError::NotFound("File not found".into())
-        }
-        other => ServerError::Internal(other.to_string()),
-    })?;
+    // Retrieve ciphertext (and discard outboard — callers fetch it via the
+    // outboard URL when needed; this endpoint returns the ciphertext blob).
+    let (data, _outboard) = state
+        .storage
+        .get_with_outboard(hash.as_bytes())
+        .await
+        .map_err(|e| match e {
+            recrypt_storage::StorageError::NotFound(_) => {
+                ServerError::NotFound("File not found".into())
+            }
+            other => ServerError::Internal(other.to_string()),
+        })?;
 
     let response = Response::builder()
         .status(StatusCode::OK)
@@ -155,10 +165,10 @@ pub async fn delete_file(
         &account.ml_dsa_pk,
     )?;
 
-    // Delete
+    // Delete ciphertext and outboard sibling atomically
     state
         .storage
-        .delete(&hash)
+        .delete_with_outboard(hash.as_bytes())
         .await
         .map_err(|e| ServerError::Internal(e.to_string()))?;
 
@@ -167,7 +177,7 @@ pub async fn delete_file(
         .ownership
         .unregister(&fingerprint, &hash)
         .await
-        .map_err(|e| ServerError::Internal(e.to_string()))?;
+        .map_err(|e| ServerError::Internal(format!("Ownership unregister error: {e}")))?;
 
     Ok(StatusCode::NO_CONTENT)
 }

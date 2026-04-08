@@ -76,10 +76,12 @@ pub struct CiphertextProto {
     #[prost(bytes = "vec", tag = "3")]
     pub data: ::prost::alloc::vec::Vec<u8>,
 }
-/// Complete encrypted file (wire format)
+/// Complete encrypted file (wire format, version 3)
+/// v3: outboard lives as a sibling S3 object ({hash}.obao), out of the envelope.
+/// Fields renumbered to close the gap — no stored v2 data exists to preserve compat for.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EncryptedFileProto {
-    /// Format version (2)
+    /// Format version (current: 3)
     #[prost(uint32, tag = "1")]
     pub version: u32,
     /// PRE-encrypted KeyMaterial
@@ -88,14 +90,11 @@ pub struct EncryptedFileProto {
     /// 32 bytes - Bao root of ciphertext
     #[prost(bytes = "vec", tag = "3")]
     pub bao_hash: ::prost::alloc::vec::Vec<u8>,
-    /// Bao verification tree (~1% size)
-    #[prost(bytes = "vec", tag = "4")]
-    pub bao_outboard: ::prost::alloc::vec::Vec<u8>,
     /// XChaCha20 encrypted data
-    #[prost(bytes = "vec", tag = "5")]
+    #[prost(bytes = "vec", tag = "4")]
     pub ciphertext: ::prost::alloc::vec::Vec<u8>,
     /// Signs (wrapped_key || bao_hash)
-    #[prost(message, optional, tag = "6")]
+    #[prost(message, optional, tag = "5")]
     pub signature: ::core::option::Option<MultiSignatureProto>,
 }
 /// Key material bundle (96 bytes, encrypted inside wrapped_key)

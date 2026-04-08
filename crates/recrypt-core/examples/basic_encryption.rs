@@ -29,10 +29,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let encrypted = encryptor.encrypt(&keypair.public, msg)?;
         println!(
-            "   ✓ Encrypted: {} bytes plaintext → {} bytes ciphertext + {} bytes Bao outboard",
+            "   ✓ Encrypted: {} bytes plaintext → {} bytes ciphertext",
             msg.len(),
             encrypted.ciphertext.len(),
-            encrypted.bao_outboard.len()
         );
 
         let decrypted = encryptor.decrypt(&keypair.secret, &encrypted)?;

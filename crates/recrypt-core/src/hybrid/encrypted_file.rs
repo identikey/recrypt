@@ -13,9 +13,6 @@ pub struct EncryptedFile {
     /// Bao root hash of ciphertext (for streaming verification)
     pub bao_hash: [u8; 32],
 
-    /// Bao outboard data (verification tree, ~1% of ciphertext size)
-    pub bao_outboard: Vec<u8>,
-
     /// XChaCha20-encrypted data (no auth tag—Bao provides integrity)
     pub ciphertext: Vec<u8>,
 

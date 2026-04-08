@@ -20,6 +20,11 @@ pub fn hash_from_base58(s: &str) -> Option<Hash> {
     Some(Hash::from(arr))
 }
 
+/// Encode a raw 32-byte hash as base58
+pub fn raw_hash_to_base58(hash: &[u8; 32]) -> String {
+    bs58::encode(hash).into_string()
+}
+
 /// Content-addressed chunk storage
 ///
 /// All operations are keyed by Blake3 hash. Implementations must verify
@@ -51,4 +56,57 @@ pub trait ChunkStorage: Send + Sync {
     /// Production implementations may return an error or partial results
     /// for very large stores.
     async fn list(&self) -> StorageResult<Vec<Hash>>;
+
+    // ── Two-object API (bao-tree layout) ────────────────────────────────────
+    //
+    // Each encrypted file is stored as two sibling objects keyed by the
+    // Blake3 root hash of the ciphertext:
+    //
+    //   chunks/b3/{base58(hash)}       — ciphertext blob
+    //   chunks/b3/{base58(hash)}.obao  — bao-tree outboard (omitted for ≤16 KiB)
+    //
+    // When `outboard` is empty the sibling `.obao` object is not stored.
+    // `get_with_outboard` returns an empty `Vec` for the outboard in that case.
+    //
+    // TODO(future): return `impl AsyncRead` once bao-tree gains stable streaming
+    // support and the API can do incremental verification without buffering the
+    // entire ciphertext. For now, `Vec<u8>` is correct and consistent with how
+    // Group B's encrypt/decrypt path works.
+    //
+    // TODO(future): use S3 multipart upload for the ciphertext object once the
+    // interface supports streaming inputs. The current `Vec<u8>` interface
+    // issues a single PutObject call, which is sufficient for the first cut.
+
+    /// Store a ciphertext blob and its sibling outboard atomically.
+    ///
+    /// If `outboard` is empty (file ≤ 16 KiB), the `.obao` sibling is skipped.
+    ///
+    /// Key format:
+    /// - Ciphertext: `chunks/b3/{base58(hash)}`
+    /// - Outboard:   `chunks/b3/{base58(hash)}.obao`
+    async fn put_with_outboard(
+        &self,
+        hash: &[u8; 32],
+        ciphertext: Vec<u8>,
+        outboard: Vec<u8>,
+    ) -> StorageResult<()>;
+
+    /// Retrieve a ciphertext blob and its outboard sibling.
+    ///
+    /// Returns `(ciphertext_bytes, outboard_bytes)`. `outboard_bytes` is empty
+    /// when no `.obao` sibling exists (small-file case).
+    ///
+    /// Returns `StorageError::NotFound` if the ciphertext object is absent.
+    async fn get_with_outboard(
+        &self,
+        hash: &[u8; 32],
+    ) -> StorageResult<(Vec<u8>, Vec<u8>)>;
+
+    /// Delete both the ciphertext and (if present) the outboard sibling.
+    ///
+    /// Succeeds even if neither object exists (idempotent).
+    async fn delete_with_outboard(
+        &self,
+        hash: &[u8; 32],
+    ) -> StorageResult<()>;
 }
