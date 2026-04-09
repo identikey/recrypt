@@ -140,16 +140,16 @@ async fn new_identity(name: Option<String>, ctx: &Context) -> Result<()> {
             .as_secs(),
         fingerprint: fingerprint.clone(),
         ed25519: KeyPair {
-            public: bs58::encode(ed25519_kp.verifying_key.as_bytes()).into_string(),
-            secret: bs58::encode(ed25519_kp.signing_key.as_bytes()).into_string(),
+            public: ed25519_kp.verifying_key.as_bytes().to_vec(),
+            secret: ed25519_kp.signing_key.as_bytes().to_vec(),
         },
         ml_dsa: KeyPair {
-            public: bs58::encode(&ml_dsa_kp.public_key).into_string(),
-            secret: bs58::encode(&ml_dsa_kp.secret_key).into_string(),
+            public: ml_dsa_kp.public_key.clone(),
+            secret: ml_dsa_kp.secret_key.clone(),
         },
         pre: KeyPair {
-            public: base64::engine::general_purpose::STANDARD.encode(pre_kp.public.as_bytes()),
-            secret: base64::engine::general_purpose::STANDARD.encode(pre_kp.secret.as_bytes()),
+            public: pre_kp.public.as_bytes().to_vec(),
+            secret: pre_kp.secret.as_bytes().to_vec(),
         },
         pre_backend: backend_id,
     };
@@ -259,16 +259,24 @@ async fn show_identity(name: Option<String>, ctx: &Context) -> Result<()> {
             pre_public: String,
             pre_backend: String,
         }
+        let ed25519_b58 = bs58::encode(&identity.ed25519.public).into_string();
+        let ml_dsa_b58 = bs58::encode(&identity.ml_dsa.public).into_string();
+        let pre_b58 = bs58::encode(&identity.pre.public).into_string();
+
         print_json(&Output {
             name: identity_name,
             fingerprint: identity.fingerprint.clone(),
             created_at: identity.created_at,
-            ed25519_public: identity.ed25519.public.clone(),
-            ml_dsa_public: identity.ml_dsa.public.clone(),
-            pre_public: identity.pre.public.clone(),
+            ed25519_public: ed25519_b58,
+            ml_dsa_public: ml_dsa_b58,
+            pre_public: pre_b58,
             pre_backend: identity.pre_backend.to_string(),
         })?;
     } else {
+        let ed25519_b58 = bs58::encode(&identity.ed25519.public).into_string();
+        let ml_dsa_b58 = bs58::encode(&identity.ml_dsa.public).into_string();
+        let pre_b58 = bs58::encode(&identity.pre.public).into_string();
+
         println!("{}", format!("Identity: {identity_name}").bold());
         println!("  {}: {}", "Fingerprint".dimmed(), identity.fingerprint);
         println!(
@@ -281,17 +289,17 @@ async fn show_identity(name: Option<String>, ctx: &Context) -> Result<()> {
         println!(
             "    {}: {}",
             "ED25519".dimmed(),
-            truncate(&identity.ed25519.public, 32)
+            truncate(&ed25519_b58, 32)
         );
         println!(
             "    {}: {}",
             "ML-DSA-87".dimmed(),
-            truncate(&identity.ml_dsa.public, 32)
+            truncate(&ml_dsa_b58, 32)
         );
         println!(
             "    {}: {}",
             "PRE".dimmed(),
-            truncate(&identity.pre.public, 32)
+            truncate(&pre_b58, 32)
         );
     }
 

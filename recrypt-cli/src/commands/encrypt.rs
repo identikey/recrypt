@@ -35,12 +35,8 @@ pub async fn run(args: EncryptArgs, ctx: &Context) -> Result<()> {
         )
     })?;
 
-    // Parse recipient's PRE public key using their stored backend
-    // PRE keys are stored as base64 in the wallet (see identity.rs)
-    use base64::Engine as _;
-    let recipient_pre_pk_bytes = base64::engine::general_purpose::STANDARD
-        .decode(&recipient_identity.pre.public)
-        .context("Failed to decode recipient PRE public key")?;
+    // PRE keys are stored as raw bytes in the wallet
+    let recipient_pre_pk_bytes = recipient_identity.pre.public.clone();
 
     let recipient_backend_id = recipient_identity.pre_backend;
     let recipient_pre_pk =

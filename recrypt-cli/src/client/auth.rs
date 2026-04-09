@@ -75,11 +75,9 @@ async fn sign_with_nonce(
     let signing_message = message.as_bytes();
 
     // 3. Sign with ED25519
-    let ed25519_sk_bytes = bs58::decode(&identity.ed25519.secret)
-        .into_vec()
-        .context("Failed to decode ED25519 secret key")?;
-
-    let ed25519_sk: [u8; 32] = ed25519_sk_bytes
+    let ed25519_sk: [u8; 32] = identity
+        .ed25519
+        .secret
         .as_slice()
         .try_into()
         .context("ED25519 secret key must be 32 bytes")?;
@@ -88,9 +86,7 @@ async fn sign_with_nonce(
     let ed25519_sig: Signature = ed25519::ed25519_sign(&signing_key, signing_message);
 
     // 4. Sign with ML-DSA
-    let ml_dsa_sk_bytes = bs58::decode(&identity.ml_dsa.secret)
-        .into_vec()
-        .context("Failed to decode ML-DSA secret key")?;
+    let ml_dsa_sk_bytes = &identity.ml_dsa.secret;
 
     let ml_dsa_sig = pq_sign(&ml_dsa_sk_bytes, PqAlgorithm::MlDsa87, signing_message)
         .context("Failed to sign with ML-DSA")?;

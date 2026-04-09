@@ -44,8 +44,8 @@ fn default_backend() -> recrypt_core::pre::BackendId {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct KeyPair {
-    pub public: String, // base58
-    pub secret: String, // base58
+    pub public: Vec<u8>,
+    pub secret: Vec<u8>,
 }
 
 impl WalletData {

@@ -40,8 +40,8 @@ impl ApiClient {
     /// Register an account on the server
     pub async fn register_account(&self, identity: &Identity) -> Result<RegisterResponse> {
         let request_body = RegisterRequest {
-            ed25519_pk: identity.ed25519.public.clone(),
-            ml_dsa_pk: identity.ml_dsa.public.clone(),
+            ed25519_pk: bs58::encode(&identity.ed25519.public).into_string(),
+            ml_dsa_pk: bs58::encode(&identity.ml_dsa.public).into_string(),
         };
 
         let nonce = self.fetch_nonce().await?;

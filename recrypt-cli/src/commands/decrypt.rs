@@ -33,12 +33,8 @@ pub async fn run(args: DecryptArgs, ctx: &Context) -> Result<()> {
         .get(&identity_name)
         .ok_or_else(|| anyhow::anyhow!("Identity '{identity_name}' not found"))?;
 
-    // Parse PRE secret key using the identity's stored backend
-    // PRE keys are stored as base64 in the wallet (see identity.rs)
-    use base64::Engine as _;
-    let pre_sk_bytes = base64::engine::general_purpose::STANDARD
-        .decode(&identity.pre.secret)
-        .context("Failed to decode PRE secret key")?;
+    // PRE keys are stored as raw bytes in the wallet
+    let pre_sk_bytes = identity.pre.secret.clone();
 
     let backend_id = identity.pre_backend;
     let pre_sk = recrypt_core::pre::SecretKey::new(backend_id, pre_sk_bytes);
