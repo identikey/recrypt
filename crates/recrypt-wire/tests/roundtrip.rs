@@ -64,9 +64,10 @@ fn test_from_any_armor() {
 }
 
 #[test]
-fn test_large_file_metadata_only() {
-    // Ciphertext is NOT in the envelope (it's a sidecar S3 object).
-    // The envelope carries only metadata (bao-hash, backend, etc.).
+fn test_large_file_inline_roundtrip() {
+    // When ciphertext is present (local CLI mode), the envelope carries
+    // everything inline. When ciphertext is empty (server mode), only
+    // metadata is in the envelope.
     let encrypted = EncryptedFile {
         wrapped_key: Ciphertext::new(BackendId::Lattice, 0, vec![0u8; 4096]),
         bao_hash: [0xABu8; 32],
@@ -75,12 +76,72 @@ fn test_large_file_metadata_only() {
     };
 
     let envelope_bytes = encrypted.to_envelope().unwrap();
+    // Envelope includes 1 MB inline ciphertext + 4 KB wrapped key
+    assert!(envelope_bytes.len() > 1_000_000, "envelope should include inline ciphertext");
+
+    let restored = EncryptedFile::from_envelope(&envelope_bytes).unwrap();
+    assert_eq!(restored.bao_hash, encrypted.bao_hash);
+    assert_eq!(restored.ciphertext.len(), 1_000_000);
+    assert_eq!(restored.wrapped_key.as_bytes().len(), 4096);
+}
+
+#[test]
+fn test_metadata_only_envelope() {
+    // When ciphertext is empty (server-mediated flow), the envelope
+    // is metadata-only and small.
+    let encrypted = EncryptedFile {
+        wrapped_key: Ciphertext::new(BackendId::Lattice, 0, Vec::new()),
+        bao_hash: [0xABu8; 32],
+        ciphertext: Vec::new(),
+        signature: None,
+    };
+
+    let envelope_bytes = encrypted.to_envelope().unwrap();
     assert!(
-        envelope_bytes.len() < 1000,
-        "envelope should be metadata-only, got {} bytes",
+        envelope_bytes.len() < 500,
+        "metadata-only envelope should be small, got {} bytes",
         envelope_bytes.len()
     );
 
     let restored = EncryptedFile::from_envelope(&envelope_bytes).unwrap();
     assert_eq!(restored.bao_hash, encrypted.bao_hash);
+    assert!(restored.ciphertext.is_empty());
+}
+
+#[test]
+fn test_wrapped_key_roundtrip_with_data() {
+    // Simulate a realistic wrapped key (PRE ciphertext with actual content)
+    let wrapped_key_data = vec![0xCA; 512]; // 512 bytes of PRE ciphertext
+    let encrypted = EncryptedFile {
+        wrapped_key: Ciphertext::new(BackendId::Mock, 0, wrapped_key_data.clone()),
+        bao_hash: [0x11u8; 32],
+        ciphertext: vec![0xEE; 256],
+        signature: None,
+    };
+
+    let envelope_bytes = encrypted.to_envelope().unwrap();
+    let restored = EncryptedFile::from_envelope(&envelope_bytes).unwrap();
+
+    // Verify wrapped key roundtrips correctly
+    assert_eq!(restored.wrapped_key.backend(), BackendId::Mock);
+    assert_eq!(restored.wrapped_key.level(), 0);
+    assert_eq!(restored.wrapped_key.as_bytes(), &wrapped_key_data[..],
+        "wrapped key inner bytes must match");
+
+    // Verify ciphertext roundtrips
+    assert_eq!(restored.ciphertext, vec![0xEE; 256]);
+    assert_eq!(restored.bao_hash, [0x11u8; 32]);
+}
+
+#[test]
+fn test_empty_wrapped_key_does_not_serialize() {
+    // If wrapped_key has no inner bytes but has backend+level,
+    // to_bytes() still produces 2 bytes (backend, level).
+    // Verify this roundtrips.
+    let ct = Ciphertext::new(BackendId::Mock, 0, Vec::new());
+    let bytes = ct.to_bytes();
+    println!("empty ciphertext to_bytes: {:?} (len={})", bytes, bytes.len());
+    assert_eq!(bytes.len(), 2); // backend byte + level byte
+    let restored = Ciphertext::from_bytes(&bytes).unwrap();
+    assert_eq!(restored.as_bytes().len(), 0);
 }

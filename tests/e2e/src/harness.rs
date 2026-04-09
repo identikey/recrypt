@@ -149,6 +149,7 @@ impl TestHarness {
             &self.server_url,
             &self.wallet_path,
             "mock",
+            self.temp_dir.path(),
         )
     }
 

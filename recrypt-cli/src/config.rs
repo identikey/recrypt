@@ -8,7 +8,6 @@ use std::path::PathBuf;
 #[derive(Serialize, Deserialize, Default)]
 pub struct Config {
     pub default_server: Option<String>,
-    pub active_identity: Option<String>,
     pub output_format: Option<String>,
     pub wallet_path: Option<String>,
     /// Default PRE backend for new identities
@@ -40,6 +39,11 @@ impl Config {
     }
 
     fn config_path() -> Result<PathBuf> {
+        // Allow override for testing/CI isolation
+        if let Ok(dir) = std::env::var("RECRYPT_CONFIG_DIR") {
+            return Ok(PathBuf::from(dir).join("config.toml"));
+        }
+
         // Uses platform-specific config directories:
         //   macOS:   ~/Library/Application Support/io.identikey.recrypt/
         //   Linux:   ~/.config/recrypt/

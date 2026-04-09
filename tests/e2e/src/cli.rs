@@ -56,15 +56,17 @@ pub struct CliRunner {
     wallet_path: PathBuf,
     backend: String,
     identity: Option<String>,
+    config_dir: PathBuf,
 }
 
 impl CliRunner {
-    pub fn new(server_url: &str, wallet_path: &Path, backend: &str) -> Self {
+    pub fn new(server_url: &str, wallet_path: &Path, backend: &str, config_dir: &Path) -> Self {
         Self {
             server_url: server_url.to_string(),
             wallet_path: wallet_path.to_owned(),
             backend: backend.to_string(),
             identity: None,
+            config_dir: config_dir.to_owned(),
         }
     }
 
@@ -91,6 +93,8 @@ impl CliRunner {
         let output = cmd
             .args(args)
             .env("RECRYPT_WALLET_PASSWORD", "testpass123")
+            .env("RECRYPT_CONFIG_DIR", &self.config_dir)
+            .env("RECRYPT_NO_KEYCHAIN", "1")
             .output()
             .await
             .expect("failed to execute recrypt CLI");

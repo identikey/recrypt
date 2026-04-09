@@ -9,7 +9,20 @@ use base64::Engine;
 use std::sync::RwLock;
 
 const SERVICE_NAME: &str = "recrypt";
-const ACCOUNT_NAME: &str = "wallet-key";
+
+/// Derive a wallet-specific account name for the keychain.
+/// Uses a truncated blake3 hash of the canonical wallet path so different
+/// wallets get separate keychain entries and don't stomp each other.
+pub fn account_name_for_wallet(wallet_path: &std::path::Path) -> String {
+    let canonical = wallet_path
+        .canonicalize()
+        .unwrap_or_else(|_| wallet_path.to_path_buf());
+    let hash = blake3::hash(canonical.to_string_lossy().as_bytes());
+    format!("wallet-key-{}", &hash.to_hex()[..16])
+}
+
+/// Legacy account name for backward compat with existing keychain entries.
+const LEGACY_ACCOUNT_NAME: &str = "wallet-key";
 
 /// Abstraction for secure credential storage.
 ///
@@ -36,19 +49,23 @@ pub trait CredentialProvider: Send + Sync {
 // === macOS: Direct Security Framework access (avoids double prompts) ===
 
 #[cfg(target_os = "macos")]
-pub struct MacOSKeychainProvider;
-
-#[cfg(target_os = "macos")]
-impl MacOSKeychainProvider {
-    pub fn new() -> Self {
-        Self
-    }
+pub struct MacOSKeychainProvider {
+    account_name: String,
 }
 
 #[cfg(target_os = "macos")]
-impl Default for MacOSKeychainProvider {
-    fn default() -> Self {
-        Self::new()
+impl MacOSKeychainProvider {
+    pub fn new(wallet_path: &std::path::Path) -> Self {
+        Self {
+            account_name: account_name_for_wallet(wallet_path),
+        }
+    }
+
+    /// Create with the legacy singleton account name (for migration).
+    pub fn legacy() -> Self {
+        Self {
+            account_name: LEGACY_ACCOUNT_NAME.to_string(),
+        }
     }
 }
 
@@ -60,16 +77,16 @@ impl CredentialProvider for MacOSKeychainProvider {
         let encoded = base64::engine::general_purpose::STANDARD.encode(key);
 
         // Delete existing entry first (set_generic_password fails if entry exists)
-        let _ = delete_generic_password(SERVICE_NAME, ACCOUNT_NAME);
+        let _ = delete_generic_password(SERVICE_NAME, &self.account_name);
 
-        set_generic_password(SERVICE_NAME, ACCOUNT_NAME, encoded.as_bytes())
+        set_generic_password(SERVICE_NAME, &self.account_name, encoded.as_bytes())
             .map_err(|e| anyhow!("Failed to store key in Keychain: {e}"))
     }
 
     fn get_key(&self) -> Result<Option<[u8; 32]>> {
         use security_framework::passwords::get_generic_password;
 
-        match get_generic_password(SERVICE_NAME, ACCOUNT_NAME) {
+        match get_generic_password(SERVICE_NAME, &self.account_name) {
             Ok(data) => {
                 let encoded = String::from_utf8(data)
                     .map_err(|e| anyhow!("Invalid UTF-8 in keychain: {e}"))?;
@@ -91,7 +108,7 @@ impl CredentialProvider for MacOSKeychainProvider {
     fn clear_key(&self) -> Result<()> {
         use security_framework::passwords::delete_generic_password;
 
-        match delete_generic_password(SERVICE_NAME, ACCOUNT_NAME) {
+        match delete_generic_password(SERVICE_NAME, &self.account_name) {
             Ok(()) => Ok(()),
             Err(e) if e.code() == -25300 => Ok(()), // errSecItemNotFound
             Err(e) => Err(anyhow!("Failed to clear keychain: {e}")),
@@ -110,23 +127,27 @@ impl CredentialProvider for MacOSKeychainProvider {
 // === KeyringProvider (Linux/Windows) ===
 
 #[cfg(not(target_os = "macos"))]
-pub struct KeyringProvider;
-
-#[cfg(not(target_os = "macos"))]
-impl KeyringProvider {
-    pub fn new() -> Self {
-        Self
-    }
-
-    fn entry(&self) -> Result<keyring::Entry> {
-        keyring::Entry::new(SERVICE_NAME, ACCOUNT_NAME).map_err(|e| anyhow!("Keyring error: {e}"))
-    }
+pub struct KeyringProvider {
+    account_name: String,
 }
 
 #[cfg(not(target_os = "macos"))]
-impl Default for KeyringProvider {
-    fn default() -> Self {
-        Self::new()
+impl KeyringProvider {
+    pub fn new(wallet_path: &std::path::Path) -> Self {
+        Self {
+            account_name: account_name_for_wallet(wallet_path),
+        }
+    }
+
+    /// Create with the legacy singleton account name (for migration).
+    pub fn legacy() -> Self {
+        Self {
+            account_name: LEGACY_ACCOUNT_NAME.to_string(),
+        }
+    }
+
+    fn entry(&self) -> Result<keyring::Entry> {
+        keyring::Entry::new(SERVICE_NAME, &self.account_name).map_err(|e| anyhow!("Keyring error: {e}"))
     }
 }
 
@@ -308,13 +329,21 @@ impl CredentialProvider for MemoryProvider {
 
 // === Provider selection ===
 
-/// Select the best available credential provider.
+/// Select the best available credential provider for a given wallet path.
+///
+/// The keychain entry is keyed by the wallet path hash, so different wallets
+/// get separate cached keys and don't stomp each other.
 ///
 /// Priority:
 /// 1. `RECRYPT_WALLET_KEY` env var (CI mode)
-/// 2. OS keyring (interactive use)
+/// 2. OS keyring (interactive use, wallet-specific entry)
 /// 3. Memory fallback (per-process only, for headless systems without keyring)
-pub fn default_provider() -> Box<dyn CredentialProvider> {
+pub fn default_provider_for(wallet_path: &std::path::Path) -> Box<dyn CredentialProvider> {
+    // 0. Check for no-keychain mode (testing/CI without keychain access)
+    if std::env::var("RECRYPT_NO_KEYCHAIN").is_ok() {
+        return Box::new(MemoryProvider::new());
+    }
+
     // 1. Check for CI mode via env var
     let env = EnvProvider::default();
     if env.is_available() {
@@ -324,19 +353,19 @@ pub fn default_provider() -> Box<dyn CredentialProvider> {
     // 2. macOS: use security-framework directly (single prompt, not double)
     #[cfg(target_os = "macos")]
     {
-        Box::new(MacOSKeychainProvider::new())
+        Box::new(MacOSKeychainProvider::new(wallet_path))
     }
 
     // 3. Windows: use keyring crate
     #[cfg(target_os = "windows")]
     {
-        Box::new(KeyringProvider::new())
+        Box::new(KeyringProvider::new(wallet_path))
     }
 
     // 4. Linux: check if Secret Service is available; fall back to memory if not
     #[cfg(target_os = "linux")]
     {
-        let keyring = KeyringProvider::new();
+        let keyring = KeyringProvider::new(wallet_path);
         if keyring.is_available() {
             Box::new(keyring)
         } else {
@@ -347,7 +376,23 @@ pub fn default_provider() -> Box<dyn CredentialProvider> {
     // 5. Other platforms: memory only
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
+        let _ = wallet_path;
         Box::new(MemoryProvider::new())
+    }
+}
+
+/// Legacy provider selection (singleton keychain entry).
+/// Used only for migration — tries the old "wallet-key" entry.
+#[allow(dead_code)]
+pub fn legacy_provider() -> Box<dyn CredentialProvider> {
+    #[cfg(target_os = "macos")]
+    {
+        Box::new(MacOSKeychainProvider::legacy())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        Box::new(KeyringProvider::legacy())
     }
 }
 

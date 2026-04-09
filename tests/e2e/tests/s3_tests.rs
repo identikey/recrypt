@@ -40,7 +40,7 @@ async fn test_upload_download_via_s3() {
     let mut cli = harness.cli();
 
     cli.run_ok(&["identity", "new", "--name", "alice"]).await;
-    cli.set_identity("alice");
+
     cli.run_ok(&["account", "register"]).await;
 
     let input_path = harness.tmp().join("s3_upload.txt");
@@ -89,7 +89,7 @@ async fn test_file_delete_from_s3() {
     let mut cli = harness.cli();
 
     cli.run_ok(&["identity", "new", "--name", "alice"]).await;
-    cli.set_identity("alice");
+
     cli.run_ok(&["account", "register"]).await;
 
     let file_path = harness.tmp().join("to_delete.enc");
@@ -206,7 +206,7 @@ async fn test_large_file_s3() {
     let mut cli = harness.cli();
 
     cli.run_ok(&["identity", "new", "--name", "alice"]).await;
-    cli.set_identity("alice");
+
     cli.run_ok(&["account", "register"]).await;
 
     // 1 MB of repeating pattern.

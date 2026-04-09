@@ -41,13 +41,33 @@ pub fn encrypted_file_to_envelope(
     subject.insert("type", "recrypt.encrypted-file");
     subject.insert("format-version", 3_u32);
     subject.insert("bao-hash", ByteString::from(ef.bao_hash.to_vec()));
-    subject.insert("ciphertext-ref", ByteString::from(ef.bao_hash.to_vec()));
 
     let mut envelope = Envelope::new(CBOR::from(subject))
         .add_assertion_salted("backend", backend_to_string(ef.wrapped_key.backend()), true);
 
     if let Some(fp) = owner_fingerprint {
         envelope = envelope.add_assertion("owner", ByteString::from(fp.to_vec()));
+    }
+
+    // Inline the wrapped-key ciphertext bytes and its metadata.
+    // For server-mediated flows these would be separate objects, but for
+    // local CLI encrypt/decrypt and on-disk storage, they're inline.
+    let wrapped_key_bytes = ef.wrapped_key.to_bytes();
+    if !wrapped_key_bytes.is_empty() {
+        envelope = envelope.add_assertion(
+            "wrapped-key",
+            ByteString::from(wrapped_key_bytes),
+        );
+    }
+
+    // Inline the ciphertext bytes for local file storage.
+    // For S3-backed server flows, this would be a content-addressed sidecar
+    // referenced by bao-hash; the ciphertext assertion would be absent.
+    if !ef.ciphertext.is_empty() {
+        envelope = envelope.add_assertion(
+            "ciphertext",
+            ByteString::from(ef.ciphertext.clone()),
+        );
     }
 
     envelope
@@ -107,10 +127,27 @@ pub fn encrypted_file_from_envelope(envelope: &Envelope) -> WireResult<(Encrypte
         .map_err(|_| WireError::MissingField("backend assertion".into()))?;
     let backend = backend_from_string(&backend_str)?;
 
+    // Extract inline wrapped-key if present (local file storage mode).
+    // For server-mediated flows this assertion is absent — the wrapped-key
+    // is a separate object discovered via the auth service.
+    let wrapped_key = match envelope.extract_object_for_predicate::<ByteString>("wrapped-key") {
+        Ok(bs) => Ciphertext::from_bytes(&bs.to_vec())
+            .map_err(|e| WireError::InvalidFormat(format!("wrapped-key: {e}")))?,
+        Err(_) => Ciphertext::new(backend, 0, Vec::new()),
+    };
+
+    // Extract inline ciphertext if present (local file storage mode).
+    // For server-mediated flows this is absent — the ciphertext lives in
+    // a content-addressed S3 sidecar identified by bao-hash.
+    let ciphertext = match envelope.extract_object_for_predicate::<ByteString>("ciphertext") {
+        Ok(bs) => bs.to_vec(),
+        Err(_) => Vec::new(),
+    };
+
     let ef = EncryptedFile {
-        wrapped_key: Ciphertext::new(backend, 0, Vec::new()),
+        wrapped_key,
         bao_hash,
-        ciphertext: Vec::new(),
+        ciphertext,
         signature: None,
     };
 

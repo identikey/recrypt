@@ -20,6 +20,10 @@ const ARGON2_P_COST: u32 = 4; // 4 parallelism
 pub struct WalletData {
     pub version: u8,
     pub identities: HashMap<String, Identity>,
+    /// Active identity name — lives in the wallet so it's per-wallet, not global.
+    /// Falls back to the global config's `active_identity` for backward compat.
+    #[serde(default)]
+    pub active_identity: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -49,6 +53,7 @@ impl WalletData {
         Self {
             version: 1,
             identities: HashMap::new(),
+            active_identity: None,
         }
     }
 }

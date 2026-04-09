@@ -99,7 +99,7 @@ async fn test_account_register() {
     let mut cli = harness.cli();
 
     cli.run_ok(&["identity", "new", "--name", "alice"]).await;
-    cli.set_identity("alice");
+
     let result = cli.run_ok(&["account", "register"]).await;
     let json = result.json();
     assert!(
@@ -115,7 +115,7 @@ async fn test_account_get() {
     let mut cli = harness.cli();
 
     cli.run_ok(&["identity", "new", "--name", "alice"]).await;
-    cli.set_identity("alice");
+
     cli.run_ok(&["account", "register"]).await;
 
     let result = cli.run_ok(&["account", "show"]).await;
@@ -137,13 +137,13 @@ async fn test_account_get_nonexistent() {
 // ── Encrypt/decrypt tests (local, no server) ──────────────────────────────────
 
 #[tokio::test]
-#[ignore = "Blocked: Gordian Envelope from_envelope() doesn't roundtrip wrapped_key/ciphertext"]
+// Previously ignored: Gordian Envelope now roundtrips wrapped_key/ciphertext inline
 async fn test_encrypt_decrypt_roundtrip() {
     let harness = TestHarness::new().await;
     let mut cli = harness.cli();
 
     cli.run_ok(&["identity", "new", "--name", "alice"]).await;
-    cli.set_identity("alice");
+
 
     let input_path = harness.tmp().join("input.txt");
     let enc_path = harness.tmp().join("input.enc");
@@ -179,7 +179,7 @@ async fn test_encrypt_missing_file_fails() {
     let mut cli = harness.cli();
 
     cli.run_ok(&["identity", "new", "--name", "alice"]).await;
-    cli.set_identity("alice");
+
 
     cli.run_err(&[
         "encrypt",
@@ -190,13 +190,13 @@ async fn test_encrypt_missing_file_fails() {
 }
 
 #[tokio::test]
-#[ignore = "Blocked: Gordian Envelope from_envelope() doesn't roundtrip wrapped_key/ciphertext"]
+// Previously ignored: Gordian Envelope now roundtrips wrapped_key/ciphertext inline
 async fn test_encrypt_empty_file() {
     let harness = TestHarness::new().await;
     let mut cli = harness.cli();
 
     cli.run_ok(&["identity", "new", "--name", "alice"]).await;
-    cli.set_identity("alice");
+
 
     let input_path = harness.tmp().join("empty.txt");
     let enc_path = harness.tmp().join("empty.enc");
@@ -225,13 +225,13 @@ async fn test_encrypt_empty_file() {
 }
 
 #[tokio::test]
-#[ignore = "Blocked: Gordian Envelope from_envelope() doesn't roundtrip wrapped_key/ciphertext"]
+// Previously ignored: Gordian Envelope now roundtrips wrapped_key/ciphertext inline
 async fn test_encrypt_large_file() {
     let harness = TestHarness::new().await;
     let mut cli = harness.cli();
 
     cli.run_ok(&["identity", "new", "--name", "alice"]).await;
-    cli.set_identity("alice");
+
 
     // 10 MB of repeating pattern
     let pattern = b"LARGE_FILE_TEST_PATTERN_0123456789ABCDEF";
@@ -280,7 +280,7 @@ async fn test_file_upload_download() {
     let mut cli = harness.cli();
 
     cli.run_ok(&["identity", "new", "--name", "alice"]).await;
-    cli.set_identity("alice");
+
     cli.run_ok(&["account", "register"]).await;
 
     let input_path = harness.tmp().join("upload_me.txt");
@@ -327,7 +327,7 @@ async fn test_file_list() {
     let mut cli = harness.cli();
 
     cli.run_ok(&["identity", "new", "--name", "alice"]).await;
-    cli.set_identity("alice");
+
     cli.run_ok(&["account", "register"]).await;
 
     // Upload two files
@@ -352,7 +352,7 @@ async fn test_file_delete() {
     let mut cli = harness.cli();
 
     cli.run_ok(&["identity", "new", "--name", "alice"]).await;
-    cli.set_identity("alice");
+
     cli.run_ok(&["account", "register"]).await;
 
     let file_path = harness.tmp().join("to_delete.enc");
@@ -385,7 +385,7 @@ async fn test_file_download_nonexistent() {
     let mut cli = harness.cli();
 
     cli.run_ok(&["identity", "new", "--name", "alice"]).await;
-    cli.set_identity("alice");
+
     cli.run_ok(&["account", "register"]).await;
 
     let bogus_hash = "11111111111111111111111111111111111111111111";
@@ -407,7 +407,7 @@ async fn test_share_create_disabled() {
     let mut cli = harness.cli();
 
     cli.run_ok(&["identity", "new", "--name", "alice"]).await;
-    cli.set_identity("alice");
+
     cli.run_ok(&["account", "register"]).await;
 
     // share create should return an error about disabled feature
@@ -432,7 +432,7 @@ async fn test_share_list_empty() {
     let mut cli = harness.cli();
 
     cli.run_ok(&["identity", "new", "--name", "alice"]).await;
-    cli.set_identity("alice");
+
     cli.run_ok(&["account", "register"]).await;
 
     let result = cli.run_ok(&["share", "list"]).await;

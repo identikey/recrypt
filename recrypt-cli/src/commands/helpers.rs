@@ -5,17 +5,17 @@ use crate::config::Config;
 use crate::wallet::Wallet;
 use anyhow::Result;
 
-pub fn resolve_identity(ctx: &Context, _wallet: &Wallet) -> Result<String> {
-    // Priority: --identity flag > $RECRYPT_IDENTITY env > config.active_identity
+pub fn resolve_identity(ctx: &Context, wallet: &Wallet) -> Result<String> {
+    // Priority: --identity flag / $RECRYPT_IDENTITY env > wallet.active_identity
+    // No global config fallback — wallet is the single source of truth.
     if let Some(ref name) = ctx.identity_override {
         return Ok(name.clone());
     }
 
-    // $RECRYPT_IDENTITY already handled by clap in ctx.identity_override
-
-    let config = Config::load()?;
-    if let Some(ref name) = config.active_identity {
-        return Ok(name.clone());
+    if let Some(ref name) = wallet.data.active_identity {
+        if wallet.data.identities.contains_key(name) {
+            return Ok(name.clone());
+        }
     }
 
     anyhow::bail!(

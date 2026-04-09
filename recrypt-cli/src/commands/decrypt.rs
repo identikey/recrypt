@@ -129,14 +129,15 @@ pub async fn run(args: DecryptArgs, ctx: &Context) -> Result<()> {
     Ok(())
 }
 
-fn resolve_identity(ctx: &Context, _wallet: &Wallet) -> Result<String> {
+fn resolve_identity(ctx: &Context, wallet: &Wallet) -> Result<String> {
     if let Some(ref name) = ctx.identity_override {
         return Ok(name.clone());
     }
 
-    let config = Config::load()?;
-    if let Some(ref name) = config.active_identity {
-        return Ok(name.clone());
+    if let Some(ref name) = wallet.data.active_identity {
+        if wallet.data.identities.contains_key(name) {
+            return Ok(name.clone());
+        }
     }
 
     anyhow::bail!(

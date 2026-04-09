@@ -160,16 +160,13 @@ async fn new_identity(name: Option<String>, ctx: &Context) -> Result<()> {
         .identities
         .insert(identity_name.clone(), identity);
 
+    // Set as active if first identity
+    if wallet.data.active_identity.is_none() {
+        wallet.data.active_identity = Some(identity_name.clone());
+    }
+
     debug!("Saving wallet");
     wallet.save(is_new_wallet)?;
-
-    // Set as active if first identity
-    debug!("Updating config");
-    let mut config = Config::load()?;
-    if config.active_identity.is_none() {
-        config.active_identity = Some(identity_name.clone());
-        config.save()?;
-    }
 
     if ctx.json_output {
         #[derive(Serialize)]
@@ -193,7 +190,8 @@ async fn new_identity(name: Option<String>, ctx: &Context) -> Result<()> {
 
 async fn list_identities(ctx: &Context) -> Result<()> {
     let wallet = Wallet::load(ctx.wallet_override.as_deref())?;
-    let config = Config::load()?;
+
+    let active_identity = wallet.data.active_identity.as_ref();
 
     if wallet.data.identities.is_empty() {
         if !ctx.json_output {
@@ -216,14 +214,14 @@ async fn list_identities(ctx: &Context) -> Result<()> {
             .map(|(name, identity)| Output {
                 name: name.clone(),
                 fingerprint: identity.fingerprint.clone(),
-                is_active: config.active_identity.as_ref() == Some(name),
+                is_active: active_identity == Some(name),
             })
             .collect();
         print_json(&list)?;
     } else {
         println!("{}", "Identities:".bold());
         for (name, identity) in &wallet.data.identities {
-            let marker = if config.active_identity.as_ref() == Some(name) {
+            let marker = if active_identity == Some(name) {
                 "★".yellow()
             } else {
                 " ".normal()
@@ -301,15 +299,14 @@ async fn show_identity(name: Option<String>, ctx: &Context) -> Result<()> {
 }
 
 async fn use_identity(name: String, ctx: &Context) -> Result<()> {
-    let wallet = Wallet::load(ctx.wallet_override.as_deref())?;
+    let mut wallet = Wallet::load(ctx.wallet_override.as_deref())?;
 
     if !wallet.data.identities.contains_key(&name) {
         anyhow::bail!("Identity '{name}' not found");
     }
 
-    let mut config = Config::load()?;
-    config.active_identity = Some(name.clone());
-    config.save()?;
+    wallet.data.active_identity = Some(name.clone());
+    wallet.save(false)?;
 
     if ctx.json_output {
         #[derive(Serialize)]
@@ -334,14 +331,12 @@ async fn delete_identity(name: String, ctx: &Context) -> Result<()> {
     }
 
     wallet.data.identities.remove(&name);
-    wallet.save(false)?;
 
     // Clear active identity if it was this one
-    let mut config = Config::load()?;
-    if config.active_identity.as_ref() == Some(&name) {
-        config.active_identity = wallet.data.identities.keys().next().cloned();
-        config.save()?;
+    if wallet.data.active_identity.as_ref() == Some(&name) {
+        wallet.data.active_identity = wallet.data.identities.keys().next().cloned();
     }
+    wallet.save(false)?;
 
     if ctx.json_output {
         #[derive(Serialize)]
@@ -429,7 +424,7 @@ async fn import_identity(file: String, name: Option<String>, ctx: &Context) -> R
 
 fn resolve_identity_name(
     explicit: Option<String>,
-    _wallet: &Wallet,
+    wallet: &Wallet,
     ctx: &Context,
 ) -> Result<String> {
     if let Some(name) = explicit {
@@ -440,9 +435,10 @@ fn resolve_identity_name(
         return Ok(name.clone());
     }
 
-    let config = Config::load()?;
-    if let Some(ref name) = config.active_identity {
-        return Ok(name.clone());
+    if let Some(ref name) = wallet.data.active_identity {
+        if wallet.data.identities.contains_key(name) {
+            return Ok(name.clone());
+        }
     }
 
     anyhow::bail!(

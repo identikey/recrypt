@@ -5,7 +5,7 @@ use serde::Serialize;
 
 use super::Context;
 use crate::output::{print_info, print_json, print_success};
-use crate::wallet::credential::default_provider;
+use crate::wallet::credential::default_provider_for;
 use crate::wallet::Wallet;
 
 #[derive(Subcommand)]
@@ -29,8 +29,21 @@ pub async fn run(action: WalletCommand, ctx: &Context) -> Result<()> {
     }
 }
 
+fn resolve_wallet_path(ctx: &Context) -> Result<std::path::PathBuf> {
+    use directories::ProjectDirs;
+    match &ctx.wallet_override {
+        Some(p) => Ok(std::path::PathBuf::from(p)),
+        None => {
+            let dirs = ProjectDirs::from("io", "identikey", "recrypt")
+                .ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
+            Ok(dirs.data_dir().join("wallet.recrypt"))
+        }
+    }
+}
+
 async fn unlock(ctx: &Context) -> Result<()> {
-    let provider = default_provider();
+    let wallet_path = resolve_wallet_path(ctx)?;
+    let provider = default_provider_for(&wallet_path);
 
     // Check if already unlocked
     if provider.get_key()?.is_some() {
@@ -69,7 +82,8 @@ async fn unlock(ctx: &Context) -> Result<()> {
 }
 
 async fn lock(ctx: &Context) -> Result<()> {
-    let provider = default_provider();
+    let wallet_path = resolve_wallet_path(ctx)?;
+    let provider = default_provider_for(&wallet_path);
     provider.clear_key()?;
 
     if ctx.json_output {
@@ -86,20 +100,9 @@ async fn lock(ctx: &Context) -> Result<()> {
 }
 
 async fn status(ctx: &Context) -> Result<()> {
-    use directories::ProjectDirs;
-
-    let provider = default_provider();
+    let wallet_path = resolve_wallet_path(ctx)?;
+    let provider = default_provider_for(&wallet_path);
     let is_unlocked = provider.get_key()?.is_some();
-
-    // Get wallet path without loading/decrypting the wallet
-    let wallet_path = match &ctx.wallet_override {
-        Some(p) => std::path::PathBuf::from(p),
-        None => {
-            let dirs = ProjectDirs::from("io", "identikey", "recrypt")
-                .ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
-            dirs.data_dir().join("wallet.recrypt")
-        }
-    };
     let wallet_path_str = wallet_path.display().to_string();
 
     if ctx.json_output {
@@ -129,16 +132,7 @@ async fn status(ctx: &Context) -> Result<()> {
 }
 
 async fn path(ctx: &Context) -> Result<()> {
-    use directories::ProjectDirs;
-
-    let path = match &ctx.wallet_override {
-        Some(p) => std::path::PathBuf::from(p),
-        None => {
-            let dirs = ProjectDirs::from("io", "identikey", "recrypt")
-                .ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
-            dirs.data_dir().join("wallet.recrypt")
-        }
-    };
+    let path = resolve_wallet_path(ctx)?;
 
     if ctx.json_output {
         #[derive(Serialize)]

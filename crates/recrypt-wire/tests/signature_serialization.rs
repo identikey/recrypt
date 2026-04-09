@@ -29,17 +29,30 @@ fn test_unsigned_file_envelope_roundtrip() {
 
 #[test]
 fn test_envelope_size_overhead() {
-    // Envelope metadata should be small — the actual crypto payloads
-    // (ciphertext, wrapped-key) live in separate objects.
-    let encrypted = make_unsigned_file(BackendId::Lattice);
-    let envelope_bytes = encrypted.to_envelope().unwrap();
+    // When inline payloads are present, the envelope is larger.
+    // When they're absent (server mode), only metadata remains.
+    let with_payload = make_unsigned_file(BackendId::Lattice);
+    let with_bytes = with_payload.to_envelope().unwrap();
 
-    // Envelope is metadata only: type string, version, bao-hash (32 bytes),
-    // ciphertext-ref (32 bytes), backend assertion. Should be under 300 bytes.
+    // 128-byte wrapped-key + 64-byte ciphertext + metadata framing
     assert!(
-        envelope_bytes.len() < 300,
-        "envelope overhead too large: {} bytes",
-        envelope_bytes.len()
+        with_bytes.len() < 600,
+        "envelope with small inline payloads too large: {} bytes",
+        with_bytes.len()
+    );
+
+    // Metadata-only envelope (no inline payloads)
+    let metadata_only = EncryptedFile {
+        wrapped_key: Ciphertext::new(BackendId::Lattice, 0, Vec::new()),
+        bao_hash: [0x55u8; 32],
+        ciphertext: Vec::new(),
+        signature: None,
+    };
+    let meta_bytes = metadata_only.to_envelope().unwrap();
+    assert!(
+        meta_bytes.len() < 300,
+        "metadata-only envelope too large: {} bytes",
+        meta_bytes.len()
     );
 }
 

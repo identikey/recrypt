@@ -37,15 +37,6 @@ async fn show() -> Result<()> {
     );
     println!("    {}", "Example: http://localhost:7222".bright_black());
 
-    println!(
-        "  {}: {}",
-        "active_identity".dimmed(),
-        config.active_identity.as_deref().unwrap_or("(not set)")
-    );
-    println!(
-        "    {}",
-        "Example: alice (set with: recrypt identity use <name>)".bright_black()
-    );
 
     println!(
         "  {}: {}",
@@ -81,9 +72,6 @@ async fn set(key: String, value: String) -> Result<()> {
         "default_server" => {
             config.default_server = Some(value.clone());
         }
-        "active_identity" => {
-            config.active_identity = Some(value.clone());
-        }
         "output_format" => {
             if value != "pretty" && value != "json" {
                 anyhow::bail!("Invalid output_format '{value}'. Valid values: pretty, json");
@@ -98,9 +86,9 @@ async fn set(key: String, value: String) -> Result<()> {
                 "Unknown config key '{key}'.\n\n\
                 Valid keys:\n  \
                   default_server      (e.g., http://localhost:7222)\n  \
-                  active_identity     (e.g., alice) [use 'recrypt identity use' instead]\n  \
                   output_format       (pretty or json)\n  \
-                  wallet_path         (e.g., /path/to/wallet.dcyw)"
+                  wallet_path         (e.g., /path/to/wallet.dcyw)\n\n\
+                Note: active identity is managed with: recrypt identity use <name>"
             );
         }
     }

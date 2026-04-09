@@ -7,7 +7,7 @@ use rand::RngCore;
 use std::fs;
 use std::path::PathBuf;
 
-use super::credential::{default_provider, CredentialProvider};
+use super::credential::{default_provider_for, CredentialProvider};
 use super::format::{
     decrypt_wallet_with_key, derive_key, encrypt_wallet_with_key, extract_salt, WalletData,
 };
@@ -51,7 +51,9 @@ pub struct Wallet {
 impl Wallet {
     /// Load wallet, using cached key from provider or prompting for password
     pub fn load(override_path: Option<&str>) -> Result<Self> {
-        Self::load_with_provider(override_path, default_provider().as_ref())
+        let path = Self::resolve_path(override_path)?;
+        let provider = default_provider_for(&path);
+        Self::load_with_provider(override_path, provider.as_ref())
     }
 
     /// Load wallet with explicit credential provider (for testing)
@@ -112,7 +114,8 @@ impl Wallet {
 
     /// Save wallet to disk
     pub fn save(&mut self, is_new: bool) -> Result<()> {
-        self.save_with_provider(is_new, default_provider().as_ref())
+        let provider = default_provider_for(&self.path);
+        self.save_with_provider(is_new, provider.as_ref())
     }
 
     /// Save wallet with explicit provider (for testing)
