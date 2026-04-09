@@ -1,504 +1,922 @@
-# Wire Protocol: Multiple Serialization Formats
+# Wire Protocol: Gordian Envelope Format
 
-**Status:** ✅ IMPLEMENTED (Protobuf + Armor full; JSON for `EncryptedFile` only)
-**Authoritative schema:** [`crates/recrypt-proto/proto/recrypt.proto`](../crates/recrypt-proto/proto/recrypt.proto) — this
-document is derived from the proto and must be kept in sync with it.
+**Status:** 📝 DRAFT — planned migration from protobuf. See [migration plan](plans/2026-04-08-gordian-envelope-migration.md).
+**Authoritative reference:** this document.
+**Implementation:** [`crates/recrypt-wire`](../crates/recrypt-wire/) (renamed from `recrypt-proto` as part of the migration)
 
 For the HTTP endpoints that consume these messages, see
 [http-api-reference.md](http-api-reference.md). For the broader architectural
-role of `recrypt-proto`, see [architecture.md §3](architecture.md#3-per-crate-responsibilities).
+role of the wire crate, see [architecture.md §3](architecture.md#3-per-crate-responsibilities).
+For the bulk-encryption construction used underneath this envelope, see
+[xchacha20-bao-aead.md](standards/xchacha20-bao-aead.md).
 
 ---
 
-## 1. Supported formats
+## 1. Overview
 
-| Format       | Primary use              | Content-Type             | Status              |
-| ------------ | ------------------------ | ------------------------ | ------------------- |
-| Protobuf     | Wire protocol, storage   | `application/x-protobuf` | ✅ Full              |
-| ASCII armor  | Human export, key backup | `text/plain`             | ✅ Full              |
-| JSON         | API responses, debugging | `application/json`       | ✅ `EncryptedFile`   |
+Recrypt's wire format is a thin layering over [Gordian Envelope](https://developer.blockchaincommons.com/envelope/)
+from Blockchain Commons. Envelope is a CBOR-based "smart document"
+format with:
 
-Selection rationale:
+- **Deterministic CBOR (dCBOR)** encoding, so signature
+  canonicalization is solved at the library level.
+- A **Merkle-like digest tree** over every assertion, allowing
+  individual assertions to be **elided** (replaced with their hash)
+  without invalidating signatures on ancestors.
+- **Semantic triples** (`subject [predicate: object]`) as the
+  internal structure, giving us first-class extensible metadata.
+- **Salted assertions** for redaction-resistant privacy, so
+  low-entropy fields can be elided without being brute-forceable
+  from their digest.
+- **Native multi-signature support** via repeated `'signed'`
+  assertions — exactly what recrypt's hybrid Ed25519+ML-DSA-87
+  scheme needs.
+- An **IETF draft** (`draft-mcnally-envelope`) and the media type
+  `application/envelope+cbor`.
 
-- **Protobuf** — compact, schema-driven, forward-compatible via field numbers.
-  Default for client ↔ server and blob storage.
-- **ASCII armor** — PGP-style, copy-pasteable. Used for key export/import and
-  manual backup workflows.
-- **JSON** — universal tooling, debuggable. Currently only
-  `EncryptedFile` has a full JSON implementation. Other types that need JSON
-  transport fall back to base58/base64-wrapped protobuf.
+We carry recrypt-specific semantics as CBOR-tagged subject types and
+named assertion predicates. Everything outside of PRE (which Envelope
+doesn't speak natively) maps onto Envelope primitives directly.
 
----
+### 1.1 Supported formats
 
-## 2. Protobuf schema
+| Format       | Primary use              | Content-Type                | Status  |
+| ------------ | ------------------------ | --------------------------- | ------- |
+| Envelope     | Wire protocol, storage   | `application/envelope+cbor` | 📝 Draft |
+| ASCII armor  | Human export, key backup | `text/plain`                | 📝 Draft |
+| UR           | QR codes, sneakernet     | `text/plain`                | 🔜 Later |
 
-The authoritative schema is `crates/recrypt-proto/proto/recrypt.proto`. The
-generated Rust types live at `crates/recrypt-proto/src/generated/recrypt.v1.rs`
-and are re-exported as `recrypt_proto::proto`.
+The Envelope bytes are the authoritative representation. Armor and
+UR are wrappings of the same underlying bytes.
 
-Package: **`recrypt.v1`** (any future breaking changes will use `v2`, etc.)
+### 1.2 Why not protobuf? Why Envelope?
 
-### 2.1 Enums
+Recrypt was originally implemented in protobuf. The migration plan's
+[retrospective](plans/2026-04-08-gordian-envelope-migration.md#context)
+covers the reasoning in full. The short version:
 
-```protobuf
-enum BackendId {
-    BACKEND_UNKNOWN      = 0;
-    BACKEND_LATTICE      = 1;   // OpenFHE BFV, post-quantum (default)
-    BACKEND_EC_PAIRING   = 2;   // classical, reserved
-    BACKEND_EC_SECP256K1 = 3;   // classical, reserved
-    BACKEND_MOCK         = 255; // testing only, NOT secure
-}
-```
+- **Protobuf is not self-describing.** A blob without its `.proto`
+  schema is structured noise. For archival storage with a multi-year
+  horizon, this is a liability.
+- **Every field in the recrypt schema was opaque `bytes`.** The
+  schema-driven type safety protobuf advertises did not apply to
+  our data.
+- **Extension by parties we don't control was awkward.** The
+  `google.protobuf.Any` escape hatch is universally regretted.
+- **Elision did not exist.** We could not let a proxy strip
+  metadata from a forwarded blob without invalidating signatures.
 
-### 2.2 Core crypto types
-
-```protobuf
-message PublicKeyBundle {
-    uint32 version              = 1;
-    bytes  ed25519_key          = 2;   // 32 bytes
-    repeated PqPublicKey pq_keys = 3;   // typically one ML-DSA-87 entry
-    BackendId pre_backend       = 4;
-    bytes  pre_public_key       = 5;   // backend-specific serialization
-}
-
-message PqPublicKey {
-    string algorithm = 1;   // e.g. "ML-DSA-87"
-    bytes  key_data  = 2;
-}
-
-message SecretKeyBundle {
-    uint32 version              = 1;
-    bytes  ed25519_key          = 2;
-    repeated PqSecretKey pq_keys = 3;
-    BackendId pre_backend       = 4;
-    bytes  pre_secret_key       = 5;
-}
-
-message PqSecretKey {
-    string algorithm = 1;
-    bytes  key_data  = 2;
-}
-
-message RecryptKeyProto {
-    uint32    version                  = 1;
-    BackendId backend                  = 2;
-    bytes     from_pubkey_fingerprint  = 3;   // Blake3 of delegator pubkey
-    bytes     to_pubkey_fingerprint    = 4;   // Blake3 of recipient pubkey
-    bytes     key_data                 = 5;   // backend-specific serialization
-}
-
-message CiphertextProto {
-    BackendId backend = 1;
-    uint32    level   = 2;   // 0 = original, 1+ = recrypted
-    bytes     data    = 3;   // backend-specific ciphertext
-}
-```
-
-### 2.3 Encrypted file — the primary wire payload
-
-```protobuf
-message EncryptedFileProto {
-    uint32              version      = 1;   // format version (currently 3)
-    CiphertextProto     wrapped_key  = 2;   // PRE-encrypted KeyMaterial
-    bytes               bao_hash     = 3;   // 32-byte Bao root over ciphertext
-    bytes               ciphertext   = 4;   // XChaCha20-encrypted data
-    MultiSignatureProto signature    = 5;   // signs (wrapped_key || bao_hash)
-}
-```
-
-**Version 3 change:** The outboard has moved out of the envelope. For files
-> 16 KiB, it is stored as a sibling object in S3-compatible storage (key
-suffix `.obao`), fetched separately, and kept out-of-band during verification.
-Files ≤ 16 KiB contain no outboard (single Bao chunk group = root). This is
-a breaking wire-format change from v2; no stored v2 data exists anywhere, so
-field numbers were renumbered rather than reserved.
-
-See §4 for the role of `bao_hash` and the verification architecture.
-
-### 2.4 Key material — documentary only (never transmitted)
-
-```protobuf
-// NOT serialized on the wire. This message documents what lives inside
-// wrapped_key after PRE decryption. Layout is fixed at 96 bytes to match
-// LatticeBackend::max_plaintext_size().
-message KeyMaterialProto {
-    bytes  symmetric_key  = 1;   // 32 bytes — XChaCha20 key
-    bytes  nonce          = 2;   // 24 bytes — XChaCha20 nonce
-    bytes  plaintext_hash = 3;   // 32 bytes — Blake3(plaintext)
-    uint64 plaintext_size = 4;   //  8 bytes — original file size
-}
-```
-
-`plaintext_hash` is carried *inside* `wrapped_key` specifically so that
-possessing a ciphertext does not reveal anything about the plaintext.
-A recipient verifies it only after decrypting both the wrapped key and
-the ciphertext.
-
-### 2.5 Signatures
-
-```protobuf
-message MultiSignatureProto {
-    bytes ed25519_signature                = 1;   // 64 bytes
-    repeated PqSignatureProto pq_signatures = 2;   // typically one ML-DSA-87 entry
-}
-
-message PqSignatureProto {
-    string algorithm = 1;   // "ML-DSA-87"
-    bytes  signature = 2;
-}
-```
-
-Both signatures must verify for a multi-sig to be accepted. See
-[http-api-reference.md §1](http-api-reference.md) for the dual-stack
-rationale and the canonical message strings that are signed.
-
-### 2.6 File metadata and chunks
-
-```protobuf
-message FileMetadata {
-    uint32    version           = 1;
-    bytes     file_hash         = 2;   // Blake3 of ciphertext (content address)
-    uint64    total_size        = 3;
-    uint64    created_at        = 4;   // unix seconds
-    bytes     owner_fingerprint = 5;   // Blake3(owner_ed25519_pk)
-    BackendId backend           = 6;   // PRE backend used
-}
-
-message ChunkProto {
-    uint32 index     = 1;
-    bytes  data      = 2;   // encrypted chunk bytes
-    bytes  bao_proof = 3;   // optional Bao slice proof (see §4)
-}
-```
-
-### 2.7 Capabilities
-
-```protobuf
-message CapabilityProto {
-    uint32              version            = 1;
-    bytes               file_hash          = 2;
-    bytes               granted_to         = 3;   // recipient fingerprint
-    repeated string     operations         = 4;   // "read" | "write" | "delete" | "share"
-    uint64              expires_at         = 5;   // unix seconds (0 = never)
-    bytes               issuer_fingerprint = 6;   // who granted this
-    MultiSignatureProto signature          = 7;   // over all fields above
-}
-```
-
-### 2.8 API request/response wrappers
-
-```protobuf
-message UploadRequest {
-    FileMetadata metadata         = 1;
-    repeated ChunkProto chunks    = 2;
-}
-
-message DownloadResponse {
-    FileMetadata metadata         = 1;
-    repeated string chunk_urls    = 2;
-}
-
-message RecryptRequest {
-    bytes file_hash      = 1;
-    bytes recrypt_key_id = 2;
-}
-
-message RecryptResponse {
-    CiphertextProto new_wrapped_key = 1;
-}
-```
+Envelope solves all four. The migration cost is real but paid once;
+see the migration plan for sizing.
 
 ---
 
-## 3. The `MultiFormat` trait
+## 2. Primitives and conventions
 
-`recrypt-proto` exposes a single trait for all supported serialization formats:
+### 2.1 dCBOR
 
-```rust
-pub trait MultiFormat: Sized {
-    fn proto_name() -> &'static str;
+All recrypt envelope bytes are **dCBOR**, Blockchain Commons'
+deterministic CBOR profile. dCBOR is stricter than RFC 8949's
+canonical encoding, guaranteeing that re-serializing any parsed
+value produces byte-identical output.
 
-    fn to_protobuf(&self) -> ProtoResult<Vec<u8>>;
-    fn from_protobuf(bytes: &[u8]) -> ProtoResult<Self>;
+The rules that affect recrypt specifically:
 
-    fn to_json(&self) -> ProtoResult<String>;
-    fn from_json(s: &str) -> ProtoResult<Self>;
+- **Map keys sorted** in canonical CBOR order (shortest encoding
+  first, then lexicographic). Applies automatically via
+  `bc-dcbor`.
+- **Integers use the smallest encoding.** `1`, `24`, `256`, `65536`
+  each use the smallest form; non-canonical encodings are invalid.
+- **No indefinite-length items.** All byte strings, text strings,
+  arrays, and maps must have a known length at encode time.
+- **No floats.** Recrypt has no floating-point values in any domain
+  type. If we ever need one, dCBOR's rules (no NaN, no -0.0,
+  smallest representation) apply.
+- **Tagged major types** are permitted and we use them for the
+  envelope/leaf tags and for timestamps.
 
-    fn to_armor(&self, armor_type: ArmorType) -> ProtoResult<String>;
-    fn from_armor(s: &str) -> ProtoResult<Self>;
+### 2.2 Envelope and leaf tags
 
-    /// Auto-detect format and deserialize.
-    fn from_any(data: &[u8]) -> ProtoResult<Self>;
-}
+| CBOR tag | Role                         | Owner                        |
+|---       |---                           |---                           |
+| `#6.200` | Envelope                     | Blockchain Commons           |
+| `#6.201` | Leaf (dCBOR-encoded subject) | Blockchain Commons           |
+| `#6.1`   | Epoch time (RFC 8949)        | IETF                         |
+| `#6.???` | `recrypt.pre-wrapped-key`    | TBD — private-use until BC feedback ([migration plan OQ1](plans/2026-04-08-gordian-envelope-migration.md#open-questions)) |
+
+Every recrypt envelope is a `#6.200`-tagged value. The subject of
+every recrypt envelope is a `#6.201`-tagged dCBOR map containing a
+`"type"` field that names the recrypt domain object.
+
+### 2.3 Named predicates
+
+Recrypt uses plain-string assertion predicates for all
+recrypt-specific metadata. We use Blockchain Commons' Known Values
+(BCR-2023-002, small integers) only for predicates that already
+have a BC-standardized meaning:
+
+| Predicate     | Known Value | Source                          |
+|---            |---          |---                              |
+| `'signed'`    | yes         | BC standard, signature assertion |
+| `'note'`      | yes         | BC standard, human-readable comment |
+| `'date'`      | yes         | BC standard, timestamp          |
+| `'isA'`       | yes         | BC standard, type assertion     |
+
+Everything else — `"backend"`, `"owner"`, `"for-file"`,
+`"operations"`, etc. — is a plain UTF-8 string. This is a
+deliberate trade-off: BC known values save a few bytes per
+assertion but couple our wire format to BC's registry. Plain
+strings are more verbose but keep our vocabulary independent.
+
+### 2.4 Subject vs assertions: the design rule
+
+Every recrypt envelope follows a strict rule:
+
+> **Load-bearing integrity anchors live in the subject map.
+> Mutable, descriptive, and elidable metadata lives in assertions.**
+
+"Load-bearing" means: the field is required for correctness and
+cannot be removed without changing the envelope's meaning.
+"Elidable" means: the field can be stripped without breaking
+verification, usually for privacy or size.
+
+Subject fields:
+
+- Identify the envelope's **type** (`"type"` field).
+- Carry the **format version** so parsers can reject unsupported
+  versions before doing work.
+- Hold any **content-address / cryptographic anchor** that
+  downstream operations depend on (`bao-hash`, `ciphertext-ref`,
+  `file-hash`, etc.).
+
+Assertions:
+
+- Carry metadata (`"created"`, `"plaintext-size"`, `"owner"`,
+  `"backend"`).
+- Carry relationships (`"for-file"`, `"for-recipient"`).
+- Carry signatures (`'signed': Signature`).
+
+Any field an attacker might care about reversing — like a 4-value
+enum — must be **salted** if it lives in an assertion and is
+intended to be elidable in a hostile environment. See §6.
+
+### 2.5 Multi-signature rule
+
+Every signed recrypt envelope carries **two** `'signed'` assertions:
+one Ed25519, one ML-DSA-87. The recrypt application-layer invariant
+is **"all attached `'signed'` assertions must verify"** — a verifier
+that sees only one signature MUST reject the envelope.
+
+This is a recrypt rule, not an Envelope rule. The Envelope standard
+allows multiple `'signed'` assertions without mandating any
+verification policy across them; the policy is the application's
+job. See [threat-model.md](threat-model.md) for the rationale
+(defense-in-depth, Ed25519 as identity primitive, acknowledged
+security-level asymmetry).
+
+---
+
+## 3. Domain types
+
+The following envelope types are defined. Each is shown in CBOR
+diagnostic notation with elidable salted assertions marked
+`[salted]`.
+
+### 3.1 `recrypt.encrypted-file`
+
+The primary wire payload — represents an encrypted file's metadata,
+signatures, and content-address. The actual ciphertext bytes live
+in a sidecar S3 object (content-addressed by `bao-hash`). The
+wrapped key material lives in a separate envelope (§3.2), discovered
+via the auth service on the recipient's behalf.
+
 ```
-
-### 3.1 Format auto-detection
-
-```rust
-pub fn detect_format(data: &[u8]) -> Format {
-    if data.starts_with(b"----- BEGIN RECRYPT") {
-        Format::Armor
-    } else if data.first() == Some(&b'{') {
-        Format::Json
-    } else {
-        Format::Protobuf
+200(                                            ; envelope
+  201(                                          ; leaf subject
+    {
+      "type":           "recrypt.encrypted-file",
+      "format-version": 3,
+      "bao-hash":       h'...32 bytes...',      ; Bao root of ciphertext
+      "ciphertext-ref": h'...32 bytes...'       ; = bao-hash; S3 content address
     }
-}
+  )
+) [
+  [salted] "backend":        "lattice-bfv",
+  [salted] "created":        1(1712534400),     ; CBOR tag 1 = epoch time
+           "owner":          h'...32 bytes...', ; Blake3(owner Ed25519 pubkey)
+  [salted] "plaintext-size": 1048576,
+           'signed':         Signature(ed25519, ...),
+           'signed':         Signature(ml-dsa-87, ...)
+]
 ```
 
-This is a heuristic, not a guarantee — malicious input could be ambiguous.
-It exists for convenience on input paths that want to accept "whatever the
-user pasted". Security-sensitive code paths should pin the expected format.
+**Subject fields:**
 
-### 3.2 Current implementation coverage
+| Field            | Type     | Meaning                                   |
+|---               |---       |---                                        |
+| `type`           | string   | Always `"recrypt.encrypted-file"`         |
+| `format-version` | u32      | Currently 3; bumped on breaking changes   |
+| `bao-hash`       | 32 bytes | Blake3/Bao root hash of the ciphertext    |
+| `ciphertext-ref` | 32 bytes | S3 content address (equal to `bao-hash`)  |
 
-| Type                 | Protobuf | JSON | Armor | Notes                                              |
-| -------------------- | :------: | :--: | :---: | -------------------------------------------------- |
-| `EncryptedFile`      | ✅        | ✅   | ✅    | Fully implemented in `impls.rs`                    |
-| `PublicKeyBundle`    | ✅        | —    | ✅    | JSON would wrap base64'd proto                     |
-| `SecretKeyBundle`    | ✅        | —    | ✅    | JSON would wrap base64'd proto                     |
-| `RecryptKeyProto`    | ✅        | —    | ✅    | JSON would wrap base64'd proto                     |
-| `CapabilityProto`    | ✅        | —    | ✅    | JSON would wrap base64'd proto                     |
-| `FileMetadata`       | ✅        | —    | —    | Proto only                                         |
-| `ChunkProto`         | ✅        | —    | —    | Proto only                                         |
+`bao-hash` and `ciphertext-ref` are equal in the current design but
+kept as separate fields for future-proofing — a future version may
+address ciphertext by a different key (e.g., for storage-provider
+sharding).
 
-Broader JSON and `MultiFormat` coverage for the other types is a planned
-follow-up; today, the primary wire format is Protobuf across the board.
+**Assertions:**
+
+| Predicate        | Salted? | Meaning                                                    |
+|---               |---      |---                                                          |
+| `"backend"`      | YES     | PRE backend: `"lattice-bfv"`, `"ec-pairing"`, `"ec-secp256k1"`, `"mock"` |
+| `"created"`      | YES     | Epoch time of encryption, CBOR tag 1                        |
+| `"owner"`        | no      | Blake3(owner's Ed25519 pubkey) — the file originator fingerprint |
+| `"plaintext-size"` | YES   | Original plaintext byte count, for display only             |
+| `'signed'`       | no      | Ed25519 signature over the subject + non-elided assertions  |
+| `'signed'`       | no      | ML-DSA-87 signature, same coverage                          |
+
+**What is signed:** the envelope's subject digest plus the digest
+of every non-elided assertion at signing time, per Envelope's
+signature semantics. Eliding an assertion after signing does not
+invalidate the signature because elision replaces the assertion
+with its own digest, which is already what the signature committed
+to.
+
+**No wrapped-key reference.** The file envelope does **not** contain
+a pointer to the wrapped-key envelope. The file envelope is the same
+for every recipient and across every recryption, so it never needs
+re-issuing. Wrapped-key discovery is the auth service's job; see §5.
+
+### 3.2 `recrypt.pre-wrapped-key`
+
+A PRE-encrypted symmetric-key bundle. One file may have many of
+these — one per recipient, and potentially multiple per recipient
+(e.g., after key rotation). Wrapped-keys are the thing that *change*
+when the recryption proxy does its job.
+
+```
+200(
+  201(
+    {
+      "type":           "recrypt.pre-wrapped-key",
+      "format-version": 1,
+      "backend":        "lattice-bfv",
+      "for-recipient":  h'...32 bytes...',      ; Blake3(recipient's PRE pubkey)
+      "ciphertext":     h'...backend-specific bytes...'
+    }
+  )
+) [
+  [salted] "for-file": h'...32 bytes...',       ; bao-hash of the file this unlocks
+  [salted] "level":    0,                        ; 0 = original, 1+ = recrypted
+  [salted] "created":  1(1712534400)
+  ; NO 'signed' assertions — see §3.2.1
+]
+```
+
+**Subject fields:**
+
+| Field            | Type     | Meaning                                              |
+|---               |---       |---                                                    |
+| `type`           | string   | Always `"recrypt.pre-wrapped-key"`                   |
+| `format-version` | u32      | Currently 1                                          |
+| `backend`        | string   | PRE backend; must match the file envelope's backend  |
+| `for-recipient`  | 32 bytes | Blake3(recipient PRE pubkey) — who can decrypt this  |
+| `ciphertext`     | bytes    | Backend-specific PRE ciphertext; opaque              |
+
+`backend` lives in the subject here (not an elidable assertion)
+because the PRE decryption routine needs to know which backend to
+dispatch to — eliding it would break decryption. Contrast with the
+file envelope, where `backend` is metadata and is elidable.
+
+**The `ciphertext` field** contains the opaque PRE ciphertext that,
+when decrypted by the recipient's PRE secret key, yields a 96-byte
+`KeyMaterial` bundle (see §3.3).
+
+**Assertions:**
+
+| Predicate    | Salted? | Meaning                                                  |
+|---           |---      |---                                                        |
+| `"for-file"` | YES     | Blake3 hash of the file this wrapped-key unlocks          |
+| `"level"`    | YES     | 0 for originals, incremented by each recryption           |
+| `"created"`  | YES     | Epoch time of wrapping, CBOR tag 1                        |
+
+#### 3.2.1 Why wrapped-keys are unsigned
+
+**Integrity of the wrapped-key is established by successful
+decryption and the plaintext-hash check inside the decrypted
+KeyMaterial bundle**, not by a signature on the envelope.
+
+The decryption flow is:
+
+1. Recipient fetches the wrapped-key envelope (via auth service
+   lookup; §5).
+2. Recipient PRE-decrypts `subject.ciphertext` with their PRE
+   secret key → 96-byte `KeyMaterial`.
+3. Recipient fetches the file's ciphertext bytes from S3 at
+   `file.ciphertext-ref`.
+4. Recipient XChaCha20-decrypts the ciphertext with
+   `KeyMaterial.symmetric_key` and `KeyMaterial.nonce`.
+5. Recipient computes `Blake3(plaintext)` and compares to
+   `KeyMaterial.plaintext_hash`.
+
+If the wrapped-key has been tampered with or swapped, step 2 either
+fails (PRE decryption rejects) or produces garbage KeyMaterial whose
+symmetric key doesn't decrypt the file correctly, which step 5 then
+catches. The `plaintext_hash` field is **inside the PRE encryption
+envelope**, so it cannot be modified by an attacker who does not
+hold the recipient's PRE secret key.
+
+This means signing the wrapped-key envelope would add **redundant
+integrity, not new integrity**. It would also require the proxy to
+hold a signing key — creating a high-value target where none needs
+to exist.
+
+**Future work:** we may add `'signed'` assertions to wrapped-key
+envelopes later as a **provenance signal, not an integrity
+gate** — letting an auditor trace which proxy performed which
+recryption. Such signatures would be additive and
+backwards-compatible: verifiers that ignore them MUST continue to
+get the same answer about whether the wrapped-key is valid. This
+rule protects the integrity model from silently shifting.
+
+#### 3.2.2 Why `for-file` is an elidable assertion, not a subject field
+
+An earlier draft of this spec put `"for-file"` in the subject, on
+the theory that binding the wrapped-key to its file needed to be
+load-bearing. That was wrong: the plaintext-hash check inside the
+decrypted KeyMaterial already defeats any "wrong file" confusion
+attack (see the decryption flow above).
+
+Making `"for-file"` an elidable salted assertion gives us a
+**privacy property**: a wrapped-key envelope in its fully-elided
+form reveals nothing about which file it unlocks or when it was
+issued. This is useful for:
+
+- Stripping metadata when forwarding a wrapped-key through a
+  less-trusted hop.
+- "I have *some* access grant" attestations that don't reveal the
+  grant's scope.
+- Sensitive deployments where the association between a recipient
+  and a file-hash is itself confidential.
+
+The salt on `"for-file"` is load-bearing even though the value is
+high-entropy: without salt, an observer who suspects the file hash
+is `H` can hash `H` and compare to the elided assertion digest.
+With salt, they'd need both the salt and `H`, and the salt is gone.
+
+### 3.3 `recrypt.key-material` (documentary only)
+
+Never transmitted on the wire as an envelope. This is the plaintext
+structure *inside* the PRE-encrypted `ciphertext` field of a
+`recrypt.pre-wrapped-key`. Documented here so the format is
+complete.
+
+#### v1 layout (96 bytes total)
+
+```
+[0]      version          = 1   (u8)
+[1..33]  symmetric_key    = XChaCha20 256-bit key (32 bytes)
+[33..57] nonce            = XChaCha20 192-bit nonce (24 bytes)
+[57..89] plaintext_hash   = Blake3 of original plaintext (32 bytes)
+[89..96] plaintext_size   = u56 little-endian (7 bytes)
+```
+
+The 96-byte size is fixed to match
+`LatticeBackend::max_plaintext_size()` in the OpenFHE BFV backend.
+Other PRE backends MAY have different plaintext capacities; the
+KeyMaterial encoding is the same 96 bytes regardless, and PRE
+backends with larger plaintext capacity simply use a smaller
+fraction of their slot.
+
+#### Why a version byte instead of dCBOR
+
+The first byte is a **version discriminator**. The remaining 95
+bytes are interpreted per version. Unknown versions MUST be
+rejected with a clear error. This is the entire forward-
+compatibility story for KeyMaterial.
+
+We considered dCBOR. Even with the most aggressive encoding
+(integer map keys, no `type` field, no version field), the framing
+overhead pushes the smallest CBOR encoding past 96 bytes once the
+three 32-byte fields are accounted for. The version-byte approach
+is ~15 bytes more efficient than CBOR while preserving the only
+property we wanted from CBOR (extensibility), and parsing is one
+byte then a match statement.
+
+Rest of the recrypt wire format is dCBOR; KeyMaterial is the one
+exception. The exception is justified because KeyMaterial:
+
+- Lives inside a fixed-size cryptographic plaintext slot.
+- Has no third-party extension story (we control all encoders and
+  decoders).
+- Is never inspected without first PRE-decrypting it, so
+  self-description is irrelevant — the recipient knows it's
+  KeyMaterial because that's what the wrapped-key envelope's
+  `type` says.
+
+#### Why u56 for `plaintext_size`
+
+Squeezing the version byte requires giving up one byte somewhere.
+We took it from `plaintext_size`, dropping it from u64 to u56.
+The maximum representable value becomes 2^56 − 1 ≈ 72 PB, which is
+wildly larger than [`MAX_ENCRYPT_FILE_SIZE`](../crates/recrypt-core/src/hybrid/mod.rs)
+(currently 1 TiB). Encoders MUST reject any plaintext size that
+does not fit in u56; in practice this is unreachable because the
+streaming encrypt path enforces a much smaller limit.
+
+#### Why `plaintext_size` lives both here and on the file envelope
+
+The file envelope carries `plaintext-size` as a salted, elidable
+assertion (§3.1). That copy is for UX and **may be elided for
+privacy** — see the privacy note below.
+
+The KeyMaterial copy is **inside the PRE encryption** and is never
+exposed to anyone except the recipient who can decrypt the wrapped
+key. It exists so the decryption code path can sanity-check the
+plaintext size after XChaCha20 decryption without depending on any
+envelope assertion that a malicious proxy might have stripped or
+tampered with. The `plaintext_hash` already covers integrity (a
+truncated plaintext would fail the hash check), but the size check
+is a faster failure mode for truncation attacks and it costs us
+nothing because the bytes are already inside the PRE envelope.
+
+**Privacy note on the file envelope's `plaintext-size`:** the
+salted, elidable assertion is by default elidable so producers can
+publish file envelopes that reveal nothing about file size to
+observers. This matters because **small `plaintext_size` values are
+low-entropy even when salted across many envelopes** — an attacker
+who learns a single value can confirm "this file is exactly N
+bytes" everywhere it appears, and small files cluster in narrow
+ranges that correlate with content type (a thumbnail vs a document
+vs a video). Eliding by default gives the producer maximum public
+mystery; the recipient still has the size from KeyMaterial after
+decryption.
+
+#### Version evolution
+
+To define v2:
+
+1. Choose a new layout for bytes [1..96].
+2. Add the version constant to the parser dispatch.
+3. Bump the `format-version` of the `recrypt.encrypted-file`
+   envelope and document which KeyMaterial versions are valid for
+   which envelope versions.
+
+Old encryptors continue producing v1; old decryptors continue
+parsing v1; v2 is opt-in for new files. There is no in-place
+migration. This is intentional — KeyMaterial is the most
+performance-sensitive byte layout in the system and a flag day is
+preferable to runtime version negotiation inside the hot path.
+
+### 3.4 `recrypt.public-key-bundle`
+
+A recipient's public keys, bundled for transport. Used during
+account registration and when looking up a recipient's keys.
+
+```
+200(
+  201(
+    {
+      "type":           "recrypt.public-key-bundle",
+      "format-version": 1,
+      "ed25519":        h'...32 bytes...',
+      "ml-dsa-87":      h'...2592 bytes...',
+      "pre-backend":    "lattice-bfv",
+      "pre-public":     h'...backend-specific...'
+    }
+  )
+) [
+  [salted] "created": 1(1712534400),
+           "fingerprint": h'...32 bytes...',   ; Blake3(ed25519) for convenience
+  [salted] 'note':    "Alice's primary keypair"
+]
+```
+
+**Subject fields:**
+
+| Field            | Type     | Meaning                                     |
+|---               |---       |---                                           |
+| `type`           | string   | Always `"recrypt.public-key-bundle"`        |
+| `format-version` | u32      | Currently 1                                  |
+| `ed25519`         | 32 bytes | Ed25519 verification key (raw)              |
+| `ml-dsa-87`       | bytes    | ML-DSA-87 verification key (~2592 bytes)    |
+| `pre-backend`    | string   | PRE backend identifier                       |
+| `pre-public`     | bytes    | PRE public key bytes (backend-specific)     |
+
+**Why these fields are in the subject:** all four keys are
+load-bearing for verification — you cannot verify a signature
+without the corresponding verification key, and you cannot PRE-wrap
+a key for a recipient without their PRE public key. Eliding any of
+them would produce a bundle that can't do its job.
+
+**`"fingerprint"`** in the assertions is `Blake3(ed25519)` and is
+redundant with the subject (a verifier can compute it). It exists
+only as a lookup key and UX affordance.
+
+### 3.5 `recrypt.secret-key-bundle`
+
+Same shape as `recrypt.public-key-bundle` with the corresponding
+secret keys. **Never transmitted on the wire.** Used only for local
+at-rest storage, always wrapped in a password-encrypted envelope
+(not specified here — see
+[phase-6b-secure-credential-storage.md](plans/2026-01-14-phase-6b-secure-credential-storage.md)).
+
+### 3.6 `recrypt.recrypt-key`
+
+A PRE recryption key — held by the proxy, transported between the
+delegator and the proxy when a new sharing relationship is
+established. Never published.
+
+```
+200(
+  201(
+    {
+      "type":             "recrypt.recrypt-key",
+      "format-version":   1,
+      "backend":          "lattice-bfv",
+      "from-fingerprint": h'...32 bytes...',  ; Blake3(delegator PRE pubkey)
+      "to-fingerprint":   h'...32 bytes...',  ; Blake3(delegatee PRE pubkey)
+      "key-data":         h'...backend-specific bytes...'
+    }
+  )
+) [
+  [salted] "created": 1(1712534400),
+           'signed':  Signature(ed25519, ...),   ; signed by the delegator
+           'signed':  Signature(ml-dsa-87, ...)
+]
+```
+
+All subject fields are load-bearing: the proxy needs every one of
+them to apply the recryption. The signature is **required** — a
+recryption key is a powerful delegation and the proxy MUST verify
+the delegator authorized it.
+
+### 3.7 `recrypt.capability`
+
+A signed, time-limited access token granting operations on a file.
+Issued by a file's owner, presented by a grantee to the storage
+layer to perform authorized operations.
+
+```
+200(
+  201(
+    {
+      "type":           "recrypt.capability",
+      "format-version": 1,
+      "file-hash":      h'...32 bytes...',
+      "granted-to":     h'...32 bytes...',       ; Blake3(grantee Ed25519 pubkey)
+      "issuer":         h'...32 bytes...'        ; Blake3(issuer Ed25519 pubkey)
+    }
+  )
+) [
+  [salted] "operations": ["read", "share"],      ; subset of {read, write, delete, share}
+  [salted] "expires-at": 1(1714521600),          ; 0 or absent = no expiry
+  [salted] 'note':       "research access",
+           'signed':     Signature(ed25519, ...),
+           'signed':     Signature(ml-dsa-87, ...)
+]
+```
+
+**Subject fields** form the identity triple: which file, to whom,
+from whom. These cannot be elided — a capability without them is
+meaningless.
+
+**Assertions** are all elidable:
+
+- `"operations"` is salted because the 4-value enum is trivially
+  brute-forceable unsalted.
+- `"expires-at"` is salted because timestamps are often guessable
+  from context.
+- `'note'` is salted because human-readable comments are often
+  short and templated.
+
+The current `Capability::signature_payload()` code in
+[`capability.rs:96`](../crates/identikey-storage-auth/src/capability.rs#L96)
+hand-sorts operations alphabetically before signing for
+determinism. dCBOR gives us this for free — the canonical encoding
+of `["read", "share"]` is byte-identical regardless of input order.
+The hand-sort code can be deleted as part of the migration.
+
+### 3.8 HTTP request/response wrappers
+
+The recrypt HTTP API sends and receives bare envelopes as the
+request/response body with `Content-Type: application/envelope+cbor`.
+Requests that need additional framing (e.g., uploading a file with
+its metadata envelope *plus* the ciphertext bytes) use multipart
+form encoding with the envelope as one part and the ciphertext as
+another. See [http-api-reference.md](http-api-reference.md) for the
+endpoint specification.
 
 ---
 
-## 4. Integrity verification: Blake3 + Bao
+## 4. Signature model
 
-### 4.1 What's in `EncryptedFile`
+### 4.1 Producer flow
 
-Every `EncryptedFile` carries two integrity-related fields that are computed
-together at encryption time:
+To sign an envelope:
 
-```rust
-let (bao_outboard, bao_hash) = bao::encode::outboard(&ciphertext);
-```
+1. Construct the envelope with its subject and all non-signature
+   assertions.
+2. Call `envelope.add_signatures(&[ed25519_signer, mldsa_signer])`.
+3. The Envelope library computes the digest of the subject plus
+   all current assertions, signs that digest with each signer,
+   and adds one `'signed'` assertion per signature.
 
-- **`bao_hash`** is the 32-byte root of the Bao tree over the ciphertext. For
-  Bao, this root is **identical** to `blake3::hash(ciphertext)` — the tree is
-  designed so the root equals plain Blake3 over the full data. That's what
-  makes `blake3::hash(ciphertext) == bao_hash` a valid full-file integrity
-  check.
+The Envelope library handles the digest computation and the
+canonical encoding of the signature input. Implementations MUST use
+the library's high-level API, not hand-computed signature inputs,
+to avoid drift from the canonical form.
 
-- **`bao_outboard`** is the Bao verification tree. It is ~1% the size of the
-  ciphertext and is what makes **streaming** and **slice** verification
-  possible: given the root `bao_hash` and the outboard, a verifier can check
-  a chunk or byte range **as it arrives**, without buffering the whole
-  ciphertext and without trusting the rest of the data.
+### 4.2 Verifier flow
 
-Both fields are signed together as part of `signature_payload =
-wrapped_key_bytes || bao_hash`, so a tampered `bao_hash` invalidates the
-multi-signature. The outboard itself is not directly signed, but because it
-is checked *against* the signed root, any tampering with it causes
-verification to fail.
+To verify an envelope:
 
-**Important nuance on what the "MAC" actually is.** Raw BLAKE3 and raw Bao
-are unkeyed hashes — by themselves they provide integrity only against a
-passive observer. An active attacker who tampers with the ciphertext can
-trivially recompute both `bao_hash` and `bao_outboard` over the tampered
-bytes and the decoder will happily verify the result. What makes this
-construction a real authenticator is the **MultiSig over `wrapped_key ||
-bao_hash`**: the signature is the key, and once the signature is verified
-against the sender's public key, the whole downstream Bao tree
-verification inherits that authentication.
+1. Check `subject.type` and `subject.format-version` — reject
+   unknown or unsupported values early.
+2. Count `'signed'` assertions. If fewer than 2, reject with
+   "missing required signature."
+3. For each `'signed'` assertion, identify the signature algorithm
+   from its content and verify it against the appropriate
+   verification key.
+4. If any signature fails, reject the entire envelope.
+5. If exactly one of {Ed25519, ML-DSA-87} is present and the other
+   is missing, reject — both are required.
+6. If verification succeeds, the envelope is trusted.
 
-There is a second, independent integrity mechanism that catches failures
-in the first: `plaintext_hash` inside `KeyMaterial` (§2.4) is a BLAKE3
-hash of the plaintext, carried inside `wrapped_key`. After decryption the
-recipient checks `blake3(decrypted) == plaintext_hash`. This field is
-itself unforgeable because it lives inside the PRE-encrypted `wrapped_key`;
-tampering with it requires breaking the PRE scheme. It's a post-decryption
-backstop, not a pre-decryption authenticator, but it catches failure modes
-where signature verification is somehow bypassed.
+The "all attached signatures must verify + both Ed25519 and
+ML-DSA-87 must be present" policy is recrypt-specific. A pure
+Envelope verifier with no recrypt knowledge would accept an
+envelope with only an Ed25519 signature; recrypt verifiers must
+apply the stricter rule.
 
-**Critical operational rule:** always verify the signature *before*
-decryption. If decryption happens before (or without) signature
-verification, an active attacker can feed chosen ciphertext into XChaCha20
-and the raw cipher has no way to reject it. `plaintext_hash` will
-eventually catch it, but only after the bad bytes have flowed through. See
-[plans/2026-04-06-bao-streaming-and-storage-simplification.md §12](plans/2026-04-06-bao-streaming-and-storage-simplification.md#12-integrity-chain-whats-the-mac-exactly)
-for a full walkthrough of the integrity chain.
+### 4.3 Elision and signatures
 
-### 4.2 Current implementation status
+Elision replaces an assertion (or a subject subtree) with its
+32-byte Blake3 digest. The signature continues to verify because
+the signed digest was already the assertion's digest.
 
-| Capability                                                    | Status     |
-| ------------------------------------------------------------- | ---------- |
-| Full-file integrity check on `HybridEncryptor::decrypt`       | ✅ Done     |
-| Signature over `wrapped_key \|\| bao_hash`                    | ✅ Done     |
-| **Streaming verification** using the `bao_outboard`           | 🚧 Planned |
-| **Slice verification** (random access to verified byte range) | 🚧 Planned |
+**Elision rules for recrypt envelopes:**
 
-The full-file check is correct today because `bao_hash == blake3(ciphertext)`.
-It guarantees that if a receiver holds the complete ciphertext, they can
-detect any tampering before decryption. What it does **not** yet give us is
-the ability to detect tampering *before the whole ciphertext is buffered*,
-or on an arbitrary byte range, which is what `bao_outboard` was shipped for.
+- The **subject** may never be elided. Subject fields are
+  load-bearing for correctness.
+- Any assertion marked `[salted]` in §3 MAY be elided by any
+  holder of the envelope without invalidating signatures.
+- An assertion NOT marked `[salted]` MUST NOT be elided — it's
+  either a signature (whose elision would destroy verification) or
+  a high-entropy field whose elision is meaningful and already
+  covered by the dCBOR digest.
+- A verifier receiving a partially-elided envelope MUST verify it
+  exactly as it would a non-elided envelope. Elision is invisible
+  to the verification routine.
 
-**Next work:** wire the real `bao::decode::Decoder::new_outboard` into
-`HybridEncryptor::decrypt` and add a `SliceDecoder`-backed API for
-random-access reads. See [verification-architecture.md §Current status](verification-architecture.md#current-status)
-for the implementation plan.
-
-**Audit note:** the old `recrypt-proto::bao_stream` scaffolding that partially
-attempted this was removed. It compared the stored `expected_hash` against
-`blake3::hash(data)` (which happened to match the Bao root but was presented
-as if it were tree verification) and only size-checked the outboard. The
-replacement will use the `bao` crate's streaming decoder directly, so the
-outboard is actually walked during verification.
+See §6 for the salting / brute-force analysis.
 
 ---
 
-## 5. ASCII armor
+## 5. The auth service and wrapped-key discovery
 
-### 5.1 Structure
+The `identikey-storage-auth` crate indexes wrapped-key envelopes
+and answers the question "which wrapped-key should this recipient
+fetch for this file?" It does not mint wrapped-keys itself; the
+proxy does that.
+
+The index is keyed on `(file_hash, recipient_fingerprint) →
+wrapped_key_location`. When a recipient wants to decrypt a file:
+
+1. Recipient fetches the file envelope from storage (content-
+   addressed by `file_hash`).
+2. Recipient verifies the file envelope's signatures (§4.2).
+3. Recipient queries the auth service:
+   `lookup(file_hash, my_fingerprint) → wrapped_key_location`.
+4. Recipient fetches the wrapped-key envelope from the returned
+   location.
+5. Recipient proceeds with the decryption flow in §3.2.1.
+
+If the lookup fails (no wrapped-key exists for this recipient), the
+auth service returns an error and the recipient has no access. If
+the lookup returns a wrapped-key for a *different* file, the
+recipient's decryption will fail at the plaintext-hash check,
+preventing confusion attacks regardless of whether the auth service
+is honest.
+
+**The auth service is trusted for availability, not for
+confidentiality.** A malicious auth service can deny access but
+cannot grant it (the wrapped-key still needs to PRE-decrypt under
+the recipient's secret key) and cannot tamper with file contents
+(the file envelope's signature covers the bao-hash). This is the
+separation of concerns that the migration plan's architectural
+commitment preserves.
+
+---
+
+## 6. Salting policy
+
+Elision alone is not sufficient privacy for low-entropy fields. An
+attacker who sees the digest of an elided assertion and knows the
+predicate can enumerate the preimage space, encode each candidate
+as canonical dCBOR, hash, and compare. For a 4-value enum, this
+takes microseconds.
+
+Recrypt addresses this by **salting** any elidable assertion whose
+object has fewer than ~80 bits of effective entropy OR where
+unsalted elision would leak unlinkability.
+
+### 6.1 Which assertions are salted
+
+See the per-type tables in §3. The rule is:
+
+| Entropy / Use Case                  | Salted? |
+|---                                   |---      |
+| Enum with < 2^20 values              | YES     |
+| Timestamp                            | YES     |
+| Byte-count or size (often guessable) | YES     |
+| Human-readable text (templated)      | YES     |
+| Hash or fingerprint (high entropy)   | no, unless unlinkability matters |
+| Signature bytes                      | no      |
+| Subject field                        | n/a — never elided |
+
+The one unusual case is `"for-file"` on wrapped-key envelopes: the
+value is a 32-byte hash (high entropy), but salt is still used
+because the unlinkability property matters (see §3.2.2).
+
+### 6.2 Salt generation
+
+Salts MUST be drawn freshly from a CSPRNG per assertion. They MUST
+NOT be:
+
+- Derived from the assertion value (defeats the purpose).
+- Reused across assertions within a single envelope.
+- Reused across envelopes for the "same" value (would let an
+  attacker who learns the value once confirm it for all others).
+
+`bc-envelope`'s `add_assertion_salted` API does the right thing by
+default. Implementations that construct salted assertions by any
+other path MUST independently verify these properties.
+
+### 6.3 What salting does not protect against
+
+Salting prevents brute-force reversal of an *individual* elided
+assertion's value. It does not protect against:
+
+- **Traffic analysis.** An observer who sees which wrapped-key is
+  fetched for which recipient learns the access graph, even if
+  the wrapped-key's contents are fully elided.
+- **Timing correlation.** Create-time gaps, access patterns, and
+  similar side channels are out of scope for the wire format and
+  must be handled at higher layers if they matter.
+- **Known-plaintext forgery.** Salted elision is about privacy,
+  not integrity. Integrity comes from signatures and (for
+  wrapped-keys) the plaintext-hash check.
+
+---
+
+## 7. Benchmarks and sizing
+
+**TBD — Doc 1 completion requires populated benchmark numbers
+before this section is considered done.** The migration plan's
+[NFR-1 and NFR-2 gates](plans/2026-04-08-gordian-envelope-migration.md#non-functional-requirements)
+specify the thresholds and the tests that must fill in this table.
+
+Placeholder structure:
+
+| Metric                              | Protobuf | Envelope | Delta |
+|---                                  |---       |---       |---    |
+| `EncryptedFile` metadata bytes      | TBD      | TBD      | TBD   |
+| 1 MB file encrypt latency (p50)     | TBD      | TBD      | TBD   |
+| 1 MB file encrypt latency (p99)     | TBD      | TBD      | TBD   |
+| Recryption hot path (p50)           | TBD      | TBD      | TBD   |
+| Recryption hot path (p99)           | TBD      | TBD      | TBD   |
+| Capability envelope size            | TBD      | TBD      | TBD   |
+| Signed envelope size (hybrid sig)   | TBD      | TBD      | TBD   |
+
+NFR-1 requires the recryption hot-path p50 not to regress more than
+20% against the protobuf baseline. NFR-2 requires metadata overhead
+under 5% of payload for files > 1 MB, and under 2 KB absolute for
+any envelope.
+
+---
+
+## 8. ASCII armor
+
+ASCII armor is a PGP-style wrapper around envelope bytes for
+human-touchable workflows (copy-paste, email, printed backups).
 
 ```
------ BEGIN RECRYPT {TYPE} -----
-{Header}: {value}
-{Header}: {value}
-...
-
-{base64-encoded protobuf payload}
------ END RECRYPT {TYPE} -----
-```
-
-Six armor types are supported:
-
-- `RECRYPT PUBLIC KEY` — `PublicKeyBundle`
-- `RECRYPT SECRET KEY` — `SecretKeyBundle`
-- `RECRYPT RECRYPT KEY` — `RecryptKeyProto`
-- `RECRYPT CAPABILITY` — `CapabilityProto`
-- `RECRYPT ENCRYPTED FILE` — `EncryptedFileProto`
-- `RECRYPT MESSAGE` — generic envelope, reserved
-
-### 5.2 Example — public key export
-
-```
------ BEGIN RECRYPT PUBLIC KEY -----
+----- BEGIN RECRYPT ENVELOPE -----
+Type: recrypt.public-key-bundle
 Version: 1
-Algorithm: ED25519+ML-DSA-87
-Created: 2026-04-06T12:00:00Z
+Format: envelope+cbor
 
-eyJlZDI1NTE5IjoiTUZrd0V3WUhLb1pJemowQ0FRWUlLb1pJemowREFRY0RRZ0FF...
------ END RECRYPT PUBLIC KEY -----
+<base64-encoded envelope bytes>
+----- END RECRYPT ENVELOPE -----
 ```
+
+**Migration note:** old-format armor banners contained the word
+`PROTOBUF`. The new banners contain `ENVELOPE`. Parsers MUST reject
+old-format banners with a clear error pointing to the format change,
+not silently try to parse them as envelopes. This is the armor path
+for FR-7 in the [migration plan](plans/2026-04-08-gordian-envelope-migration.md#functional-requirements).
+
+The armor types currently defined:
+
+| Armor type           | Envelope type inside                |
+|---                   |---                                   |
+| `RECRYPT ENVELOPE`   | Any — the inner `type` disambiguates |
+| `RECRYPT PUBLIC KEY` | `recrypt.public-key-bundle`         |
+| `RECRYPT SECRET KEY` | `recrypt.secret-key-bundle` (password-wrapped) |
+| `RECRYPT CAPABILITY` | `recrypt.capability`                 |
+
+Implementations MAY use the generic `RECRYPT ENVELOPE` banner for
+everything; the type-specific banners exist for UX clarity in
+workflows where users see the armor directly.
 
 ---
 
-## 6. JSON format (EncryptedFile only)
+## 9. UR (Uniform Resources)
 
-`EncryptedFile` serializes to a self-describing JSON form where every
-binary field is base58-encoded:
+Deferred. [Blockchain Commons UR](https://developer.blockchaincommons.com/ur/)
+is a text encoding for CBOR that plays well with QR codes and
+sneakernet workflows. Because Envelope is CBOR, every recrypt
+envelope can be serialized as a UR:
 
-```json
-{
-  "version": 2,
-  "wrapped_key": {
-    "backend": "Lattice",
-    "level": 0,
-    "data": "base58..."
-  },
-  "bao_hash": "base58...",
-  "bao_outboard": "base58...",
-  "ciphertext": "base58..."
-}
+```
+ur:envelope/<bytewords-encoded envelope bytes>
 ```
 
-The signature, if present, follows the same pattern:
-
-```json
-"signature": {
-  "ed25519_signature": "base58...",
-  "pq_signatures": [
-    { "algorithm": "ML-DSA-87", "signature": "base58..." }
-  ]
-}
-```
-
-JSON is intended for debug output, inspection, and interop with tools that
-can't easily consume protobuf. On the wire, prefer protobuf.
+We do not support UR in the initial migration. A follow-up pass
+will add it once the core migration is shipped. The Envelope
+library already handles UR encoding — adoption is mostly plumbing.
 
 ---
 
-## 7. Content negotiation
+## 10. Versioning and evolution
 
-HTTP endpoints that return `EncryptedFile` honor `Accept`:
+### 10.1 The `format-version` field
 
-```http
-Accept: application/x-protobuf   → protobuf (default, recommended)
-Accept: application/json         → JSON (EncryptedFile only)
-Accept: text/plain               → ASCII armor
-```
+Every recrypt envelope carries a `format-version` integer in its
+subject. Current values:
 
----
+| Envelope type                  | Current version |
+|---                             |---               |
+| `recrypt.encrypted-file`       | 3               |
+| `recrypt.pre-wrapped-key`      | 1               |
+| `recrypt.public-key-bundle`    | 1               |
+| `recrypt.secret-key-bundle`    | 1               |
+| `recrypt.recrypt-key`          | 1               |
+| `recrypt.capability`           | 1               |
 
-## 8. Size comparison (rough, 1 MiB file)
+Parsers MUST check the version before any other field access and
+reject unsupported versions with a specific error.
 
-| Format       | Metadata overhead | Ciphertext encoding | Bao outboard | Total overhead |
-| ------------ | ----------------- | ------------------- | ------------ | -------------- |
-| Protobuf     | ~200 B            | 0%                  | ~10 KB (~1%) | ~1%            |
-| JSON         | ~1 KB             | ~37% (base58)       | ~14 KB       | ~37%           |
-| ASCII armor  | ~300 B            | ~33% (base64)       | ~13 KB       | ~34%           |
+### 10.2 Adding fields
 
-Recommendation: Protobuf for wire and storage. Armor for human-touchable
-export. JSON strictly for debug.
+- **New assertions** are additive. Old parsers ignore unknown
+  predicates. No version bump required.
+- **New subject fields** require a version bump because old
+  parsers may reject unknown subject keys (and should, for
+  safety). Bump the version integer and document the change.
+- **Renaming or removing** a subject field is a breaking change.
+  Bump to a new major version integer and retain the old parser
+  for a migration window.
 
----
+### 10.3 Adding domain types
 
-## 9. Version evolution
+Introduce a new `type` string in the subject. Register it in this
+document's §3. No version interaction with existing types — new
+types are orthogonal.
 
-### Protobuf
+### 10.4 Signature scheme changes
 
-Add new fields with new field numbers. Old clients ignore unknown fields.
-Never reuse a retired field number.
+Adding a new signature algorithm (e.g., Falcon or SLH-DSA as a
+third hybrid component) would require updating the "two signatures
+required" rule in §4.2. That's a verifier change, not a format
+change per se — the envelope structure already accommodates
+multiple `'signed'` assertions. Treat it as a version bump on
+every signed type.
 
-```protobuf
-message EncryptedFileProto {
-    // ... existing fields ...
-    optional bytes encryption_algorithm = 7;   // new in v3
-    optional uint32 compression_level   = 8;
-}
-```
+### 10.5 Dropping protobuf
 
-### JSON
-
-Add fields. Old parsers ignore unknown keys. Include a top-level `version`.
-
-### ASCII armor
-
-Add new headers. Old parsers ignore unknown headers. The armor type string
-itself is part of the format contract — a new payload type gets a new type
-name.
-
----
-
-## 10. Dependencies
-
-```toml
-[dependencies]
-prost       = "0.13"
-prost-types = "0.13"
-serde       = { version = "1", features = ["derive"] }
-serde_json  = "1"
-base64      = "0.22"
-bs58        = "0.5"
-bao         = "0.12"
-blake3      = "1"
-
-[build-dependencies]
-prost-build = "0.13"
-```
+There is no dual-format support. The old protobuf wire format is
+removed entirely as part of the migration. There is no
+hybrid-decoder or migration-reader path because there is no
+deployed protobuf data to migrate. See the
+[migration plan](plans/2026-04-08-gordian-envelope-migration.md)
+for the rollback story (trivial: git revert).
 
 ---
 
 ## 11. References
 
-- [Protocol Buffers](https://protobuf.dev/)
-- [`prost` crate docs](https://docs.rs/prost)
+- [Gordian Envelope Developer Resources](https://developer.blockchaincommons.com/envelope/)
+- [`draft-mcnally-envelope`](https://blockchaincommons.github.io/WIPs-IETF-draft-envelope/draft-mcnally-envelope.html) — IETF draft specification
+- [BCR-2023-013: Gordian Envelope Cryptography](https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2023-013-envelope-crypto.md)
+- [BCR-2023-002: Known Values](https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2023-002-known-value.md)
+- [BCR-2025-003: Post-Quantum CBOR Tags](https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2025-003-post-quantum.md)
+- [dCBOR / CBOR Deterministic Encoding](https://cborbook.com/part_2/cbor_cde_dcbor.html)
+- [RFC 8949: CBOR](https://datatracker.ietf.org/doc/html/rfc8949)
+- [RFC 8610: CDDL](https://datatracker.ietf.org/doc/html/rfc8610)
 - [Bao specification](https://github.com/oconnor663/bao/blob/master/docs/spec.md)
-- [Blake3 paper](https://github.com/BLAKE3-team/BLAKE3-specs/blob/master/blake3.pdf)
-- [OpenPGP ASCII Armor (RFC 4880 §6)](https://datatracker.ietf.org/doc/html/rfc4880#section-6)
+- [XChaCha20+Bao AEAD spec (this repo)](standards/xchacha20-bao-aead.md)
+- [Migration plan](plans/2026-04-08-gordian-envelope-migration.md)
+- [Envelope sketch spike](spikes/2026-04-08-envelope-sketch.md)
+- [Threat model](threat-model.md)

@@ -51,7 +51,7 @@ recrypt/
 │   ├── recrypt-ffi/          # OpenFHE + liboqs FFI bindings
 │   ├── recrypt-openfhe-sys/  # Low-level OpenFHE bindings
 │   ├── recrypt-core/         # Core crypto operations (hybrid encryption)
-│   ├── recrypt-proto/        # Wire protocol (Protobuf + Bao verification)
+│   ├── recrypt-wire/         # Wire protocol (Gordian Envelope + Bao verification)
 │   ├── recrypt-storage/      # S3-compatible storage client
 │   └── identikey-storage-auth/ # Auth service for storage access
 ├── recrypt-server/           # Recryption proxy server (Axum)
@@ -147,7 +147,7 @@ recrypt/
 - `tokio` - Async runtime
 - `axum` - HTTP server framework
 - `aws-sdk-s3` - S3 client
-- `prost` - Protobuf serialization
+- `bc-envelope` - Gordian Envelope serialization (dCBOR)
 - `clap` - CLI framework
 - `serde` - Config/identity serialization
 

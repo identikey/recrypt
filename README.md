@@ -33,7 +33,7 @@ Recrypt is a production-ready proxy recryption system enabling secure, revocable
 | ----- | ------------------------------------------------- | ------ |
 | 1     | FFI Bindings (OpenFHE + liboqs)                   | 🔲     |
 | 2     | Core Cryptography (PRE traits, hybrid encryption) | 🔲     |
-| 3     | Protocol Layer (Protobuf, Bao)                    | 🔲     |
+| 3     | Protocol Layer (Gordian Envelope, Bao)             | 🔲     |
 | 4     | Storage Client (S3-compatible)                    | 🔲     |
 | 4b    | Auth Service (identikey-storage-auth)             | 🔲     |
 | 5     | HDprint (parallelizable)                          | 🔲     |
@@ -72,7 +72,7 @@ recrypt/
     ├── crates/
     │   ├── recrypt-ffi/
     │   ├── recrypt-core/
-    │   ├── recrypt-proto/
+    │   ├── recrypt-wire/
     │   ├── recrypt-storage/
     │   └── recrypt-hdprint/
     ├── recrypt-cli/
@@ -144,7 +144,7 @@ recrypt share download <share-id> --output myfile.txt
 | **Encryption**   | Hybrid KEM-DEM with pluggable PRE backends         |
 | **Hashing**      | Blake3 everywhere (HMAC-SHA3-512 for HDprint only) |
 | **Verification** | Blake3/Bao tree mode for streaming                 |
-| **Wire format**  | Protobuf (primary), ASCII armor (export)           |
+| **Wire format**  | Gordian Envelope (primary), ASCII armor (export)   |
 | **Storage**      | Content-addressed S3 + auth service                |
 | **Signatures**   | ED25519 (classical) + ML-DSA-87 (post-quantum)     |
 
@@ -173,7 +173,7 @@ recrypt share download <share-id> --output myfile.txt
 | `docs/hybrid-encryption-architecture.md` | KEM-DEM with pluggable PRE backends |
 | `docs/pre-backend-traits.md`             | `PreBackend` trait hierarchy        |
 | `docs/storage-design.md`                 | S3 + auth service architecture      |
-| `docs/wire-protocol.md`                  | Protobuf + ASCII armor formats      |
+| `docs/wire-protocol.md`                  | Gordian Envelope + ASCII armor formats |
 | `docs/verification-architecture.md`      | Blake3/Bao streaming verification   |
 | `docs/hashing-standard.md`               | Blake3 standardization              |
 | `docs/non-determinism.md`                | Crypto testing strategy             |
@@ -224,7 +224,7 @@ This terminology is standardized throughout the Rust implementation.
 | ------------------------ | ------------------------------------------- |
 | `recrypt-ffi`            | OpenFHE + liboqs FFI bindings               |
 | `recrypt-core`           | PRE backends, hybrid encryption, signatures |
-| `recrypt-proto`          | Wire protocol (Protobuf + Bao)              |
+| `recrypt-wire`          | Wire protocol (Gordian Envelope + Bao)      |
 | `recrypt-storage`        | S3-compatible storage client                |
 | `recrypt-hdprint`        | Self-correcting identifiers                 |
 | `identikey-storage-auth` | Auth service for storage access             |

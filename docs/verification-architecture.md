@@ -223,12 +223,11 @@ Use **outboard mode** for storage:
 
 ### Chunk Format
 
-```protobuf
-message FileChunk {
-    uint32 index = 1;
-    bytes data = 2;
-    bytes bao_proof = 3;  // For slice mode
-}
+```
+FileChunk (conceptual — not a wire-format envelope):
+  index:     u32         chunk sequence number
+  data:      bytes       encrypted chunk data
+  bao_proof: bytes       Bao slice proof for this chunk (optional)
 ```
 
 ---
@@ -329,7 +328,7 @@ reasonable tradeoff for outboards < 200 MiB.
 
 ### Historical note
 
-An earlier `recrypt-proto::bao_stream` module partially attempted
+An earlier `recrypt-wire::bao_stream` module partially attempted
 streaming verification. Its `BaoDecoder::verify()` compared the stored
 root against `blake3::hash(data)` (which happened to match the Bao root but
 was presented as if it were tree verification) and then only size-checked

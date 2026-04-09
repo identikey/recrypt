@@ -41,12 +41,12 @@ integrity-verified with **Blake3 + Bao** streaming hashes.
           ┌────────────────────┼──────────────────┐
           ▼                    ▼                  ▼
 ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────────────┐
-│  recrypt-core    │ │  recrypt-proto   │ │  recrypt-storage         │
+│  recrypt-core    │ │  recrypt-wire    │ │  recrypt-storage         │
 │  crypto objects  │ │  wire format     │ │  content-addressed blobs │
-│  & operations    │ │  (pb/json/armor) │ │  + chunking              │
+│  & operations    │ │  (envelope/armor)│ │  + chunking              │
 └────────┬─────────┘ └────────┬─────────┘ └──────────────────────────┘
          │                    │
-         │                    └── (converts core ↔ proto)
+         │                    └── (converts core ↔ envelope)
          ▼
 ┌──────────────────┐           ┌──────────────────────────┐
 │  recrypt-ffi     │           │  identikey-storage-auth  │
@@ -62,7 +62,7 @@ integrity-verified with **Blake3 + Bao** streaming hashes.
 ```
 
 **Rule of thumb:** dependencies flow downward. `recrypt-core` never imports
-`recrypt-proto` or `recrypt-storage`. Application crates (`-cli`, `-server`)
+`recrypt-wire` or `recrypt-storage`. Application crates (`-cli`, `-server`)
 compose lower crates; they never implement crypto themselves.
 
 ---
@@ -131,7 +131,7 @@ above it composes these; everything below it is an implementation detail.
   - `EncryptedFile` — in-memory struct `{ wrapped_key, bao_hash, bao_outboard,
     ciphertext, signature }`. Provides `sign()` / `verify_signature()` over a
     canonical `signature_payload = wrapped_key.to_bytes() || bao_hash`.
-    **Wire serialization lives in `recrypt-proto`, not here.**
+    **Wire serialization lives in `recrypt-wire` (Gordian Envelope), not here.**
 
 - **`sign/` — Dual-stack signatures**
   - `MultiSig = ED25519 + ML-DSA-87`. `sign_message` / `verify_message` require
@@ -140,7 +140,7 @@ above it composes these; everything below it is an implementation detail.
 
 - **`error/`** — `CoreError`, `CoreResult`, `PreError`, `PreResult`.
 
-**Does NOT own:** wire format of any kind (that's `recrypt-proto`), storage,
+**Does NOT own:** wire format of any kind (that's `recrypt-wire`), storage,
 networking, FFI specifics, or the chunking of large files.
 
 **Depends on:** `recrypt-ffi` (with both `openfhe` and `liboqs` features),
@@ -153,44 +153,39 @@ networking, FFI specifics, or the chunking of large files.
 
 ---
 
-### `recrypt-proto` — wire format
+### `recrypt-wire` — wire format (renamed from `recrypt-wire`)
+
+> **Migration note:** this crate was renamed from `recrypt-wire` as part
+> of the [Gordian Envelope migration](plans/2026-04-08-gordian-envelope-migration.md).
+> The protobuf schema, `prost` codegen, and generated types are removed.
+> The wire format is now [Gordian Envelope](https://developer.blockchaincommons.com/envelope/)
+> (dCBOR). See [wire-protocol.md](wire-protocol.md) for the full spec.
 
 **Owns:**
 
-- **`proto/recrypt.proto`** — the protobuf schema, package `recrypt.v1`. Covers
-  16 message types: `PublicKeyBundle`, `SecretKeyBundle`, `PqPublicKey`,
-  `PqSecretKey`, `RecryptKeyProto`, `CiphertextProto`, `EncryptedFileProto`,
-  `KeyMaterialProto` (documentary — never transmitted standalone),
-  `MultiSignatureProto`, `PqSignatureProto`, `FileMetadata`, `ChunkProto`,
-  `CapabilityProto`, `UploadRequest`, `DownloadResponse`, `RecryptRequest`,
-  `RecryptResponse`; plus the `BackendId` enum.
+- **Envelope construction and parsing** for all recrypt domain types:
+  `EncryptedFile`, `PreWrappedKey`, `PublicKeyBundle`, `SecretKeyBundle`,
+  `RecryptKey`, `Capability`, `FileMetadata`. Each domain type wraps or
+  is a Gordian `Envelope` (option B — envelope-native domain types).
 
-- **`MultiFormat` trait** — the single entry point for serialization:
-  ```rust
-  fn to_protobuf/from_protobuf(...) -> ProtoResult<...>;
-  fn to_json/from_json(...) -> ProtoResult<...>;
-  fn to_armor/from_armor(...) -> ProtoResult<...>;
-  fn from_any(data: &[u8]) -> ProtoResult<Self>;  // auto-detect
-  ```
-  Currently fully implemented for `EncryptedFile`.
+- **Recrypt-specific CBOR tags** — the tag for `recrypt.pre-wrapped-key`
+  (TBD pending [BC team feedback](spikes/2026-04-08-bc-team-email-draft.md);
+  private-use tag until then).
 
-- **`format::detect_format`** — byte-prefix heuristic
-  (`"----- BEGIN RECRYPT" → Armor`, `b'{' → Json`, else `Protobuf`).
+- **`armor.rs`** — ASCII-armor variants (PublicKey, SecretKey, Capability,
+  RecryptKey, EncryptedFile) with PGP-style headers and base64-wrapped
+  envelope payloads. Banners updated from `PROTOBUF` to `ENVELOPE`.
 
-- **`armor::ArmorType`** — 6 ASCII-armor variants (PublicKey, SecretKey, Message,
-  Capability, RecryptKey, EncryptedFile) with PGP-style headers and
-  base64-wrapped payloads.
+- **Multi-signature helpers** — Ed25519 + ML-DSA-87 hybrid signing via
+  `Envelope::add_signatures`, and the "all must verify" verifier.
 
-- **`convert.rs`** — `From` / `TryFrom` bridges between `recrypt-core` types and
-  generated proto types.
-
-- **`bao_stream`** — Blake3/Bao tree verification helpers: `BaoEncoder`,
-  `BaoDecoder`, `SliceVerifier` (outboard mode).
+- **Salted assertion helpers** — constructors that apply the
+  [salting policy](wire-protocol.md) for low-entropy elidable fields.
 
 **Does NOT own:** any crypto operations, key generation, HTTP routing, or FFI.
 
-**Depends on:** `prost` (v0.13), `prost-build`, `serde`, `serde_json`, `base64`,
-`bs58`, `blake3`, `bao`, `recrypt-core`, `ed25519-dalek`.
+**Depends on:** `bc-envelope`, `bc-dcbor`, `bc-components`, `blake3`,
+`bs58`, `recrypt-core`, `ed25519-dalek`.
 
 **Downstream consumers:** `recrypt-server`, `recrypt-cli`, `identikey-storage-auth`.
 
@@ -261,7 +256,7 @@ Blake3 hash. Content addressing makes blobs immutable by construction.
 **Trust model:** the auth service holds **ground truth** for ownership and
 grants. It is **trusted**. Capabilities are forgery-resistant via multi-sig.
 
-**Depends on:** `recrypt-core`, `recrypt-proto`, `blake3`, `bs58`, `rusqlite`
+**Depends on:** `recrypt-core`, `recrypt-wire`, `blake3`, `bs58`, `rusqlite`
 (optional).
 
 **Downstream:** `recrypt-server` (holds `Arc<dyn OwnershipStore>` and
@@ -281,7 +276,7 @@ grants. It is **trusted**. Capabilities are forgery-resistant via multi-sig.
     `DELETE /files/{hash}` (signed + ownership-checked).
   - **Recryption** — `POST /recryption/share` (store share policy containing
     recrypt key + from/to fingerprints), `GET /recryption/share/{id}/file`
-    (**the core proxy operation**: deserialize `EncryptedFile` via protobuf,
+    (**the core proxy operation**: deserialize `EncryptedFile` via Gordian Envelope,
     apply `HybridEncryptor::recrypt()` to `wrapped_key` only, re-serialize,
     return to the authenticated recipient), `DELETE /recryption/share/{id}`
     (owner-only revoke), `GET /accounts/{fp}/shares`.
@@ -331,7 +326,7 @@ It does **not** hold:
 - any plaintext (never computed);
 - possession of a revoked recrypt key (deletion is atomic).
 
-**Depends on:** `recrypt-core`, `recrypt-proto`, `recrypt-storage`,
+**Depends on:** `recrypt-core`, `recrypt-wire`, `recrypt-storage`,
 `identikey-storage-auth`, `recrypt-ffi` (indirect), `axum`, `tower`.
 
 ---
@@ -351,8 +346,8 @@ that talks to `recrypt-server`.
 
 - **Local crypto** (`commands/encrypt.rs`, `commands/decrypt.rs`) — `encrypt`
   and `decrypt` are **fully offline**: `HybridEncryptor::encrypt` /
-  `HybridEncryptor::decrypt` serialized via `MultiFormat::to_protobuf` /
-  `from_protobuf`.
+  `HybridEncryptor::decrypt` serialized via Gordian Envelope (see
+  [wire-protocol.md](wire-protocol.md)).
 
 - **HTTP client** (`client/api.rs`, `client/auth.rs`) — account registration,
   nonce fetch, request signing (ED25519 + ML-DSA over action message), file
@@ -372,7 +367,7 @@ keys (encrypted at rest) and all plaintext (in process memory during operations)
 It trusts the server's enforcement of share policies but independently verifies
 multi-signatures on anything it receives.
 
-**Depends on:** `recrypt-core`, `recrypt-proto`, `recrypt-ffi`, `reqwest`,
+**Depends on:** `recrypt-core`, `recrypt-wire`, `recrypt-ffi`, `reqwest`,
 `clap`, `argon2`, `chacha20poly1305`, `keyring`.
 
 ---
@@ -396,7 +391,7 @@ multi-signatures on anything it receives.
                            │   ├─ PRE-encrypt KeyMaterial → wrapped_key (KEM)        │
                            │   ├─ XChaCha20(pt, sym_key)  → ciphertext (DEM)         │
                            │   └─ Bao(ciphertext)         → bao_hash + outboard      │
-                           │  EncryptedFile → protobuf bytes                         │
+                           │  EncryptedFile → envelope bytes                         │
                            │                                                         │
   3. account register      │  POST /accounts  (multi-sig + nonce) ──────────┐        │
                            │                                                ▼        │

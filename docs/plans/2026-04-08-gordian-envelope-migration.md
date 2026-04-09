@@ -215,6 +215,24 @@ unsupported format versions before attempting full deserialization.
 *Gate: test that an envelope claiming an unknown `format-version`
 assertion is rejected with a clear error.*
 
+**FR-11: Salted elision for low-entropy assertions.** Any assertion
+whose object has fewer than ~80 bits of effective entropy and is
+intended to be elidable in a hostile environment must be added via
+`add_assertion_salted` (not the unsalted variant). The list of
+which assertions require salting is normative and lives in
+[Doc 0 spike §"Salting policy"](../spikes/2026-04-08-envelope-sketch.md#salting-policy-for-elidable-low-entropy-assertions)
+until Doc 1 absorbs it. Rationale: an unsalted elided assertion
+is just a Blake3 digest of canonical CBOR; for a 4-value enum like
+`Operation`, this is brute-forceable in microseconds. Salting
+defeats this by including a per-assertion random nonce in the
+hashed preimage.
+*Gate: test that elides a low-entropy assertion (e.g.,
+`"operations"`) and verifies an attacker who knows the predicate
+cannot recover the value by enumerating the preimage space.
+Test that salts are drawn fresh per assertion (not reused across
+documents) by encoding two envelopes with the same value and
+asserting their salted-assertion digests differ.*
+
 ## Non-functional requirements
 
 What the migrated system must *be*. Measurable qualities, not features.
@@ -429,7 +447,7 @@ Full rewrite. Sections to cover:
 - [ ] dCBOR edge-case list is complete enough that an independent
   implementer would not be surprised
 
-### Doc 2: New `docs/xchacha20-bao-aead.md`
+### Doc 2: New `docs/standards/xchacha20-bao-aead.md`
 
 Standalone definition of "XChaCha20 + Bao" as a streaming AEAD construction,
 positioned as a sibling to the popular XChaCha20-Poly1305 variant. Sections:

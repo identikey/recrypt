@@ -227,9 +227,9 @@ These limits are configurable via `recrypt-server.toml` or environment variables
 - **Auth:** required. Canonical message:
   `UPLOAD:{fingerprint}:{file_hash}:{nonce}`.
 - **Request body:** raw binary ciphertext (not JSON). Typically a
-  protobuf-encoded `EncryptedFileProto` — see
+  Gordian Envelope-encoded `EncryptedFile` — see
   [wire-protocol.md](wire-protocol.md) — but the server stores it as an
-  opaque blob. Content-Type should be `application/octet-stream`.
+  opaque blob. Content-Type should be `application/envelope+cbor`.
 - **Hash derivation:** the client must compute `file_hash =
   bs58(blake3(body))` and include it in the signature message. The server
   recomputes and rejects any mismatch.
@@ -401,7 +401,7 @@ POST /recryption/share
 GET  /nonce                             → nonce₄
 msg  = "DOWNLOAD:bob_fp:sid:" + nonce₄
 GET  /recryption/share/sid/file
-                                        → 200 [recrypted protobuf bytes]
+                                        → 200 [recrypted envelope bytes]
 Bob: HybridEncryptor::decrypt(bob_sk, deserialized) → plaintext
 ```
 
