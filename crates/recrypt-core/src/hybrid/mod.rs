@@ -103,7 +103,7 @@ impl<B: PreBackend> HybridEncryptor<B> {
         };
 
         // Wrap entire bundle with PRE
-        let wrapped_key = self.backend.encrypt(recipient, &key_material.to_bytes())?;
+        let wrapped_key = self.backend.encrypt(recipient, &key_material.to_bytes()?)?;
 
         Ok(EncryptedFile {
             wrapped_key,
@@ -303,7 +303,7 @@ impl<B: PreBackend> HybridEncryptor<B> {
             plaintext_hash,
             plaintext_size,
         };
-        let wrapped_key = self.backend.encrypt(recipient, &key_material.to_bytes())?;
+        let wrapped_key = self.backend.encrypt(recipient, &key_material.to_bytes()?)?;
 
         // 7. Write ciphertext to output async.
         ciphertext_out

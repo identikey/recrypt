@@ -33,3 +33,8 @@ prost-build = "0.13"
 [dev-dependencies]
 proptest.workspace = true
 recrypt-ffi = { path = "../recrypt-ffi" }
+
+# Gordian Envelope spike — validate the migration target compiles
+# and round-trips before committing to the full rewrite.
+# Pin exact version per migration plan alpha-status mitigation.
+bc-envelope = "=0.43.0"
