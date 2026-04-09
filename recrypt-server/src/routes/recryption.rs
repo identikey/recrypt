@@ -9,7 +9,7 @@ use axum::{
 use base64::Engine as _;
 use recrypt_core::pre::BackendId;
 use recrypt_core::{EncryptedFile, HybridEncryptor};
-use recrypt_proto::MultiFormat;
+use recrypt_wire::MultiFormat;
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -252,7 +252,7 @@ pub async fn get_recrypted_share(
         .await
         .map_err(|e| ServerError::Internal(format!("Storage error: {e}")))?;
 
-    let encrypted = EncryptedFile::from_protobuf(&file_bytes)
+    let encrypted = EncryptedFile::from_envelope(&file_bytes)
         .map_err(|e| ServerError::Internal(format!("Failed to deserialize file: {e}")))?;
 
     // Reconstruct RecryptKey from stored bytes

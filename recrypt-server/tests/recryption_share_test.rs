@@ -87,7 +87,7 @@ impl TestIdentity {
 async fn test_recryption_share_returns_control_plane_response() {
     use recrypt_core::pre::backends::MockBackend;
     use recrypt_core::{EncryptedFile, HybridEncryptor, PreBackend as _};
-    use recrypt_proto::MultiFormat;
+    use recrypt_wire::MultiFormat;
 
     let server = common::TestServer::start().await;
     let client = Client::new();
@@ -151,7 +151,7 @@ async fn test_recryption_share_returns_control_plane_response() {
     // ── Alice encrypts a file and uploads it ────────────────────────────────
     let plaintext = b"Control plane test file content";
     let encrypted: EncryptedFile = encryptor.encrypt(&alice.pre_kp.public, plaintext).unwrap();
-    let file_bytes = encrypted.to_protobuf().unwrap();
+    let file_bytes = encrypted.to_envelope().unwrap();
     let file_hash_bytes = blake3::hash(&file_bytes);
     let file_hash_b58 = bs58::encode(file_hash_bytes.as_bytes()).into_string();
 

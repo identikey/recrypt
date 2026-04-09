@@ -4,7 +4,7 @@ members = [
   "crates/recrypt-ffi",
   "crates/recrypt-openfhe-sys",
   "crates/recrypt-core",
-  "crates/recrypt-proto",
+  "crates/recrypt-wire",
   "crates/recrypt-storage",
   "crates/identikey-storage-auth",
   "recrypt-server",

@@ -686,17 +686,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bao"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3663af8a469bf3a2d818b8c1a7b62e4dc55c4547b4c14f5dab35fc9e707bef83"
-dependencies = [
- "arrayref",
- "arrayvec",
- "blake3",
-]
-
-[[package]]
 name = "bao-tree"
 version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1905,12 +1894,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8591b0bcc8a98a64310a2fae1bb3e9b8564dd10e381e6e28010fde8e8e8568db"
 
 [[package]]
-name = "fixedbitset"
-version = "0.5.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d674e81391d1e1ab681a28d99df07927c6d4aa5b027d7da16ba32d1d21ecd99"
-
-[[package]]
 name = "flate2"
 version = "1.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2617,8 +2600,8 @@ dependencies = [
  "bs58",
  "recrypt-core",
  "recrypt-ffi",
- "recrypt-proto",
  "recrypt-storage",
+ "recrypt-wire",
  "rusqlite",
  "serde",
  "serde_json",
@@ -3012,12 +2995,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "multimap"
-version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d87ecb2933e8aeadb3e3a02b828fed80a7528047e68b4f424523a0981a3a084"
-
-[[package]]
 name = "native-tls"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3389,16 +3366,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
-name = "petgraph"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3672b37090dbd86368a4145bc067582552b29c27377cad4e0a306c97f9bd7772"
-dependencies = [
- "fixedbitset",
- "indexmap",
-]
-
-[[package]]
 name = "phf"
 version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3766,26 +3733,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "prost-build"
-version = "0.13.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be769465445e8c1474e9c5dac2018218498557af32d9ed057325ec9a41ae81bf"
-dependencies = [
- "heck",
- "itertools 0.14.0",
- "log",
- "multimap",
- "once_cell",
- "petgraph",
- "prettyplease",
- "prost",
- "prost-types",
- "regex",
- "syn 2.0.114",
- "tempfile",
-]
-
-[[package]]
 name = "prost-derive"
 version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3796,15 +3743,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.114",
-]
-
-[[package]]
-name = "prost-types"
-version = "0.13.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52c2c1bf36ddb1a1c396b3601a3cec27c2462e45f07c386894ec3ccf5332bd16"
-dependencies = [
- "prost",
 ]
 
 [[package]]
@@ -3993,8 +3931,8 @@ dependencies = [
  "rand 0.8.5",
  "recrypt-core",
  "recrypt-ffi",
- "recrypt-proto",
  "recrypt-storage",
+ "recrypt-wire",
  "reqwest",
  "security-framework 3.5.1",
  "serde",
@@ -4052,27 +3990,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "recrypt-proto"
-version = "0.1.0"
-dependencies = [
- "bao",
- "base64",
- "bc-envelope",
- "blake3",
- "bs58",
- "ed25519-dalek",
- "proptest",
- "prost",
- "prost-build",
- "prost-types",
- "recrypt-core",
- "recrypt-ffi",
- "serde",
- "serde_json",
- "thiserror 2.0.17",
-]
-
-[[package]]
 name = "recrypt-server"
 version = "0.1.0"
 dependencies = [
@@ -4090,8 +4007,8 @@ dependencies = [
  "prost",
  "recrypt-core",
  "recrypt-ffi",
- "recrypt-proto",
  "recrypt-storage",
+ "recrypt-wire",
  "reqwest",
  "rusqlite",
  "serde",
@@ -4123,6 +4040,23 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.17",
  "tokio",
+]
+
+[[package]]
+name = "recrypt-wire"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "bc-envelope",
+ "blake3",
+ "bs58",
+ "ed25519-dalek",
+ "proptest",
+ "recrypt-core",
+ "recrypt-ffi",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.17",
 ]
 
 [[package]]

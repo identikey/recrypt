@@ -12,7 +12,7 @@ sqlite = ["rusqlite", "tokio-rusqlite"]
 [dependencies]
 # Workspace
 recrypt-core = { path = "../recrypt-core" }
-recrypt-proto = { path = "../recrypt-proto" }
+recrypt-wire = { path = "../recrypt-wire" }
 thiserror.workspace = true
 async-trait.workspace = true
 tokio.workspace = true

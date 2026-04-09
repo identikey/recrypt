@@ -103,7 +103,7 @@ pub struct KeyspaceDoc {
 pub struct Member {
     pub fingerprint: PublicKeyFingerprint,
     pub capabilities: BTreeSet<Capability>,
-    pub share_policy: SharePolicy,
+    pub share_policy: DecryptionPolicy,
     pub added_at: u64,
     pub added_by: PublicKeyFingerprint,
 }
@@ -116,7 +116,7 @@ pub enum Capability {
     SignRotation,  // sign KeyspaceDoc version bumps
 }
 
-pub enum SharePolicy {
+pub enum DecryptionPolicy {
     /// Member can decrypt on their own using their own share.
     Standalone,
 
@@ -155,6 +155,11 @@ pub enum RotationMode {
     /// set as a starting point. Used for authority change or community
     /// split. The new keyspace has no parent; lineage is documentary.
     Fork { new_id: KeyspaceId },
+
+    /// Declare the keyspace retired. Signed by quorum. Proxies stop
+    /// serving it in queries. Content in the vault is not removed
+    /// (base tier cannot enforce deletion).
+    Tombstone,
 }
 ```
 
@@ -393,7 +398,7 @@ counter and enforcement is natural.
 
 | Concept | Crate | Rationale |
 |---|---|---|
-| `KeyspaceDoc`, `Member`, `Capability`, `SharePolicy`, `RotationMode` | `identikey-storage-auth` | Identity + authorization types |
+| `KeyspaceDoc`, `Member`, `Capability`, `DecryptionPolicy`, `RotationMode` | `identikey-storage-auth` | Identity + authorization types |
 | `AccessGrant`, `GrantId` | `identikey-storage-auth` (done) | Already scaffolded |
 | `KeyspaceStore` trait + InMemory/Sqlite impls | `identikey-storage-auth` | Matches AccountStore pattern |
 | `GrantStore` trait + InMemory (done) / Sqlite | `identikey-storage-auth` | Scaffolded; add Sqlite |
@@ -513,7 +518,7 @@ No separate `Group` type. Same primitive, different parameters.
 
 ### Phase A — types and store traits (lands first)
 
-1. Define `KeyspaceDoc`, `Member`, `Capability`, `SharePolicy`,
+1. Define `KeyspaceDoc`, `Member`, `Capability`, `DecryptionPolicy`,
    `RotationMode`, `KeyspaceId`, `KeyspaceDocHash` in
    `crates/identikey-storage-auth/src/keyspace.rs`.
 2. Define `KeyspaceStore` async trait with `InMemoryKeyspaceStore` impl.
@@ -579,7 +584,7 @@ No separate `Group` type. Same primitive, different parameters.
 
 ### Phase G — forward-compat hooks for sentinel tier
 
-1. `SharePolicy::ThresholdShare` is defined but unused at base tier.
+1. `DecryptionPolicy::ThresholdShare` is defined but unused at base tier.
    Shape must match what the sentinel tier will need.
 2. `RotationMode::Burn` defined but rejected with "not supported at
    base tier" error when invoked without a guardian.
@@ -671,13 +676,10 @@ keyspace. Cross-linking is a follow-up that needs more design.
 
 ### 12.6 Keyspace deletion
 
-Is there such a thing as "delete this keyspace"?
-
-**Recommendation:** no hard delete. A keyspace can be **tombstoned**
-via a final `RotationMode::Tombstone` that declares the keyspace
-retired. Signed by quorum. Proxies stop serving it in queries.
-Content in the vault is not removed (base tier cannot enforce
-deletion). Add `Tombstone` to `RotationMode`.
+**Resolved:** `RotationMode::Tombstone` added to the type definition
+in section 2.1. No hard delete; a tombstoned keyspace is retired by
+quorum signature. Proxies stop serving it. Vault content is not
+removed (base tier cannot enforce deletion).
 
 ---
 

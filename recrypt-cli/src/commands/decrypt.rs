@@ -6,7 +6,7 @@ use std::io::Cursor;
 use tokio::fs;
 
 use recrypt_core::HybridEncryptor;
-use recrypt_proto::MultiFormat;
+use recrypt_wire::MultiFormat;
 
 use super::Context;
 use crate::config::Config;
@@ -47,7 +47,7 @@ pub async fn run(args: DecryptArgs, ctx: &Context) -> Result<()> {
         .with_context(|| format!("Failed to read {}", args.file))?;
 
     // Deserialize envelope
-    let encrypted = recrypt_core::EncryptedFile::from_protobuf(&encrypted_bytes)
+    let encrypted = recrypt_core::EncryptedFile::from_envelope(&encrypted_bytes)
         .context("Failed to parse encrypted file (invalid format?)")?;
 
     // Load outboard sibling if present (file > 16 KiB case)

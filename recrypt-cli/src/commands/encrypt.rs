@@ -5,7 +5,7 @@ use serde::Serialize;
 use tokio::fs;
 
 use recrypt_core::{HybridEncryptor, hybrid::EncryptedFile};
-use recrypt_proto::MultiFormat;
+use recrypt_wire::MultiFormat;
 
 use super::Context;
 use crate::output::{print_json, print_success};
@@ -88,7 +88,7 @@ pub async fn run(args: EncryptArgs, ctx: &Context) -> Result<()> {
     let ciphertext_len = encrypted.ciphertext.len();
 
     // Serialize envelope (includes ciphertext) to protobuf
-    let serialized = encrypted.to_protobuf()?;
+    let serialized = encrypted.to_envelope()?;
     fs::write(&output_path, &serialized)
         .await
         .with_context(|| format!("Failed to write {output_path}"))?;

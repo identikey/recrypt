@@ -6,7 +6,7 @@ edition.workspace = true
 [dependencies]
 # Workspace crates
 recrypt-core = { path = "../crates/recrypt-core" }
-recrypt-proto = { path = "../crates/recrypt-proto" }
+recrypt-wire = { path = "../crates/recrypt-wire" }
 recrypt-storage = { path = "../crates/recrypt-storage", features = ["s3"] }
 identikey-storage-auth = { path = "../crates/identikey-storage-auth", features = [
   "sqlite",

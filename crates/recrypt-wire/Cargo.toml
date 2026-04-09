@@ -1,14 +1,14 @@
 [package]
-name = "recrypt-proto"
+name = "recrypt-wire"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
-# Protobuf
-prost = "0.13"
-prost-types = "0.13"
+# Gordian Envelope (dCBOR wire format)
+# Pinned per migration plan alpha-status mitigation.
+bc-envelope = "=0.43.0"
 
-# Serialization
+# Serialization (JSON for debug output, serde for config compat)
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
@@ -23,18 +23,9 @@ ed25519-dalek.workspace = true
 # Error handling
 thiserror.workspace = true
 
-# Blake3/Bao for streaming verification
+# Blake3 for hashing
 blake3 = { version = "1.5", features = ["traits-preview"] }
-bao = "0.12"
-
-[build-dependencies]
-prost-build = "0.13"
 
 [dev-dependencies]
 proptest.workspace = true
 recrypt-ffi = { path = "../recrypt-ffi" }
-
-# Gordian Envelope spike — validate the migration target compiles
-# and round-trips before committing to the full rewrite.
-# Pin exact version per migration plan alpha-status mitigation.
-bc-envelope = "=0.43.0"

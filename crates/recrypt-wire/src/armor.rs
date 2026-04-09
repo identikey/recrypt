@@ -13,7 +13,7 @@
 //! ----- END RECRYPT PUBLIC KEY -----
 //! ```
 
-use crate::error::{ProtoError, ProtoResult};
+use crate::error::{WireError, WireResult};
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use std::collections::HashMap;
 
@@ -93,31 +93,31 @@ pub fn armor_encode(armor_type: ArmorType, headers: &[(&str, &str)], payload: &[
 }
 
 /// Decode ASCII armor to bytes
-pub fn armor_decode(s: &str) -> ProtoResult<ArmorBlock> {
+pub fn armor_decode(s: &str) -> WireResult<ArmorBlock> {
     let lines: Vec<&str> = s.lines().collect();
 
     // Find BEGIN line
     let begin_idx = lines
         .iter()
         .position(|l| l.starts_with("----- BEGIN RECRYPT"))
-        .ok_or_else(|| ProtoError::ArmorParse("Missing BEGIN line".into()))?;
+        .ok_or_else(|| WireError::ArmorParse("Missing BEGIN line".into()))?;
 
     // Parse armor type from BEGIN line
     let begin_line = lines[begin_idx];
     let type_str = begin_line
         .strip_prefix("----- BEGIN RECRYPT ")
         .and_then(|s| s.strip_suffix(" -----"))
-        .ok_or_else(|| ProtoError::ArmorParse("Invalid BEGIN format".into()))?;
+        .ok_or_else(|| WireError::ArmorParse("Invalid BEGIN format".into()))?;
 
     let armor_type = ArmorType::from_label(type_str)
-        .ok_or_else(|| ProtoError::ArmorParse(format!("Unknown armor type: {type_str}")))?;
+        .ok_or_else(|| WireError::ArmorParse(format!("Unknown armor type: {type_str}")))?;
 
     // Find END line
     let end_marker = format!("----- END RECRYPT {} -----", armor_type.label());
     let end_idx = lines
         .iter()
         .position(|l| *l == end_marker)
-        .ok_or_else(|| ProtoError::ArmorParse("Missing END line".into()))?;
+        .ok_or_else(|| WireError::ArmorParse("Missing END line".into()))?;
 
     // Parse headers (until blank line)
     let mut headers = HashMap::new();

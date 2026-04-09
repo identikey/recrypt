@@ -243,13 +243,13 @@ The `Member` type carries:
 Member {
     fingerprint: PublicKeyFingerprint,
     capabilities: Vec<Capability>,       // Read, Write, Delegate, Admin, SignRotation
-    share_policy: SharePolicy,           // Standalone | ThresholdShare { of: u8, n: u8, policy_ref: Hash }
+    decryption_policy: DecryptionPolicy,  // Standalone | ThresholdShare { of: u8, n: u8, policy_ref: Hash }
     added_at: u64,
     added_by: PublicKeyFingerprint,
 }
 ```
 
-`SharePolicy::Standalone` is the common case. `ThresholdShare` makes the
+`DecryptionPolicy::Standalone` is the common case. `ThresholdShare` makes the
 member an escrow participant — their DEK access requires combining
 with other shares under a named policy.
 
@@ -258,6 +258,17 @@ This collapses the "authority can decrypt?" question into
 composable: you can have multiple threshold groups in a single
 keyspace (e.g., owner + [2-of-3 escrow agents] + [3-of-5 emergency
 break-glass]).
+
+**Edge cases:**
+
+- `threshold` must be >= 1.
+- `ThresholdShare { threshold: 1, total: 1 }` is equivalent to
+  `Standalone` and should be normalized to `Standalone` on construction.
+- If all members with `SignRotation` capability are lost (below quorum),
+  the keyspace cannot be rotated. Recovery path: fork the keyspace
+  under a new authority set. The old keyspace is effectively frozen.
+  This is by design — no backdoor mechanism should be able to override
+  quorum requirements.
 
 ---
 
@@ -271,6 +282,11 @@ break-glass]).
 | Ratcheted read nonces | — | optional | X |
 | Eager re-encryption on revocation | — | — | opt-in |
 | Lazy re-encryption on touch | — | X | X |
+
+**Lazy re-encryption on touch:** when content from a stale epoch is
+next accessed by any authorized member, the vault guardian triggers
+re-encryption under the current epoch key. Amortized cost — content
+is upgraded on read, not all at once on rotation.
 
 At base, "forward secrecy" means "an attacker who compromises a key
 today cannot decrypt past traffic captured earlier" (which holds
@@ -310,7 +326,7 @@ out-of-band plaintext copies become stale for future versions.
 
 The keyspace design (separate doc) is written targeting base-tier
 semantics, with explicit extension points for sentinel-tier
-enforcement. The `SharePolicy` field on `Member` and the `RotationMode`
+enforcement. The `DecryptionPolicy` field on `Member` and the `RotationMode`
 enum are forward-compatible with threshold escrow and burn-mode
 revocation without requiring schema changes.
 

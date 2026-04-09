@@ -57,7 +57,7 @@ keyring = { version = "3", default-features = false }
 
 # Workspace crates
 recrypt-core = { path = "../crates/recrypt-core" }
-recrypt-proto = { path = "../crates/recrypt-proto" }
+recrypt-wire = { path = "../crates/recrypt-wire" }
 recrypt-ffi = { path = "../crates/recrypt-ffi" }
 recrypt-storage = { path = "../crates/recrypt-storage" }
 ed25519-dalek = "2"

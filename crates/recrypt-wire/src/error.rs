@@ -1,12 +1,12 @@
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum ProtoError {
-    #[error("Protobuf encode error: {0}")]
-    ProtobufEncode(#[from] prost::EncodeError),
+pub enum WireError {
+    #[error("Envelope error: {0}")]
+    Envelope(String),
 
-    #[error("Protobuf decode error: {0}")]
-    ProtobufDecode(#[from] prost::DecodeError),
+    #[error("dCBOR error: {0}")]
+    Dcbor(String),
 
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
@@ -23,17 +23,20 @@ pub enum ProtoError {
     #[error("Invalid format: {0}")]
     InvalidFormat(String),
 
-    #[error("Bao verification failed: {0}")]
-    BaoVerification(String),
-
     #[error("Missing required field: {0}")]
     MissingField(String),
 
+    #[error("Wrong envelope type: expected {expected}, got {actual}")]
+    WrongType { expected: String, actual: String },
+
     #[error("Version mismatch: expected {expected}, got {actual}")]
     VersionMismatch { expected: u32, actual: u32 },
+
+    #[error("Signature verification failed: {0}")]
+    SignatureVerification(String),
 
     #[error("Core error: {0}")]
     Core(#[from] recrypt_core::error::CoreError),
 }
 
-pub type ProtoResult<T> = Result<T, ProtoError>;
+pub type WireResult<T> = Result<T, WireError>;
