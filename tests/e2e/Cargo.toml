@@ -1,0 +1,44 @@
+[package]
+name = "recrypt-e2e-tests"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[features]
+s3-tests = ["aws-sdk-s3"]
+
+[dependencies]
+# Test infrastructure
+tokio = { version = "1", features = ["full"] }
+assert_cmd = "2"
+predicates = "3"
+tempfile = "3"
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }
+reqwest = { version = "0.12", features = ["json"] }
+axum = "0.8"
+
+# Crypto (for API-level test signing)
+ed25519-dalek = { workspace = true }
+blake3 = "1"
+bs58 = "0.5"
+base64 = "0.22"
+uuid = { version = "1", features = ["v4"] }
+rand = "0.8"
+
+# Workspace crates
+recrypt-server = { path = "../../recrypt-server" }
+recrypt-core = { path = "../../crates/recrypt-core" }
+recrypt-ffi = { path = "../../crates/recrypt-ffi" }
+recrypt-wire = { path = "../../crates/recrypt-wire" }
+
+# S3 (optional)
+aws-sdk-s3 = { version = "1", optional = true }
+aws-config = { version = "1", optional = true }
+
+# Observability (for diagnostic tests)
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing = "0.1"
+
+# Utilities
+anyhow = "1"

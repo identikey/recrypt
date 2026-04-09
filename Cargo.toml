@@ -9,6 +9,7 @@ members = [
   "crates/identikey-storage-auth",
   "recrypt-server",
   "recrypt-cli",
+  "tests/e2e",
   # "crates/recrypt-hdprint",  # parallel track
 ]
 

@@ -24,6 +24,10 @@ pub struct SharePolicy {
     pub to_fingerprint: PublicKeyFingerprint,
     pub file_hash: blake3::Hash,
     pub recrypt_key: Vec<u8>,
+    /// Serialized original wrapped key (`Ciphertext::to_bytes()`).
+    /// Stored so `get_recrypted_share` can recrypt it without loading the
+    /// full file from storage (the file envelope does not embed the wrapped key).
+    pub wrapped_key: Vec<u8>,
     pub backend_id: BackendId,
     pub created_at: u64,
 }
@@ -128,6 +132,7 @@ impl SqliteShareStore {
                     to_fp       TEXT NOT NULL,
                     file_hash   TEXT NOT NULL,
                     recrypt_key BLOB NOT NULL,
+                    wrapped_key BLOB NOT NULL DEFAULT X'',
                     backend_id  TEXT NOT NULL,
                     created_at  INTEGER NOT NULL
                 );
@@ -158,8 +163,9 @@ fn row_to_policy(row: &rusqlite::Row<'_>) -> rusqlite::Result<SharePolicy> {
     let to_fp: String = row.get(2)?;
     let file_hash_b58: String = row.get(3)?;
     let recrypt_key: Vec<u8> = row.get(4)?;
-    let backend_id_s: String = row.get(5)?;
-    let created_at: i64 = row.get(6)?;
+    let wrapped_key: Vec<u8> = row.get(5)?;
+    let backend_id_s: String = row.get(6)?;
+    let created_at: i64 = row.get(7)?;
 
     let hash_bytes = bs58::decode(&file_hash_b58)
         .into_vec()
@@ -175,7 +181,7 @@ fn row_to_policy(row: &rusqlite::Row<'_>) -> rusqlite::Result<SharePolicy> {
     arr.copy_from_slice(&hash_bytes);
     let backend_id: BackendId = backend_id_s.parse().map_err(|_| {
         rusqlite::Error::FromSqlConversionFailure(
-            5,
+            6,
             rusqlite::types::Type::Text,
             "invalid backend_id".into(),
         )
@@ -187,6 +193,7 @@ fn row_to_policy(row: &rusqlite::Row<'_>) -> rusqlite::Result<SharePolicy> {
         to_fingerprint: to_fp,
         file_hash: blake3::Hash::from(arr),
         recrypt_key,
+        wrapped_key,
         backend_id,
         created_at: created_at as u64,
     })
@@ -202,14 +209,15 @@ impl ShareStore for SqliteShareStore {
                 let tx = c.transaction()?;
                 tx.execute(
                     "INSERT OR REPLACE INTO shares
-                     (share_id, from_fp, to_fp, file_hash, recrypt_key, backend_id, created_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?)",
+                     (share_id, from_fp, to_fp, file_hash, recrypt_key, wrapped_key, backend_id, created_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     rusqlite::params![
                         id_for_call,
                         policy.from_fingerprint,
                         policy.to_fingerprint,
                         bs58::encode(policy.file_hash.as_bytes()).into_string(),
                         policy.recrypt_key,
+                        policy.wrapped_key,
                         policy.backend_id.to_string(),
                         policy.created_at as i64,
                     ],
@@ -227,7 +235,7 @@ impl ShareStore for SqliteShareStore {
         self.conn
             .call(move |c| {
                 let mut stmt = c.prepare(
-                    "SELECT share_id, from_fp, to_fp, file_hash, recrypt_key, backend_id, created_at
+                    "SELECT share_id, from_fp, to_fp, file_hash, recrypt_key, wrapped_key, backend_id, created_at
                      FROM shares WHERE share_id = ?",
                 )?;
                 let mut rows = stmt.query([id])?;
@@ -262,7 +270,7 @@ impl ShareStore for SqliteShareStore {
         self.conn
             .call(move |c| {
                 let mut stmt = c.prepare(
-                    "SELECT share_id, from_fp, to_fp, file_hash, recrypt_key, backend_id, created_at
+                    "SELECT share_id, from_fp, to_fp, file_hash, recrypt_key, wrapped_key, backend_id, created_at
                      FROM shares WHERE from_fp = ?",
                 )?;
                 let rows = stmt.query_map([from], row_to_policy)?;
@@ -284,7 +292,7 @@ impl ShareStore for SqliteShareStore {
         self.conn
             .call(move |c| {
                 let mut stmt = c.prepare(
-                    "SELECT share_id, from_fp, to_fp, file_hash, recrypt_key, backend_id, created_at
+                    "SELECT share_id, from_fp, to_fp, file_hash, recrypt_key, wrapped_key, backend_id, created_at
                      FROM shares WHERE to_fp = ?",
                 )?;
                 let rows = stmt.query_map([to], row_to_policy)?;
@@ -310,6 +318,7 @@ mod tests {
             to_fingerprint: to.into(),
             file_hash: blake3::hash(id.as_bytes()),
             recrypt_key: vec![1, 2, 3, 4],
+            wrapped_key: vec![5, 6, 7, 8],
             backend_id: BackendId::Mock,
             created_at: 42,
         }

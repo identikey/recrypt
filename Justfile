@@ -294,16 +294,24 @@ wallet-dir:
 test-cli: build-release
     ./test-cli.sh
 
-# Run e2e recryption test with mock backend (~5 seconds)
+# Run Rust e2e tests (mock backend, memory storage, ~30s)
 test-e2e: build-release
+    cargo test -p recrypt-e2e-tests -- --test-threads=1
+
+# Run e2e tests with S3/Minio (~2min, requires Docker)
+test-e2e-s3: build-release minio-up
+    cargo test -p recrypt-e2e-tests --features s3-tests -- --test-threads=1
+
+# Run comprehensive e2e (all backends + S3)
+test-e2e-full: test-e2e test-e2e-s3
+
+# Run legacy bash e2e test with mock backend
+test-e2e-legacy: build-release
     ./tests/e2e/recryption.sh mock
 
-# Run e2e recryption test with lattice backend (~3 minutes, post-quantum)
+# Run legacy bash e2e with lattice backend (~3 minutes, post-quantum)
 test-e2e-lattice: build-release
     ./tests/e2e/recryption.sh lattice
-
-# Run all e2e tests (mock + lattice)
-test-e2e-all: test-e2e test-e2e-lattice
 
 # =============================================================================
 # Release Management

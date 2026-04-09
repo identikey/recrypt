@@ -69,6 +69,10 @@ pub struct CreateShareRequest {
     pub to_fingerprint: String,
     pub file_hash: String,   // base58
     pub recrypt_key: String, // base58
+    /// Serialized original wrapped key (`Ciphertext::to_bytes()`) as base58.
+    /// Required so the proxy can recrypt it later without re-fetching the full
+    /// file envelope (which does not embed the wrapped key by design).
+    pub wrapped_key: String, // base58
     pub backend_id: String,  // "mock" or "lattice"
 }
 
@@ -147,6 +151,11 @@ pub async fn create_share(
         .into_vec()
         .map_err(|_| ServerError::BadRequest("Invalid base58 in recrypt_key".into()))?;
 
+    // Decode wrapped key (original PRE ciphertext, needed for recryption)
+    let wrapped_key_bytes = bs58::decode(&body.wrapped_key)
+        .into_vec()
+        .map_err(|_| ServerError::BadRequest("Invalid base58 in wrapped_key".into()))?;
+
     // Parse backend ID
     let backend_id: BackendId = body
         .backend_id
@@ -171,6 +180,7 @@ pub async fn create_share(
         to_fingerprint: body.to_fingerprint.clone(),
         file_hash,
         recrypt_key: recrypt_key_bytes,
+        wrapped_key: wrapped_key_bytes,
         backend_id,
         created_at: now,
     };
@@ -241,11 +251,9 @@ pub async fn get_recrypted_share(
         &requester_account.ml_dsa_pk,
     )?;
 
-    // Load EncryptedFile metadata from storage.
-    // NOTE: We load the full stored object to extract wrapped_key, bao_hash, and
-    // signature. We do NOT forward ciphertext bytes to the client — those are
-    // fetched directly from storage via the returned URLs. For a future
-    // optimisation, the server could store metadata separately from ciphertext.
+    // Load bao_hash from storage to build ciphertext URLs.
+    // The wrapped_key is stored directly in SharePolicy (it was provided at
+    // share-creation time) because the file envelope does not embed it.
     let file_bytes = state
         .storage
         .get(&policy.file_hash)
@@ -255,6 +263,10 @@ pub async fn get_recrypted_share(
     let encrypted = EncryptedFile::from_envelope(&file_bytes)
         .map_err(|e| ServerError::Internal(format!("Failed to deserialize file: {e}")))?;
 
+    // Reconstruct the original wrapped key from the stored bytes
+    let original_wrapped_key = recrypt_core::pre::Ciphertext::from_bytes(&policy.wrapped_key)
+        .map_err(|e| ServerError::Internal(format!("Failed to deserialize wrapped key: {e}")))?;
+
     // Reconstruct RecryptKey from stored bytes
     let recrypt_key = recrypt_core::pre::RecryptKey::from_bytes(&policy.recrypt_key)
         .map_err(|e| ServerError::Internal(format!("Failed to deserialize recrypt key: {e}")))?;
@@ -262,7 +274,7 @@ pub async fn get_recrypted_share(
     // Recrypt only the wrapped key — bulk ciphertext is untouched
     let encryptor = HybridEncryptor::new(state.pre_backend.as_ref());
     let new_wrapped_key = encryptor
-        .recrypt_wrapped_key(&recrypt_key, &encrypted.wrapped_key)
+        .recrypt_wrapped_key(&recrypt_key, &original_wrapped_key)
         .map_err(|e| ServerError::Internal(format!("Recryption failed: {e}")))?;
 
     // Encode recrypted wrapped key as base64
