@@ -6,7 +6,7 @@ use recrypt_ffi::ed25519::{ed25519_sign, ed25519_verify};
 use recrypt_ffi::liboqs::{PqAlgorithm, pq_sign, pq_verify};
 
 /// A multi-signature combining classical and post-quantum signatures
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct MultiSig {
     /// ED25519 signature (fast, small)
     pub ed25519_sig: Ed25519Signature,

@@ -297,7 +297,7 @@ These limits are configurable via `recrypt-server.toml` or environment variables
   `to_fingerprint`.
 - **Server side transform:**
   1. Look up the share policy, backend, and recrypt key.
-  2. Fetch the metadata (`EncryptedFileProto`) from storage.
+  2. Fetch the metadata (`recrypt.encrypted-file` envelope) from storage.
   3. Call `HybridEncryptor::recrypt(&recrypt_key, &wrapped_key)` — transforms
      **only** the `wrapped_key`; all other fields (including `bao_hash`) are
      unchanged.
@@ -306,7 +306,7 @@ These limits are configurable via `recrypt-server.toml` or environment variables
 - **Response: 200 OK (JSON)**
   ```json
   {
-    "wrapped_key_for_recipient": "<base64 recrypted CiphertextProto>",
+    "wrapped_key_for_recipient": "<base64 recrypted wrapped-key envelope>",
     "bao_hash": "<base58 32-byte BLAKE3 root>",
     "signature": {
       "ed25519_signature": "<base64>",

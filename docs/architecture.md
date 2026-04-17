@@ -153,9 +153,9 @@ networking, FFI specifics, or the chunking of large files.
 
 ---
 
-### `recrypt-wire` — wire format (renamed from `recrypt-wire`)
+### `recrypt-wire` — wire format (renamed from `recrypt-proto`)
 
-> **Migration note:** this crate was renamed from `recrypt-wire` as part
+> **Migration note:** this crate was renamed from `recrypt-proto` as part
 > of the [Gordian Envelope migration](plans/2026-04-08-gordian-envelope-migration.md).
 > The protobuf schema, `prost` codegen, and generated types are removed.
 > The wire format is now [Gordian Envelope](https://developer.blockchaincommons.com/envelope/)

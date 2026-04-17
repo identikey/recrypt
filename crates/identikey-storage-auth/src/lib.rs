@@ -13,33 +13,22 @@
 //! ## Example
 //!
 //! ```rust,ignore
+//! use std::collections::BTreeSet;
 //! use identikey_storage_auth::{
-//!     InMemoryOwnershipStore, InMemoryProviderIndex,
-//!     OwnershipStore, ProviderIndex, Capability, Operation,
+//!     Capability, MemberCapability, PublicKeyFingerprint,
 //! };
 //!
-//! #[tokio::main]
-//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     let ownership = InMemoryOwnershipStore::new();
-//!     let providers = InMemoryProviderIndex::new();
-//!
-//!     // Register file ownership
-//!     let file_hash = blake3::hash(b"encrypted content");
-//!     ownership.register(&owner_fingerprint, &file_hash).await?;
-//!
-//!     // Issue capability
-//!     let cap = Capability::new(
-//!         file_hash,
-//!         grantee_fingerprint,
-//!         vec![Operation::Read],
-//!         Some(expires_at),
-//!         issuer_fingerprint,
-//!     );
-//!     let mut signed_cap = cap;
-//!     signed_cap.sign(&signing_keys)?;
-//!
-//!     Ok(())
-//! }
+//! // Issue a keyspace-scoped capability
+//! let cap = Capability::new(
+//!     keyspace_id,
+//!     0, // keyspace_version
+//!     grantee_fingerprint,
+//!     BTreeSet::from([MemberCapability::Read]),
+//!     Some(expires_at),
+//!     issuer_fingerprint,
+//! );
+//! let mut signed_cap = cap;
+//! signed_cap.sign(&signing_keys)?;
 //! ```
 
 mod account;
@@ -48,6 +37,8 @@ mod error;
 mod fingerprint;
 mod grant;
 mod ownership;
+pub mod keyspace;
+pub mod keyspace_store;
 
 pub mod memory;
 
@@ -56,13 +47,18 @@ pub mod sqlite;
 
 // Re-exports
 pub use account::{AccountRecord, AccountStore, InMemoryAccountStore};
-pub use capability::{Capability, Operation};
+pub use capability::Capability;
 pub use error::{AuthError, AuthResult};
 pub use fingerprint::PublicKeyFingerprint;
 pub use grant::{AccessGrant, GrantId, GrantStore, InMemoryGrantStore};
 pub use ownership::OwnershipStore;
 
 pub use memory::InMemoryOwnershipStore;
+pub use keyspace::{
+    DecryptionPolicy, KeyspaceDoc, KeyspaceDocHash, KeyspaceId, Member, MemberCapability,
+    RotationMode,
+};
+pub use keyspace_store::{KeyspaceStore, InMemoryKeyspaceStore};
 
 #[cfg(feature = "sqlite")]
-pub use sqlite::{SqliteAccountStore, SqliteOwnershipStore};
+pub use sqlite::{SqliteAccountStore, SqliteGrantStore, SqliteKeyspaceStore, SqliteOwnershipStore};

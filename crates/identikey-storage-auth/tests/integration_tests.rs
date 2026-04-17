@@ -1,8 +1,11 @@
 //! Integration tests: auth + storage working together
 
+use std::collections::BTreeSet;
+
 use identikey_storage_auth::{
-    AccessGrant, Capability, InMemoryOwnershipStore, Operation, OwnershipStore,
-    PublicKeyFingerprint,
+    AccessGrant, Capability, DecryptionPolicy, GrantStore, InMemoryGrantStore,
+    InMemoryKeyspaceStore, InMemoryOwnershipStore, KeyspaceDoc, KeyspaceId, KeyspaceStore,
+    Member, MemberCapability, OwnershipStore, PublicKeyFingerprint, RotationMode,
 };
 use recrypt_core::sign::{SigningKeys, VerifyingKeys};
 use recrypt_ffi::ed25519::ed25519_keygen;
@@ -62,39 +65,35 @@ async fn test_full_upload_flow() {
 
 #[tokio::test]
 async fn test_share_flow() {
-    let ownership = InMemoryOwnershipStore::new();
+    let grant_store = InMemoryGrantStore::new();
 
     let (alice_signing, alice_verifying, alice_fp) = test_keys();
     let (_, _, bob_fp) = test_keys();
 
-    let file_hash = blake3::hash(b"alice's secret");
+    let keyspace_id = [42u8; 32];
 
-    // Alice uploads and registers
-    ownership.register(&alice_fp, &file_hash).await.unwrap();
-
-    // Alice grants Bob read access
-    let grant = AccessGrant::new(file_hash, alice_fp, bob_fp, vec![Operation::Read], None);
-    ownership.grant_access(grant).await.unwrap();
-
-    // Bob can read but not write
-    assert!(
-        ownership
-            .has_access(&bob_fp, &file_hash, Operation::Read)
-            .await
-            .unwrap()
+    // Alice grants Bob read access via keyspace grant
+    let grant = AccessGrant::new(
+        keyspace_id,
+        0,
+        bob_fp,
+        alice_fp,
+        BTreeSet::from([MemberCapability::Read]),
+        None,
     );
-    assert!(
-        !ownership
-            .has_access(&bob_fp, &file_hash, Operation::Write)
-            .await
-            .unwrap()
-    );
+    let grant_id = grant_store.issue(grant).await.unwrap();
+
+    // Verify grant was stored
+    let retrieved = grant_store.get(&grant_id).await.unwrap().unwrap();
+    assert!(retrieved.permits(MemberCapability::Read));
+    assert!(!retrieved.permits(MemberCapability::Write));
 
     // Alice issues signed capability for Bob
     let cap = Capability::new_signed(
-        file_hash,
+        keyspace_id,
+        0,
         bob_fp,
-        vec![Operation::Read],
+        BTreeSet::from([MemberCapability::Read]),
         None,
         alice_fp,
         &alice_signing,
@@ -102,42 +101,110 @@ async fn test_share_flow() {
     .unwrap();
 
     // Bob can verify the capability
-    cap.verify(&alice_verifying, Operation::Read).unwrap();
+    cap.verify(&alice_verifying, MemberCapability::Read).unwrap();
 }
 
 #[tokio::test]
 async fn test_revoke_flow() {
-    let ownership = InMemoryOwnershipStore::new();
+    let grant_store = InMemoryGrantStore::new();
 
     let (_, _, alice_fp) = test_keys();
     let (_, _, bob_fp) = test_keys();
 
-    let file_hash = blake3::hash(b"secret");
+    let keyspace_id = [42u8; 32];
 
-    ownership.register(&alice_fp, &file_hash).await.unwrap();
-
-    // Grant then revoke
-    let grant = AccessGrant::new(file_hash, alice_fp, bob_fp, vec![Operation::Read], None);
-    ownership.grant_access(grant).await.unwrap();
-
-    assert!(
-        ownership
-            .has_access(&bob_fp, &file_hash, Operation::Read)
-            .await
-            .unwrap()
+    // Issue then revoke a grant
+    let grant = AccessGrant::new(
+        keyspace_id,
+        0,
+        bob_fp,
+        alice_fp,
+        BTreeSet::from([MemberCapability::Read]),
+        None,
     );
+    let grant_id = grant_store.issue(grant).await.unwrap();
 
-    ownership
-        .revoke_access(&alice_fp, &bob_fp, &file_hash)
-        .await
-        .unwrap();
+    // Grant exists
+    assert!(grant_store.get(&grant_id).await.unwrap().is_some());
 
-    assert!(
-        !ownership
-            .has_access(&bob_fp, &file_hash, Operation::Read)
-            .await
-            .unwrap()
+    // Revoke
+    grant_store.revoke(&grant_id).await.unwrap();
+
+    // Grant is gone
+    assert!(grant_store.get(&grant_id).await.unwrap().is_none());
+
+    // Idempotent revoke
+    grant_store.revoke(&grant_id).await.unwrap();
+}
+
+#[tokio::test]
+async fn test_keyspace_grant_capability_end_to_end() {
+    // Exercise the keyspace → grant → capability path end-to-end against
+    // the in-memory stores: create a keyspace naming Alice as a Delegate
+    // member, issue a grant to Bob, and verify a matching signed
+    // capability is accepted for that keyspace.
+    let keyspaces = InMemoryKeyspaceStore::new();
+    let grants = InMemoryGrantStore::new();
+
+    let (alice_signing, alice_verifying, alice_fp) = test_keys();
+    let (_, _, bob_fp) = test_keys();
+
+    let id = KeyspaceId::random();
+    let alice_member = Member {
+        fingerprint: alice_fp,
+        capabilities: BTreeSet::from([
+            MemberCapability::Read,
+            MemberCapability::Delegate,
+            MemberCapability::SignRotation,
+        ]),
+        decryption_policy: DecryptionPolicy::Standalone,
+        added_at: 0,
+        added_by: alice_fp,
+    };
+
+    let doc = KeyspaceDoc {
+        id,
+        version: 0,
+        parent: None,
+        mode: RotationMode::Create,
+        name: "e2e-test".to_string(),
+        root_pk: vec![],
+        epoch_pre_pk: [0u8; 32],
+        epoch: 0,
+        members: vec![alice_member],
+        quorum: 1,
+        signatures: vec![],
+        created_at: 0,
+    };
+
+    keyspaces.put(doc.clone()).await.unwrap();
+
+    let grant = AccessGrant::new(
+        *id.as_bytes(),
+        0,
+        bob_fp,
+        alice_fp,
+        BTreeSet::from([MemberCapability::Read]),
+        None,
     );
+    let grant_id = grants.issue(grant).await.unwrap();
+
+    let retrieved = grants.get(&grant_id).await.unwrap().unwrap();
+    assert_eq!(&retrieved.keyspace_id, id.as_bytes());
+
+    // Cap referencing the same keyspace verifies cleanly.
+    let cap = Capability::new_signed(
+        *id.as_bytes(),
+        0,
+        bob_fp,
+        BTreeSet::from([MemberCapability::Read]),
+        None,
+        alice_fp,
+        &alice_signing,
+    )
+    .unwrap();
+    cap.verify(&alice_verifying, MemberCapability::Read).unwrap();
+    assert_eq!(cap.keyspace_id, retrieved.keyspace_id);
 }
 
 #[tokio::test]
@@ -145,13 +212,14 @@ async fn test_capability_expiry() {
     let (signing_keys, verifying_keys, issuer_fp) = test_keys();
     let (_, _, grantee_fp) = test_keys();
 
-    let file_hash = blake3::hash(b"test");
+    let keyspace_id = [42u8; 32];
 
     // Create expired capability
     let cap = Capability::new_signed(
-        file_hash,
+        keyspace_id,
+        0,
         grantee_fp,
-        vec![Operation::Read],
+        BTreeSet::from([MemberCapability::Read]),
         Some(1), // Expired timestamp
         issuer_fp,
         &signing_keys,
@@ -161,5 +229,5 @@ async fn test_capability_expiry() {
     // Signature is valid but capability is expired
     assert!(cap.verify_signature(&verifying_keys).is_ok());
     assert!(cap.is_expired());
-    assert!(cap.verify(&verifying_keys, Operation::Read).is_err());
+    assert!(cap.verify(&verifying_keys, MemberCapability::Read).is_err());
 }

@@ -1,3 +1,5 @@
+> **Historical:** Phase 4b planning. Protobuf references superseded by Gordian Envelope.
+
 # Phase 4b: Storage Auth Service Implementation Plan
 
 **Status:** ✅ **COMPLETE** (2026-01-06)  

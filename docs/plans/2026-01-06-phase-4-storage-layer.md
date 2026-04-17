@@ -1,3 +1,5 @@
+> **Historical:** Phase 4 planning. ChunkManifest was replaced by Bao streaming. See [storage-design.md](../storage-design.md).
+
 # Phase 4: Storage Layer Implementation Plan
 
 **Status:** ✅ **COMPLETE** (2026-01-06)  

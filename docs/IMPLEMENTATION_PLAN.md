@@ -1,3 +1,7 @@
+> **Note:** This document was the original implementation plan from Phase 0 (Jan 2026).
+> For current project status and architecture, see [architecture.md](docs/architecture.md)
+> and the Phase 8+ plans in [docs/plans/](docs/plans/).
+
 # Recrypt Implementation Plan
 
 **Status:** 🚀 Implementation Phase (Phase 0 Complete)  

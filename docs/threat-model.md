@@ -46,7 +46,7 @@ this threat model are:
 - **`recrypt-server`** — recryption proxy, HTTP API, share policy storage
 - **`recrypt-storage`** — content-addressed blob storage backends (S3, local)
 - **`identikey-storage-auth`** — ownership and capability tracking
-- **`recrypt-core` / `recrypt-proto` / `recrypt-ffi`** — crypto primitives and
+- **`recrypt-core` / `recrypt-wire` / `recrypt-ffi`** — crypto primitives and
   wire format used by the above
 
 Explicitly **out of scope**:

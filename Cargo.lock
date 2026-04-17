@@ -1735,6 +1735,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "115531babc129696a58c64a4fef0a8bf9e9698629fb97e9e40767d235cfbcd53"
 dependencies = [
  "pkcs8 0.10.2",
+ "serde",
  "signature 2.2.0",
 ]
 
@@ -2598,6 +2599,7 @@ dependencies = [
  "async-trait",
  "blake3",
  "bs58",
+ "rand 0.8.5",
  "recrypt-core",
  "recrypt-ffi",
  "recrypt-storage",
@@ -2609,6 +2611,7 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "tokio-rusqlite",
+ "tracing",
 ]
 
 [[package]]

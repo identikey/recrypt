@@ -3,7 +3,7 @@
 use crate::error::AuthResult;
 use rusqlite::Connection;
 
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// Initialize the database schema
 pub fn init_schema(conn: &Connection) -> AuthResult<()> {
@@ -38,8 +38,59 @@ pub fn init_schema(conn: &Connection) -> AuthResult<()> {
 
         CREATE INDEX IF NOT EXISTS idx_grants_file 
             ON access_grants(file_hash);
-        CREATE INDEX IF NOT EXISTS idx_grants_grantee 
+        CREATE INDEX IF NOT EXISTS idx_grants_grantee
             ON access_grants(grantee_fingerprint);
+
+        -- Keyspaces (Phase B)
+        CREATE TABLE IF NOT EXISTS keyspaces (
+            id TEXT PRIMARY KEY,
+            current_version INTEGER NOT NULL,
+            current_hash TEXT NOT NULL,
+            name TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS keyspace_docs (
+            hash TEXT PRIMARY KEY,
+            keyspace_id TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            doc_bytes BLOB NOT NULL,
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY (keyspace_id) REFERENCES keyspaces(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_keyspace_docs_id_version
+            ON keyspace_docs(keyspace_id, version);
+
+        CREATE TABLE IF NOT EXISTS keyspace_members (
+            keyspace_id TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            fingerprint TEXT NOT NULL,
+            capabilities TEXT NOT NULL,
+            decryption_policy TEXT NOT NULL,
+            PRIMARY KEY (keyspace_id, version, fingerprint)
+        );
+        CREATE INDEX IF NOT EXISTS idx_keyspace_members_fp
+            ON keyspace_members(fingerprint);
+
+        -- Grants (Phase B). Supersedes the legacy `access_grants` table, which
+        -- is intentionally left in place: silent DROP on startup destroys any
+        -- v1 data on disk. Operators on a v1 DB will see `access_grants` unused
+        -- until an explicit migration path lands.
+        CREATE TABLE IF NOT EXISTS grants (
+            grant_id TEXT PRIMARY KEY,
+            keyspace_id TEXT NOT NULL,
+            keyspace_version INTEGER NOT NULL,
+            subject TEXT NOT NULL,
+            issuer TEXT NOT NULL,
+            capabilities TEXT NOT NULL,
+            expires_at INTEGER,
+            delegation_depth INTEGER NOT NULL,
+            parent_grant TEXT,
+            created_at INTEGER NOT NULL,
+            revoked INTEGER NOT NULL DEFAULT 0,
+            doc_bytes BLOB NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_grants_subject ON grants(subject);
+        CREATE INDEX IF NOT EXISTS idx_grants_keyspace ON grants(keyspace_id);
 
     "#,
     )?;

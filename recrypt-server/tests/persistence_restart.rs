@@ -73,6 +73,7 @@ async fn sqlite_persistence_survives_restart() {
         to_fingerprint: "bob".to_string(),
         file_hash: blake3::hash(b"some-file"),
         recrypt_key: vec![1, 2, 3, 4, 5],
+        wrapped_key: vec![10, 20, 30],
         backend_id: BackendId::Mock,
         created_at: 200,
     };

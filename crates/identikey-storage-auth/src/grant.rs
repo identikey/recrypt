@@ -1,14 +1,14 @@
-//! Access grants: records of delegated access
+//! Access grants: records of delegated access within a keyspace
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::fmt;
 
 use async_trait::async_trait;
 use tokio::sync::RwLock;
 
-use crate::capability::Operation;
 use crate::error::{AuthError, AuthResult};
 use crate::fingerprint::PublicKeyFingerprint;
+use crate::keyspace::MemberCapability;
 
 /// Content-addressed identifier for an [`AccessGrant`].
 ///
@@ -41,29 +41,61 @@ impl fmt::Debug for GrantId {
     }
 }
 
-/// A record of access granted from owner to grantee
+/// A record of access granted within a keyspace.
+///
+/// Replaces the old file-hash-based AccessGrant. Grants are now scoped to a
+/// keyspace and carry a set of `MemberCapability` values.
 #[derive(Clone, Debug)]
 pub struct AccessGrant {
-    /// File being shared
-    pub file_hash: blake3::Hash,
-    /// Who owns the file
-    pub owner: PublicKeyFingerprint,
+    /// Format version
+    pub version: u32,
+    /// The keyspace this grant applies to
+    pub keyspace_id: [u8; 32],
+    /// Version of the keyspace document at time of issuance
+    pub keyspace_version: u64,
     /// Who has been granted access
-    pub grantee: PublicKeyFingerprint,
-    /// What operations are permitted
-    pub operations: Vec<Operation>,
-    /// When the grant expires (0 = never)
-    pub expires_at: u64,
+    pub subject: PublicKeyFingerprint,
+    /// Who issued the grant
+    pub issuer: PublicKeyFingerprint,
+    /// What capabilities are permitted
+    pub capabilities: BTreeSet<MemberCapability>,
+    /// When the grant expires (None = never)
+    pub expires_at: Option<u64>,
+    /// Delegation depth (0 = non-delegable)
+    pub delegation_depth: u8,
+    /// Parent grant id for delegation chains
+    pub parent_grant: Option<GrantId>,
     /// When the grant was created (Unix timestamp)
     pub created_at: u64,
+    /// Signature placeholder (will be MultiSig)
+    pub signature: Option<Vec<u8>>,
+}
+
+/// Length-prefixed encoding for a capability set.
+///
+/// Format: `u32 count || [u16 len || bytes]*` — iterated in BTreeSet order,
+/// so encoding is deterministic and cannot alias across different sets
+/// (e.g. `{"read"}` vs `{"read\0write"}`).
+pub(crate) fn write_capabilities(out: &mut Vec<u8>, caps: &BTreeSet<MemberCapability>) {
+    out.extend((caps.len() as u32).to_le_bytes());
+    for cap in caps {
+        let bytes = cap.as_str().as_bytes();
+        // `as_str()` is a closed set of ASCII tags; a 16-bit length is plenty.
+        out.extend((bytes.len() as u16).to_le_bytes());
+        out.extend(bytes);
+    }
 }
 
 impl AccessGrant {
+    /// Current grant format version
+    pub const VERSION: u32 = 2;
+
     pub fn new(
-        file_hash: blake3::Hash,
-        owner: PublicKeyFingerprint,
-        grantee: PublicKeyFingerprint,
-        operations: Vec<Operation>,
+        keyspace_id: [u8; 32],
+        keyspace_version: u64,
+        subject: PublicKeyFingerprint,
+        issuer: PublicKeyFingerprint,
+        capabilities: BTreeSet<MemberCapability>,
         expires_at: Option<u64>,
     ) -> Self {
         let now = std::time::SystemTime::now()
@@ -72,50 +104,66 @@ impl AccessGrant {
             .as_secs();
 
         Self {
-            file_hash,
-            owner,
-            grantee,
-            operations,
-            expires_at: expires_at.unwrap_or(0),
+            version: Self::VERSION,
+            keyspace_id,
+            keyspace_version,
+            subject,
+            issuer,
+            capabilities,
+            expires_at,
+            delegation_depth: 0,
+            parent_grant: None,
             created_at: now,
+            signature: None,
         }
     }
 
     /// Check if the grant has expired
     pub fn is_expired(&self) -> bool {
-        if self.expires_at == 0 {
-            return false;
-        }
+        let expires = match self.expires_at {
+            Some(ts) => ts,
+            None => return false,
+        };
 
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
 
-        now > self.expires_at
+        now > expires
     }
 
-    /// Check if a specific operation is permitted
-    pub fn permits(&self, op: Operation) -> bool {
-        self.operations.contains(&op)
+    /// Check if a specific capability is permitted
+    pub fn permits(&self, cap: MemberCapability) -> bool {
+        self.capabilities.contains(&cap)
     }
+
+    /// Domain-separation tag for `AccessGrant` canonical bytes.
+    pub(crate) const DOMAIN_TAG: &'static [u8] = b"IdentikeyGrant\x01";
 
     /// Canonical byte encoding used for content-addressing.
     ///
-    /// Note: `created_at` is intentionally included so that distinct issuances
-    /// produce distinct IDs even if all other fields match.
+    /// Layout is explicitly length-prefixed with a domain tag so that
+    /// distinct field contents cannot alias under hashing. `created_at`
+    /// is included so that distinct issuances produce distinct IDs even
+    /// if all other fields match.
     pub(crate) fn canonical_bytes(&self) -> Vec<u8> {
-        let mut out = Vec::with_capacity(128);
-        out.extend(self.file_hash.as_bytes());
-        out.extend(self.owner.as_bytes());
-        out.extend(self.grantee.as_bytes());
-        let mut ops: Vec<&'static str> = self.operations.iter().map(|o| o.as_str()).collect();
-        ops.sort();
-        for op in ops {
-            out.extend(op.as_bytes());
+        let mut out = Vec::with_capacity(256);
+        out.extend(Self::DOMAIN_TAG);
+        out.extend(self.version.to_le_bytes());
+        out.extend(&self.keyspace_id);
+        out.extend(self.keyspace_version.to_le_bytes());
+        out.extend(self.subject.as_bytes());
+        out.extend(self.issuer.as_bytes());
+        write_capabilities(&mut out, &self.capabilities);
+        out.extend(self.expires_at.unwrap_or(0).to_le_bytes());
+        out.push(self.delegation_depth);
+        if let Some(parent) = &self.parent_grant {
+            out.push(1);
+            out.extend(parent.as_bytes());
+        } else {
             out.push(0);
         }
-        out.extend(self.expires_at.to_le_bytes());
         out.extend(self.created_at.to_le_bytes());
         out
     }
@@ -139,8 +187,8 @@ pub trait GrantStore: Send + Sync {
         subject: &PublicKeyFingerprint,
     ) -> AuthResult<Vec<AccessGrant>>;
 
-    /// List grants for a given resource (file) identified by its content hash.
-    async fn list_by_resource(&self, resource_hash: &str) -> AuthResult<Vec<AccessGrant>>;
+    /// List grants for a given keyspace.
+    async fn list_by_keyspace(&self, keyspace_id: &[u8; 32]) -> AuthResult<Vec<AccessGrant>>;
 }
 
 /// In-memory implementation of [`GrantStore`].
@@ -161,8 +209,8 @@ impl GrantStore for InMemoryGrantStore {
         let id = GrantId::from_grant(&grant);
         let mut guard = self.inner.write().await;
         if guard.contains_key(&id) {
-            return Err(AuthError::Storage(format!(
-                "grant already exists: {}",
+            return Err(AuthError::AlreadyExists(format!(
+                "grant {}",
                 id.to_base58()
             )));
         }
@@ -188,16 +236,16 @@ impl GrantStore for InMemoryGrantStore {
         let guard = self.inner.read().await;
         Ok(guard
             .values()
-            .filter(|g| &g.grantee == subject)
+            .filter(|g| &g.subject == subject)
             .cloned()
             .collect())
     }
 
-    async fn list_by_resource(&self, resource_hash: &str) -> AuthResult<Vec<AccessGrant>> {
+    async fn list_by_keyspace(&self, keyspace_id: &[u8; 32]) -> AuthResult<Vec<AccessGrant>> {
         let guard = self.inner.read().await;
         Ok(guard
             .values()
-            .filter(|g| g.file_hash.to_hex().to_string() == resource_hash)
+            .filter(|g| &g.keyspace_id == keyspace_id)
             .cloned()
             .collect())
     }
@@ -209,10 +257,11 @@ mod tests {
 
     fn sample_grant(seed: u8) -> AccessGrant {
         AccessGrant::new(
-            blake3::hash(&[seed; 4]),
-            PublicKeyFingerprint::from_bytes([seed; 32]),
+            [seed; 32],
+            0,
             PublicKeyFingerprint::from_bytes([seed.wrapping_add(1); 32]),
-            vec![Operation::Read],
+            PublicKeyFingerprint::from_bytes([seed; 32]),
+            BTreeSet::from([MemberCapability::Read]),
             None,
         )
     }
@@ -224,8 +273,8 @@ mod tests {
         let id = store.issue(grant.clone()).await.unwrap();
 
         let got = store.get(&id).await.unwrap().unwrap();
-        assert_eq!(got.file_hash, grant.file_hash);
-        assert_eq!(got.grantee, grant.grantee);
+        assert_eq!(got.keyspace_id, grant.keyspace_id);
+        assert_eq!(got.subject, grant.subject);
 
         store.revoke(&id).await.unwrap();
         assert!(store.get(&id).await.unwrap().is_none());
@@ -234,12 +283,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn list_by_subject_and_resource() {
+    async fn list_by_subject_and_keyspace() {
         let store = InMemoryGrantStore::new();
         let g1 = sample_grant(1);
         let g2 = sample_grant(2);
-        let subject = g1.grantee;
-        let resource = g1.file_hash.to_hex().to_string();
+        let subject = g1.subject;
+        let keyspace_id = g1.keyspace_id;
 
         store.issue(g1.clone()).await.unwrap();
         store.issue(g2.clone()).await.unwrap();
@@ -247,8 +296,8 @@ mod tests {
         let by_subject = store.list_by_subject(&subject).await.unwrap();
         assert_eq!(by_subject.len(), 1);
 
-        let by_resource = store.list_by_resource(&resource).await.unwrap();
-        assert_eq!(by_resource.len(), 1);
-        assert_eq!(by_resource[0].file_hash, g1.file_hash);
+        let by_keyspace = store.list_by_keyspace(&keyspace_id).await.unwrap();
+        assert_eq!(by_keyspace.len(), 1);
+        assert_eq!(by_keyspace[0].keyspace_id, g1.keyspace_id);
     }
 }

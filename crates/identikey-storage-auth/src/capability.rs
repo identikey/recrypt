@@ -1,68 +1,32 @@
-//! Capability: signed, time-limited access token
+//! Capability: signed, time-limited access token bound to a keyspace
+
+use std::collections::BTreeSet;
+
+use serde::{Deserialize, Serialize};
 
 use crate::error::{AuthError, AuthResult};
 use crate::fingerprint::PublicKeyFingerprint;
+use crate::keyspace::MemberCapability;
 use recrypt_core::sign::{MultiSig, SigningKeys, VerifyingKeys, sign_message, verify_message};
 
-/// Operations that can be granted via capability
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Operation {
-    /// Read file content
-    Read,
-    /// Write/update file (re-upload)
-    Write,
-    /// Delete file
-    Delete,
-    /// Share file with others (issue sub-capabilities)
-    Share,
-}
-
-impl Operation {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Operation::Read => "read",
-            Operation::Write => "write",
-            Operation::Delete => "delete",
-            Operation::Share => "share",
-        }
-    }
-
-    pub fn parse(s: &str) -> Option<Self> {
-        match s.to_lowercase().as_str() {
-            "read" => Some(Operation::Read),
-            "write" => Some(Operation::Write),
-            "delete" => Some(Operation::Delete),
-            "share" => Some(Operation::Share),
-            _ => None,
-        }
-    }
-}
-
-/// All operations for convenience
-#[allow(dead_code)]
-pub const ALL_OPERATIONS: &[Operation] = &[
-    Operation::Read,
-    Operation::Write,
-    Operation::Delete,
-    Operation::Share,
-];
-
-/// A capability granting access to a file
+/// A signed capability token bound to a keyspace.
 ///
-/// Capabilities are signed by the issuer and can be verified by anyone
-/// with the issuer's public key.
-#[derive(Clone, Debug)]
+/// Replaces the old file-hash-bound Capability. Capabilities are signed by the
+/// issuer and can be verified by anyone with the issuer's public key.
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Capability {
     /// Format version
     pub version: u32,
-    /// Content address of the file
-    pub file_hash: blake3::Hash,
+    /// KeyspaceId bytes
+    pub keyspace_id: [u8; 32],
+    /// Version of the keyspace document this capability was issued against
+    pub keyspace_version: u64,
     /// Who this capability is granted to
     pub granted_to: PublicKeyFingerprint,
-    /// Permitted operations
-    pub operations: Vec<Operation>,
-    /// Expiration timestamp (Unix seconds, 0 = no expiry)
-    pub expires_at: u64,
+    /// Permitted capabilities within the keyspace
+    pub capabilities: BTreeSet<MemberCapability>,
+    /// Expiration timestamp (Unix seconds, None = no expiry)
+    pub expires_at: Option<u64>,
     /// Who issued this capability
     pub issuer: PublicKeyFingerprint,
     /// Signature over capability fields (None if unsigned)
@@ -71,54 +35,48 @@ pub struct Capability {
 
 impl Capability {
     /// Current capability format version
-    pub const VERSION: u32 = 1;
+    pub const VERSION: u32 = 2;
 
     /// Create a new unsigned capability
     pub fn new(
-        file_hash: blake3::Hash,
+        keyspace_id: [u8; 32],
+        keyspace_version: u64,
         granted_to: PublicKeyFingerprint,
-        operations: Vec<Operation>,
+        capabilities: BTreeSet<MemberCapability>,
         expires_at: Option<u64>,
         issuer: PublicKeyFingerprint,
     ) -> Self {
         Self {
             version: Self::VERSION,
-            file_hash,
+            keyspace_id,
+            keyspace_version,
             granted_to,
-            operations,
-            expires_at: expires_at.unwrap_or(0),
+            capabilities,
+            expires_at,
             issuer,
             signature: None,
         }
     }
 
-    /// Compute the bytes to be signed
+    /// Domain-separation tag for `Capability` signature payloads.
+    const DOMAIN_TAG: &'static [u8] = b"IdentikeyCap\x01";
+
+    /// Compute the bytes to be signed.
+    ///
+    /// Layout is length-prefixed with a domain tag so that distinct
+    /// field contents cannot alias under hashing, and so that a
+    /// `Capability` payload can never be confused with an `AccessGrant`
+    /// canonical encoding.
     fn signature_payload(&self) -> Vec<u8> {
-        let mut payload = Vec::new();
-
-        // Version (4 bytes)
+        let mut payload = Vec::with_capacity(256);
+        payload.extend(Self::DOMAIN_TAG);
         payload.extend(self.version.to_le_bytes());
-
-        // File hash (32 bytes)
-        payload.extend(self.file_hash.as_bytes());
-
-        // Granted to (32 bytes)
+        payload.extend(&self.keyspace_id);
+        payload.extend(self.keyspace_version.to_le_bytes());
         payload.extend(self.granted_to.as_bytes());
-
-        // Operations (variable, but deterministic)
-        let mut ops: Vec<_> = self.operations.iter().map(|o| o.as_str()).collect();
-        ops.sort(); // Canonical order
-        for op in ops {
-            payload.extend(op.as_bytes());
-            payload.push(0); // Separator
-        }
-
-        // Expires at (8 bytes)
-        payload.extend(self.expires_at.to_le_bytes());
-
-        // Issuer (32 bytes)
+        crate::grant::write_capabilities(&mut payload, &self.capabilities);
+        payload.extend(self.expires_at.unwrap_or(0).to_le_bytes());
         payload.extend(self.issuer.as_bytes());
-
         payload
     }
 
@@ -131,14 +89,22 @@ impl Capability {
 
     /// Create a signed capability in one step
     pub fn new_signed(
-        file_hash: blake3::Hash,
+        keyspace_id: [u8; 32],
+        keyspace_version: u64,
         granted_to: PublicKeyFingerprint,
-        operations: Vec<Operation>,
+        capabilities: BTreeSet<MemberCapability>,
         expires_at: Option<u64>,
         issuer: PublicKeyFingerprint,
         keys: &SigningKeys,
     ) -> AuthResult<Self> {
-        let mut cap = Self::new(file_hash, granted_to, operations, expires_at, issuer);
+        let mut cap = Self::new(
+            keyspace_id,
+            keyspace_version,
+            granted_to,
+            capabilities,
+            expires_at,
+            issuer,
+        );
         cap.sign(keys)?;
         Ok(cap)
     }
@@ -154,25 +120,30 @@ impl Capability {
 
     /// Check if capability has expired
     pub fn is_expired(&self) -> bool {
-        if self.expires_at == 0 {
-            return false; // No expiry
-        }
+        let expires = match self.expires_at {
+            Some(ts) => ts,
+            None => return false,
+        };
 
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
 
-        now > self.expires_at
+        now > expires
     }
 
-    /// Check if a specific operation is permitted
-    pub fn permits(&self, op: Operation) -> bool {
-        self.operations.contains(&op)
+    /// Check if a specific member capability is permitted
+    pub fn permits(&self, cap: MemberCapability) -> bool {
+        self.capabilities.contains(&cap)
     }
 
-    /// Full verification: signature + expiry + operation
-    pub fn verify(&self, issuer_keys: &VerifyingKeys, required_op: Operation) -> AuthResult<()> {
+    /// Full verification: signature + expiry + capability check
+    pub fn verify(
+        &self,
+        issuer_keys: &VerifyingKeys,
+        required_cap: MemberCapability,
+    ) -> AuthResult<()> {
         // Check signature
         self.verify_signature(issuer_keys)?;
 
@@ -181,10 +152,10 @@ impl Capability {
             return Err(AuthError::CapabilityExpired);
         }
 
-        // Check operation
-        if !self.permits(required_op) {
+        // Check capability
+        if !self.permits(required_cap) {
             return Err(AuthError::OperationNotPermitted(
-                required_op.as_str().into(),
+                required_cap.as_str().into(),
             ));
         }
 
@@ -219,14 +190,15 @@ mod tests {
     fn test_capability_sign_verify() {
         let (signing, verifying) = test_keys();
 
-        let file_hash = blake3::hash(b"test file");
-        let grantee = PublicKeyFingerprint::from_bytes([1u8; 32]);
-        let issuer = PublicKeyFingerprint::from_bytes([2u8; 32]);
+        let keyspace_id = [1u8; 32];
+        let grantee = PublicKeyFingerprint::from_bytes([2u8; 32]);
+        let issuer = PublicKeyFingerprint::from_bytes([3u8; 32]);
 
         let cap = Capability::new_signed(
-            file_hash,
+            keyspace_id,
+            0,
             grantee,
-            vec![Operation::Read],
+            BTreeSet::from([MemberCapability::Read]),
             None,
             issuer,
             &signing,
@@ -238,15 +210,29 @@ mod tests {
 
     #[test]
     fn test_capability_expiry() {
-        let file_hash = blake3::hash(b"test");
+        let keyspace_id = [0u8; 32];
         let fp = PublicKeyFingerprint::from_bytes([0u8; 32]);
 
         // No expiry
-        let cap = Capability::new(file_hash, fp, vec![Operation::Read], None, fp);
+        let cap = Capability::new(
+            keyspace_id,
+            0,
+            fp,
+            BTreeSet::from([MemberCapability::Read]),
+            None,
+            fp,
+        );
         assert!(!cap.is_expired());
 
         // Expired
-        let cap = Capability::new(file_hash, fp, vec![Operation::Read], Some(1), fp);
+        let cap = Capability::new(
+            keyspace_id,
+            0,
+            fp,
+            BTreeSet::from([MemberCapability::Read]),
+            Some(1),
+            fp,
+        );
         assert!(cap.is_expired());
 
         // Future expiry
@@ -255,26 +241,35 @@ mod tests {
             .unwrap()
             .as_secs()
             + 3600;
-        let cap = Capability::new(file_hash, fp, vec![Operation::Read], Some(future), fp);
+        let cap = Capability::new(
+            keyspace_id,
+            0,
+            fp,
+            BTreeSet::from([MemberCapability::Read]),
+            Some(future),
+            fp,
+        );
         assert!(!cap.is_expired());
     }
 
     #[test]
-    fn test_capability_operations() {
-        let file_hash = blake3::hash(b"test");
+    fn test_capability_permissions() {
+        let keyspace_id = [0u8; 32];
         let fp = PublicKeyFingerprint::from_bytes([0u8; 32]);
 
         let cap = Capability::new(
-            file_hash,
+            keyspace_id,
+            0,
             fp,
-            vec![Operation::Read, Operation::Write],
+            BTreeSet::from([MemberCapability::Read, MemberCapability::Write]),
             None,
             fp,
         );
 
-        assert!(cap.permits(Operation::Read));
-        assert!(cap.permits(Operation::Write));
-        assert!(!cap.permits(Operation::Delete));
-        assert!(!cap.permits(Operation::Share));
+        assert!(cap.permits(MemberCapability::Read));
+        assert!(cap.permits(MemberCapability::Write));
+        assert!(!cap.permits(MemberCapability::Delegate));
+        assert!(!cap.permits(MemberCapability::Admin));
+        assert!(!cap.permits(MemberCapability::SignRotation));
     }
 }

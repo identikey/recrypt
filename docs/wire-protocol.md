@@ -1,6 +1,6 @@
 # Wire Protocol: Gordian Envelope Format
 
-**Status:** 📝 DRAFT — planned migration from protobuf. See [migration plan](plans/2026-04-08-gordian-envelope-migration.md).
+**Status:** 📝 DRAFT — migration from protobuf (in progress). See [migration plan](plans/2026-04-08-gordian-envelope-migration.md).
 **Authoritative reference:** this document.
 **Implementation:** [`crates/recrypt-wire`](../crates/recrypt-wire/) (renamed from `recrypt-proto` as part of the migration)
 

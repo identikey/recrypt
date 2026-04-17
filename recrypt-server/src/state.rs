@@ -2,8 +2,9 @@ use crate::config::Config;
 use crate::nonces::{InMemoryNonceStore, NonceStore, SqliteNonceStore};
 use crate::shares::{InMemoryShareStore, ShareStore, SqliteShareStore};
 use identikey_storage_auth::{
-    AccountStore, InMemoryAccountStore, InMemoryOwnershipStore, OwnershipStore,
-    SqliteAccountStore,
+    AccountStore, GrantStore, InMemoryAccountStore, InMemoryGrantStore, InMemoryKeyspaceStore,
+    InMemoryOwnershipStore, KeyspaceStore, OwnershipStore, SqliteAccountStore, SqliteGrantStore,
+    SqliteKeyspaceStore,
 };
 use recrypt_core::pre::{
     PreBackend,
@@ -29,6 +30,8 @@ pub struct AppState {
     pub accounts: Arc<dyn AccountStore>,
     pub shares: Arc<dyn ShareStore>,
     pub nonces: Arc<dyn NonceStore>,
+    pub keyspaces: Arc<dyn KeyspaceStore>,
+    pub grants: Arc<dyn GrantStore>,
     pub config: Arc<Config>,
     /// PRE backend (immutable after startup).
     pub pre_backend: Arc<dyn PreBackend + Send + Sync>,
@@ -97,10 +100,12 @@ impl AppState {
         // keeps the in-memory stores regardless of PRE backend.
         let want_sqlite = config.persistence.backend == "sqlite";
 
-        let (accounts, shares, nonces): (
+        let (accounts, shares, nonces, keyspaces, grants): (
             Arc<dyn AccountStore>,
             Arc<dyn ShareStore>,
             Arc<dyn NonceStore>,
+            Arc<dyn KeyspaceStore>,
+            Arc<dyn GrantStore>,
         ) = if want_sqlite {
             // Single shared SQLite connection — Open Question 5.3: one unified recrypt.db.
             let path = config
@@ -128,16 +133,28 @@ impl AppState {
                     .map_err(|e| anyhow::anyhow!("share store init: {e}"))?,
             );
             let nonces = Arc::new(
-                SqliteNonceStore::new(conn)
+                SqliteNonceStore::new(conn.clone())
                     .await
                     .map_err(|e| anyhow::anyhow!("nonce store init: {e}"))?,
             );
-            (accounts, shares, nonces)
+            let keyspaces = Arc::new(
+                SqliteKeyspaceStore::new(conn.clone())
+                    .await
+                    .map_err(|e| anyhow::anyhow!("keyspace store init: {e}"))?,
+            );
+            let grants = Arc::new(
+                SqliteGrantStore::new(conn)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("grant store init: {e}"))?,
+            );
+            (accounts, shares, nonces, keyspaces, grants)
         } else {
             (
                 Arc::new(InMemoryAccountStore::new()),
                 Arc::new(InMemoryShareStore::new()),
                 Arc::new(InMemoryNonceStore::new()),
+                Arc::new(InMemoryKeyspaceStore::new()),
+                Arc::new(InMemoryGrantStore::new()),
             )
         };
 
@@ -169,6 +186,8 @@ impl AppState {
             accounts,
             shares,
             nonces,
+            keyspaces,
+            grants,
             config: Arc::new(config.clone()),
             pre_backend,
             nonce_gc: Arc::new(NonceGcHandle(handle)),

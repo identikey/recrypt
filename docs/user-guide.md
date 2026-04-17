@@ -351,7 +351,7 @@ recrypt config set <key> <value>
 | Key               | Description                              | Example                   |
 | ----------------- | ---------------------------------------- | ------------------------- |
 | `default_server`  | Server URL for API operations            | `http://localhost:7222`   |
-| `active_identity` | Current identity (prefer `identity use`) | `alice`                   |
+| `active_identity` | Active identity — managed via `recrypt identity use <name>`, not set directly | `alice` |
 | `output_format`   | Default output format                    | `pretty` or `json`        |
 | `wallet_path`     | Custom wallet file location              | `/path/to/wallet.recrypt` |
 | `default_backend` | PRE backend for new identities           | `lattice` or `mock`       |
@@ -370,6 +370,8 @@ Override configuration with environment variables:
 | `RECRYPT_WALLET_PASSWORD`| Wallet password (for CI/scripting)     |
 | `RECRYPT_BACKEND`        | PRE backend: `lattice` or `mock`       |
 | `RECRYPT_DEBUG`          | Enable debug logging (`1` or `true`)   |
+| `RECRYPT_CONFIG_DIR`     | Override config directory location (useful for testing/CI) |
+| `RECRYPT_NO_KEYCHAIN`    | When set, disables OS keychain and uses in-memory credential storage |
 
 Example:
 

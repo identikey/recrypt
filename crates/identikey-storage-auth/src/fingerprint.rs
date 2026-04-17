@@ -4,10 +4,12 @@
 
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
+
 /// A fingerprint uniquely identifying a public key
 ///
 /// Blake3 hash provides 256-bit collision resistance, Base58 encoding for readability.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct PublicKeyFingerprint([u8; 32]);
 
 impl PublicKeyFingerprint {

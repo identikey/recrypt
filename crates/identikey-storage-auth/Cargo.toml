@@ -21,9 +21,15 @@ tokio.workspace = true
 blake3 = "1"
 bs58.workspace = true
 
+# Random
+rand.workspace = true
+
 # Serialization
 serde = { version = "1", features = ["derive"] }
 serde_json.workspace = true
+
+# Logging
+tracing = "0.1"
 
 # SQLite (optional)
 rusqlite = { workspace = true, optional = true }

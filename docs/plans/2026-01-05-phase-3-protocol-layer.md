@@ -1,3 +1,5 @@
+> **Historical:** Phase 3 planning. Protobuf was replaced by Gordian Envelope. See [wire-protocol.md](../wire-protocol.md).
+
 # Phase 3: Protocol Layer Implementation Plan
 
 **STATUS: ✅ COMPLETE** (January 5, 2026)

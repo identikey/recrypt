@@ -30,6 +30,9 @@ pub enum AuthError {
     #[error("Storage error: {0}")]
     Storage(String),
 
+    #[error("Invalid encoding: {0}")]
+    InvalidEncoding(String),
+
     #[error("Signature error: {0}")]
     Signature(#[from] recrypt_core::error::CoreError),
 

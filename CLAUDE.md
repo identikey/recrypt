@@ -30,8 +30,10 @@ Recrypt is a quantum-resistant proxy recryption system that enables secure, revo
 - `just test-storage` - Test storage layer
 - `just test-auth` - Test auth service
 - `just test-cli` - Test CLI functionality
-- `just test-e2e` - Run end-to-end recryption test (mock backend)
-- `just test-e2e-lattice` - E2E test with lattice backend (slower, post-quantum)
+- `just test-e2e` - Run Rust e2e test harness (36 tests, mock backend, ~30s)
+- `just test-e2e-s3` - E2E tests with S3/Minio (requires Docker)
+- `just test-e2e-full` - All e2e tests (mock + S3)
+- `just test-e2e-lattice` - Legacy bash e2e with lattice backend (~3 min, post-quantum)
 
 ### Development Environment
 - `just minio-up` - Start Minio for S3 development
@@ -56,6 +58,7 @@ recrypt/
 │   └── identikey-storage-auth/ # Auth service for storage access
 ├── recrypt-server/           # Recryption proxy server (Axum)
 ├── recrypt-cli/              # Command-line interface
+├── tests/e2e/                # E2E test harness (recrypt-e2e-tests)
 └── docs/                     # Design documents
 ```
 
@@ -107,9 +110,12 @@ recrypt/
 - Files are content-addressed by Blake3 hash
 
 ### CLI Development
-- Identity files are password-encrypted JSON in `~/Library/Application Support/io.identikey.recrypt/`
-- Wallet keys cached in system keychain (macOS/Linux/Windows)
-- Use `recrypt-cli identity new` to create test identities
+- Wallet is password-encrypted (Argon2id + XChaCha20-Poly1305), keys stored as raw bytes
+- Active identity stored per-wallet (not in global config)
+- Wallet key cached in OS keychain, keyed by wallet path hash
+- Config dir overridable via `RECRYPT_CONFIG_DIR` env var (test isolation)
+- Keychain bypass via `RECRYPT_NO_KEYCHAIN=1` (CI/testing)
+- Use `recrypt identity new` to create test identities
 
 ## Testing Strategy
 
@@ -118,15 +124,17 @@ recrypt/
 - Property-based testing for crypto operations
 - Mock backends for fast iteration
 
-### Integration Tests
-- E2E recryption flow (Alice → Bob sharing)
-- S3 storage integration (requires Minio)
-- CLI command validation
+### Integration & E2E Tests
+- Rust e2e harness at `tests/e2e/` (36 tests: 19 CLI + 17 API)
+- CLI tests: identity CRUD, account, encrypt/decrypt, file lifecycle, share commands
+- API tests: share lifecycle, recryption roundtrip, multi-recipient, auth boundary, nonce replay
+- S3 tests: feature-gated (`--features s3-tests`), requires Docker/Minio
+- Each test gets isolated temp dir, ephemeral port, SQLite, `RECRYPT_CONFIG_DIR` + `RECRYPT_NO_KEYCHAIN`
 
 ### Performance Tests
 - Benchmark baselines established in Phase 2
-- Mock backend: ~5 seconds for E2E test
-- Lattice backend: ~3 minutes for E2E test
+- E2e harness (mock): ~30 seconds for full suite
+- Lattice backend: ~3 minutes for legacy bash E2E test
 
 ## Terminology
 
@@ -147,9 +155,10 @@ recrypt/
 - `tokio` - Async runtime
 - `axum` - HTTP server framework
 - `aws-sdk-s3` - S3 client
-- `bc-envelope` - Gordian Envelope serialization (dCBOR)
+- `bc-envelope` - Gordian Envelope serialization (dCBOR wire format)
+- `figment` - Server configuration (TOML + env vars)
 - `clap` - CLI framework
-- `serde` - Config/identity serialization
+- `serde` - Config serialization
 
 ### Development
 - `proptest` - Property-based testing
@@ -177,11 +186,14 @@ recrypt/
 - Phase 6: CLI Application
 - Phase 6b: Secure Credential Storage
 
-🔄 **Current Phase 8:** Documentation & Deployment
+🔄 **Current Phase 8:** Documentation, Wire Format & Deployment
 - User guide complete (`docs/user-guide.md`)
+- Gordian Envelope migration in progress (wire format, wallet format)
+- E2E test harness built (`tests/e2e/`, 36 tests)
+- Wallet format migrated to raw bytes (no more base58/base64 key encoding)
 - API documentation needed
 - Deployment guide needed
 
-📋 **Next Phase 9:** E2E Testing & Security Audit Prep
-- Full CLI-to-CLI via server testing
+📋 **Next Phase 9:** Security Audit Prep
 - Security audit preparation
+- Gordian Envelope migration completion

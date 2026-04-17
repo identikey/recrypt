@@ -16,6 +16,7 @@ use tower_http::trace::TraceLayer;
 mod accounts;
 mod files;
 mod health;
+mod keyspaces;
 mod nonce;
 mod recryption;
 
@@ -75,6 +76,17 @@ pub fn router(state: AppState) -> Router {
             "/recryption/share/{id}",
             get(recryption::get_recrypted_share).delete(recryption::revoke_share),
         )
+        // Keyspace & grant management
+        .route("/keyspaces", post(keyspaces::create_keyspace))
+        .route(
+            "/keyspaces/{id}/versions",
+            get(keyspaces::list_versions).post(keyspaces::publish_version),
+        )
+        .route("/grants", post(keyspaces::issue_grant))
+        .route(
+            "/grants/{id}",
+            get(keyspaces::get_grant).delete(keyspaces::revoke_grant),
+        )
         .route_layer(axum_middleware::from_fn_with_state(
             state.clone(),
             validate_nonce,
@@ -85,7 +97,23 @@ pub fn router(state: AppState) -> Router {
         .route("/nonce", get(nonce::get_nonce))
         .route("/accounts/{fingerprint}", get(accounts::get_account))
         .route("/accounts/{fingerprint}/files", get(accounts::list_files))
-        .route("/files/{hash}", get(files::download_file));
+        .route("/files/{hash}", get(files::download_file))
+        // Read-only keyspace & grant endpoints. Reverse-index routes are
+        // namespaced under `/members/` and `/subjects/` so they can never
+        // shadow a literal keyspace/grant id segment.
+        .route("/keyspaces/{id}", get(keyspaces::get_keyspace))
+        .route(
+            "/keyspaces/{id}/grants",
+            get(keyspaces::list_grants_by_keyspace),
+        )
+        .route(
+            "/members/{fp}/keyspaces",
+            get(keyspaces::list_by_member),
+        )
+        .route(
+            "/subjects/{fp}/grants",
+            get(keyspaces::list_grants_by_subject),
+        );
 
     // Health endpoint is exempt from all rate limiting.
     let health = Router::new().route("/health", get(health::health_check));

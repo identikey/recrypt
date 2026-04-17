@@ -275,7 +275,7 @@ This document describes the streaming verification architecture now in place:
 | **Full-file integrity check on decrypt**                               | ✅ Done     | `HybridEncryptor::decrypt` — validates ciphertext against signed `bao_hash` |
 | **Streaming verification** via async API                               | ✅ Done     | `HybridEncryptor::encrypt_streaming`, `decrypt_streaming`, backed by `bao-tree` |
 | **Slice / random-access verification**                                 | ✅ Done     | `HybridEncryptor::decrypt_range` for plaintext-coordinate ranges                |
-| Bao outboard stored separately from envelope                           | ✅ Done     | Sibling `.obao` object in S3; not embedded in `EncryptedFileProto` v3             |
+| Bao outboard stored separately from envelope                           | ✅ Done     | Sibling `.obao` object in S3; not embedded in `recrypt.encrypted-file` envelope   |
 
 ### Implementation overview
 
