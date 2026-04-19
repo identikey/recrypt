@@ -19,6 +19,7 @@ mod health;
 mod keyspaces;
 mod nonce;
 mod recryption;
+mod signing;
 
 /// Per-fingerprint key extractor — pulls `X-Public-Key` header for authenticated
 /// rate limiting on protected endpoints.
@@ -94,6 +95,12 @@ pub fn router(state: AppState) -> Router {
         .layer(per_fp_layer);
 
     let public = Router::new()
+        // Post-quantum signing delegation — no auth; the secret key in
+        // the request body IS the authority. See routes/signing.rs for
+        // the security rationale. Intended for localhost or trusted
+        // intra-cluster use only.
+        .route("/sign/ml-dsa", post(signing::sign_ml_dsa))
+        .route("/verify/ml-dsa", post(signing::verify_ml_dsa))
         .route("/nonce", get(nonce::get_nonce))
         .route("/accounts/{fingerprint}", get(accounts::get_account))
         .route("/accounts/{fingerprint}/files", get(accounts::list_files))
