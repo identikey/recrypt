@@ -7,7 +7,7 @@ use identikey_storage_auth::{
     InMemoryKeyspaceStore, InMemoryOwnershipStore, KeyspaceDoc, KeyspaceId, KeyspaceStore,
     Member, MemberCapability, OwnershipStore, PublicKeyFingerprint, RotationMode,
 };
-use recrypt_core::sign::{SigningKeys, VerifyingKeys};
+use recrypt_core::sign::{SigningKeys, VerifyPolicy, VerifyingKeys};
 use recrypt_ffi::ed25519::ed25519_keygen;
 use recrypt_ffi::liboqs::{PqAlgorithm, pq_keygen};
 use recrypt_storage::{BlobStorage, InMemoryProviderIndex, InMemoryStorage, ProviderIndex};
@@ -23,12 +23,12 @@ fn test_keys() -> (SigningKeys, VerifyingKeys, PublicKeyFingerprint) {
 
     let signing = SigningKeys {
         ed25519: ed_kp.signing_key,
-        ml_dsa: pq_kp.secret_key,
+        ml_dsa: Some(pq_kp.secret_key),
     };
 
     let verifying = VerifyingKeys {
         ed25519: ed_kp.verifying_key,
-        ml_dsa: pq_kp.public_key,
+        ml_dsa: Some(pq_kp.public_key),
     };
 
     (signing, verifying, fingerprint)
@@ -101,7 +101,8 @@ async fn test_share_flow() {
     .unwrap();
 
     // Bob can verify the capability
-    cap.verify(&alice_verifying, MemberCapability::Read).unwrap();
+    cap.verify(&alice_verifying, VerifyPolicy::PqRequired, MemberCapability::Read)
+        .unwrap();
 }
 
 #[tokio::test]
@@ -203,7 +204,8 @@ async fn test_keyspace_grant_capability_end_to_end() {
         &alice_signing,
     )
     .unwrap();
-    cap.verify(&alice_verifying, MemberCapability::Read).unwrap();
+    cap.verify(&alice_verifying, VerifyPolicy::PqRequired, MemberCapability::Read)
+        .unwrap();
     assert_eq!(cap.keyspace_id, retrieved.keyspace_id);
 }
 
@@ -227,7 +229,13 @@ async fn test_capability_expiry() {
     .unwrap();
 
     // Signature is valid but capability is expired
-    assert!(cap.verify_signature(&verifying_keys).is_ok());
+    assert!(
+        cap.verify_signature(&verifying_keys, VerifyPolicy::PqRequired)
+            .is_ok()
+    );
     assert!(cap.is_expired());
-    assert!(cap.verify(&verifying_keys, MemberCapability::Read).is_err());
+    assert!(
+        cap.verify(&verifying_keys, VerifyPolicy::PqRequired, MemberCapability::Read)
+            .is_err()
+    );
 }

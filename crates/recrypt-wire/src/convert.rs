@@ -162,6 +162,6 @@ pub fn multisig_ed25519_bytes(sig: &MultiSig) -> Vec<u8> {
     sig.ed25519_sig.to_bytes().to_vec()
 }
 
-pub fn multisig_mldsa_bytes(sig: &MultiSig) -> Vec<u8> {
+pub fn multisig_mldsa_bytes(sig: &MultiSig) -> Option<Vec<u8>> {
     sig.ml_dsa_sig.clone()
 }

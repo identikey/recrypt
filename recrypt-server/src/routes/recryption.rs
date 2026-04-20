@@ -29,8 +29,10 @@ use serde::{Deserialize, Serialize};
 pub struct SignatureJson {
     /// Base64-encoded ED25519 signature bytes (64 bytes).
     pub ed25519_sig: String,
-    /// Base64-encoded ML-DSA-87 signature bytes.
-    pub ml_dsa_sig: String,
+    /// Base64-encoded ML-DSA-87 signature bytes, absent when the file was
+    /// signed classical-only.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub ml_dsa_sig: Option<String>,
 }
 
 /// Response for `GET /recryption/share/{id}` (control-plane only).
@@ -143,7 +145,8 @@ pub async fn create_share(
         message.as_bytes(),
         &sig_headers,
         &sender_account.ed25519_pk,
-        &sender_account.ml_dsa_pk,
+        Some(&sender_account.ml_dsa_pk),
+        recrypt_core::sign::VerifyPolicy::PqRequired,
     )?;
 
     // Decode recrypt key
@@ -248,7 +251,8 @@ pub async fn get_recrypted_share(
         message.as_bytes(),
         &sig_headers,
         &requester_account.ed25519_pk,
-        &requester_account.ml_dsa_pk,
+        Some(&requester_account.ml_dsa_pk),
+        recrypt_core::sign::VerifyPolicy::PqRequired,
     )?;
 
     // Load bao_hash from storage to build ciphertext URLs.
@@ -304,8 +308,10 @@ pub async fn get_recrypted_share(
     let signature = encrypted.signature.map(|sig| SignatureJson {
         ed25519_sig: base64::engine::general_purpose::STANDARD
             .encode(sig.ed25519_sig.to_bytes()),
-        ml_dsa_sig: base64::engine::general_purpose::STANDARD
-            .encode(&sig.ml_dsa_sig),
+        ml_dsa_sig: sig
+            .ml_dsa_sig
+            .as_ref()
+            .map(|bytes| base64::engine::general_purpose::STANDARD.encode(bytes)),
     });
 
     Ok(Json(RecryptionShareResponse {
@@ -378,7 +384,8 @@ pub async fn revoke_share(
         message.as_bytes(),
         &sig_headers,
         &requester_account.ed25519_pk,
-        &requester_account.ml_dsa_pk,
+        Some(&requester_account.ml_dsa_pk),
+        recrypt_core::sign::VerifyPolicy::PqRequired,
     )?;
 
     // Remove share
@@ -422,7 +429,8 @@ pub async fn list_shares(
         message.as_bytes(),
         &sig_headers,
         &account.ed25519_pk,
-        &account.ml_dsa_pk,
+        Some(&account.ml_dsa_pk),
+        recrypt_core::sign::VerifyPolicy::PqRequired,
     )?;
 
     // Filter shares via the trait

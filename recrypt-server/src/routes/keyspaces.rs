@@ -378,7 +378,13 @@ async fn verify_caller(
     message.push(b':');
     message.extend_from_slice(sig_headers.nonce.as_bytes());
 
-    verify_multisig(&message, &sig_headers, &account.ed25519_pk, &account.ml_dsa_pk)?;
+    verify_multisig(
+        &message,
+        &sig_headers,
+        &account.ed25519_pk,
+        Some(&account.ml_dsa_pk),
+        recrypt_core::sign::VerifyPolicy::PqRequired,
+    )?;
 
     Ok(fp)
 }

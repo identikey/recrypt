@@ -7,7 +7,9 @@ use serde::{Deserialize, Serialize};
 use crate::error::{AuthError, AuthResult};
 use crate::fingerprint::PublicKeyFingerprint;
 use crate::keyspace::MemberCapability;
-use recrypt_core::sign::{MultiSig, SigningKeys, VerifyingKeys, sign_message, verify_message};
+use recrypt_core::sign::{
+    MultiSig, SigningKeys, VerifyPolicy, VerifyingKeys, sign_message, verify_message,
+};
 
 /// A signed capability token bound to a keyspace.
 ///
@@ -109,12 +111,16 @@ impl Capability {
         Ok(cap)
     }
 
-    /// Verify the capability signature
-    pub fn verify_signature(&self, issuer_keys: &VerifyingKeys) -> AuthResult<()> {
+    /// Verify the capability signature under `policy`.
+    pub fn verify_signature(
+        &self,
+        issuer_keys: &VerifyingKeys,
+        policy: VerifyPolicy,
+    ) -> AuthResult<()> {
         let sig = self.signature.as_ref().ok_or(AuthError::InvalidSignature)?;
 
         let payload = self.signature_payload();
-        verify_message(&payload, sig, issuer_keys)?;
+        verify_message(&payload, sig, issuer_keys, policy)?;
         Ok(())
     }
 
@@ -142,10 +148,11 @@ impl Capability {
     pub fn verify(
         &self,
         issuer_keys: &VerifyingKeys,
+        policy: VerifyPolicy,
         required_cap: MemberCapability,
     ) -> AuthResult<()> {
         // Check signature
-        self.verify_signature(issuer_keys)?;
+        self.verify_signature(issuer_keys, policy)?;
 
         // Check expiry
         if self.is_expired() {
@@ -175,12 +182,12 @@ mod tests {
 
         let signing = SigningKeys {
             ed25519: ed_kp.signing_key,
-            ml_dsa: pq_kp.secret_key.clone(),
+            ml_dsa: Some(pq_kp.secret_key.clone()),
         };
 
         let verifying = VerifyingKeys {
             ed25519: ed_kp.verifying_key,
-            ml_dsa: pq_kp.public_key.clone(),
+            ml_dsa: Some(pq_kp.public_key.clone()),
         };
 
         (signing, verifying)
@@ -205,7 +212,10 @@ mod tests {
         )
         .unwrap();
 
-        assert!(cap.verify_signature(&verifying).is_ok());
+        assert!(
+            cap.verify_signature(&verifying, VerifyPolicy::PqRequired)
+                .is_ok()
+        );
     }
 
     #[test]

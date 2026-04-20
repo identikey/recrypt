@@ -8,7 +8,7 @@ pub use keymaterial::KeyMaterial;
 
 use crate::error::{CoreError, CoreResult};
 use crate::pre::{Ciphertext, PreBackend, PublicKey, RecryptKey, SecretKey};
-use crate::sign::{SigningKeys, VerifyingKeys};
+use crate::sign::{SigningKeys, VerifyPolicy, VerifyingKeys};
 use bao_tree::{
     BaoTree, BlockSize, ChunkRanges,
     io::{
@@ -200,15 +200,16 @@ impl<B: PreBackend> HybridEncryptor<B> {
         Ok(file)
     }
 
-    /// Decrypt with signature verification
+    /// Decrypt with signature verification under `policy`.
     pub fn decrypt_and_verify(
         &self,
         secret: &SecretKey,
         file: &EncryptedFile,
         verifying_keys: &VerifyingKeys,
+        policy: VerifyPolicy,
     ) -> CoreResult<Vec<u8>> {
         // Verify signature first
-        file.verify_signature(verifying_keys)?;
+        file.verify_signature(verifying_keys, policy)?;
         // Then decrypt
         self.decrypt(secret, file)
     }

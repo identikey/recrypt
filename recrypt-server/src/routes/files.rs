@@ -52,7 +52,8 @@ pub async fn upload_file(
         message.as_bytes(),
         &sig_headers,
         &account.ed25519_pk,
-        &account.ml_dsa_pk,
+        Some(&account.ml_dsa_pk),
+        recrypt_core::sign::VerifyPolicy::PqRequired,
     )?;
 
     let size = body.len();
@@ -166,7 +167,8 @@ pub async fn delete_file(
         message.as_bytes(),
         &sig_headers,
         &account.ed25519_pk,
-        &account.ml_dsa_pk,
+        Some(&account.ml_dsa_pk),
+        recrypt_core::sign::VerifyPolicy::PqRequired,
     )?;
 
     // Delete ciphertext and outboard sibling atomically

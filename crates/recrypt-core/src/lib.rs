@@ -87,4 +87,4 @@ pub mod sign;
 pub use error::{CoreError, CoreResult};
 pub use hybrid::{EncryptedFile, HybridEncryptor, KeyMaterial};
 pub use pre::{Ciphertext, KeyPair, PreBackend, PublicKey, RecryptKey, SecretKey};
-pub use sign::{MultiSig, SigningKeys, VerifyingKeys};
+pub use sign::{MultiSig, SigningKeys, VerifyPolicy, VerifyingKeys};

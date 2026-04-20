@@ -1,6 +1,6 @@
 // Multi-signature (ED25519 + ML-DSA-87) demonstration
 
-use recrypt_core::sign::{SigningKeys, VerifyingKeys, sign_message, verify_message};
+use recrypt_core::sign::{SigningKeys, VerifyPolicy, VerifyingKeys, sign_message, verify_message};
 use recrypt_ffi::ed25519::ed25519_keygen;
 use recrypt_ffi::liboqs::{PqAlgorithm, pq_keygen};
 
@@ -14,15 +14,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pq_kp = pq_keygen(PqAlgorithm::MlDsa87)?;
     let signing_keys = SigningKeys {
         ed25519: ed_kp.signing_key,
-        ml_dsa: pq_kp.secret_key.clone(),
+        ml_dsa: Some(pq_kp.secret_key.clone()),
     };
     let verifying_keys = VerifyingKeys {
         ed25519: ed_kp.verifying_key,
-        ml_dsa: pq_kp.public_key.clone(),
+        ml_dsa: Some(pq_kp.public_key.clone()),
     };
     println!(
         "   ✓ Keys ready (ED25519: 32 bytes, ML-DSA-87: {} bytes)\n",
-        verifying_keys.ml_dsa.len()
+        verifying_keys.ml_dsa.as_ref().map(|k| k.len()).unwrap_or(0)
     );
 
     // Sign various messages
@@ -43,11 +43,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!(
             "   ✓ Signed (ED25519: {} bytes, ML-DSA-87: {} bytes)",
             multi_sig.ed25519_sig.to_bytes().len(),
-            multi_sig.ml_dsa_sig.len()
+            multi_sig.ml_dsa_sig.as_ref().map(|s| s.len()).unwrap_or(0)
         );
 
-        // Verify signature
-        verify_message(msg, &multi_sig, &verifying_keys)?;
+        // Verify signature (hybrid mode — require PQ presence).
+        verify_message(msg, &multi_sig, &verifying_keys, VerifyPolicy::PqRequired)?;
         println!("   ✓ Verified!\n");
     }
 
@@ -60,7 +60,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let sig = sign_message(msg, &signing_keys)?;
 
     let tampered = b"Tampered message";
-    match verify_message(tampered, &sig, &verifying_keys) {
+    match verify_message(tampered, &sig, &verifying_keys, VerifyPolicy::PqRequired) {
         Ok(_) => println!("   ✗ ERROR: Tampered message passed verification!"),
         Err(e) => println!("   ✓ Correctly rejected: {e}\n"),
     }

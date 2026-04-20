@@ -52,16 +52,16 @@ mod proptest_suite {
 
             let signing_keys = SigningKeys {
                 ed25519: ed_kp.signing_key,
-                ml_dsa: pq_kp.secret_key.clone(),
+                ml_dsa: Some(pq_kp.secret_key.clone()),
             };
 
             let verifying_keys = VerifyingKeys {
                 ed25519: ed_kp.verifying_key,
-                ml_dsa: pq_kp.public_key.clone(),
+                ml_dsa: Some(pq_kp.public_key.clone()),
             };
 
             let sig = sign_message(&msg, &signing_keys).unwrap();
-            let valid = verify_message(&msg, &sig, &verifying_keys).unwrap();
+            let valid = verify_message(&msg, &sig, &verifying_keys, VerifyPolicy::PqRequired).unwrap();
 
             prop_assert!(valid);
         }

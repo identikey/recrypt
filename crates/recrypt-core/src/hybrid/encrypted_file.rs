@@ -2,7 +2,7 @@
 
 use crate::error::CoreResult;
 use crate::pre::Ciphertext;
-use crate::sign::{MultiSig, SigningKeys, VerifyingKeys};
+use crate::sign::{MultiSig, SigningKeys, VerifyPolicy, VerifyingKeys};
 
 /// An encrypted file with streaming-verifiable integrity
 #[derive(Clone, Debug)]
@@ -35,12 +35,16 @@ impl EncryptedFile {
         Ok(())
     }
 
-    /// Verify the signature
-    pub fn verify_signature(&self, pks: &VerifyingKeys) -> CoreResult<bool> {
+    /// Verify the signature under `policy`.
+    pub fn verify_signature(
+        &self,
+        pks: &VerifyingKeys,
+        policy: VerifyPolicy,
+    ) -> CoreResult<bool> {
         match &self.signature {
             Some(sig) => {
                 let payload = self.signature_payload();
-                crate::sign::verify_message(&payload, sig, pks)
+                crate::sign::verify_message(&payload, sig, pks, policy)
             }
             None => Err(crate::error::CoreError::Verification(
                 "No signature present".into(),

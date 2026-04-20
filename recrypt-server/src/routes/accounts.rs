@@ -57,7 +57,13 @@ pub async fn create_account(
     );
 
     // Verify signature
-    verify_multisig(message.as_bytes(), &sig_headers, &ed25519_pk, &ml_dsa_pk)?;
+    verify_multisig(
+        message.as_bytes(),
+        &sig_headers,
+        &ed25519_pk,
+        Some(&ml_dsa_pk),
+        recrypt_core::sign::VerifyPolicy::PqRequired,
+    )?;
 
     // Check for conflict
     let fp = PublicKeyFingerprint::from_public_key(&ed25519_pk);
