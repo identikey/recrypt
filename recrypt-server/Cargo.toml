@@ -70,3 +70,8 @@ recrypt-core = { path = "../crates/recrypt-core" }
 identikey-storage-auth = { path = "../crates/identikey-storage-auth", features = [
   "sqlite",
 ] }
+criterion = { version = "0.5", features = ["async_tokio"] }
+
+[[bench]]
+name = "proxy_cost"
+harness = false

@@ -128,9 +128,11 @@ above it composes these; everything below it is an implementation detail.
   - `KeyMaterial` — fixed 96-byte bundle `(symmetric_key[32] || nonce[24] ||
     plaintext_hash[32] || plaintext_size[8])`, always encrypted inside
     `wrapped_key`, never transmitted in the clear.
-  - `EncryptedFile` — in-memory struct `{ wrapped_key, bao_hash, bao_outboard,
-    ciphertext, signature }`. Provides `sign()` / `verify_signature()` over a
-    canonical `signature_payload = wrapped_key.to_bytes() || bao_hash`.
+  - `EncryptedFile` — in-memory struct `{ wrapped_key, bao_hash, ciphertext,
+    signature }`. Provides `sign()` / `verify_signature()` over a canonical
+    `signature_payload = wrapped_key.to_bytes() || bao_hash`. The bao outboard
+    is **not** an envelope field; it lives as a sibling storage object
+    (`{hash}.obao`) and is produced/consumed via the streaming API.
     **Wire serialization lives in `recrypt-wire` (Gordian Envelope), not here.**
 
 - **`sign/` — Dual-stack signatures**
@@ -201,10 +203,11 @@ networking, FFI specifics, or the chunking of large files.
 - **Backends:** `InMemoryStorage` (tests), `LocalFileStorage` (filesystem,
   `{root}/blob/b3/{hash_base58}`), `S3Storage` (feature-gated `s3`, supports
   S3 / Minio / Backblaze).
-- **`chunking` module:** `Chunk`, `ChunkManifest`, `split()`, `join()`,
-  `store_chunked()`, `retrieve_chunked()`. `ChunkManifest` now derives
-  `Serialize`/`Deserialize` with Blake3 hashes encoded as base58 via custom
-  serde helpers.
+- **Two-object storage API:** `put_with_outboard` / `get_with_outboard` for
+  ciphertext + sibling `.obao` (bao-tree outboard). Small files (≤ 16 KiB)
+  skip the `.obao` PUT. Replaces the retired `chunking` module
+  (`ChunkManifest` was fully subsumed by Bao and deleted in the 2026-04-06
+  streaming sprint).
 - **Hash utilities:** `hash_to_base58`, `hash_from_base58`.
 - **`StorageError`** enum.
 

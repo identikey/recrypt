@@ -255,26 +255,27 @@ Both lattice and EC-based PRE can be extended to threshold/MPC schemes:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ EncryptedFile                                               │
+│ EncryptedFile (envelope, v3 — Gordian Envelope / dCBOR)     │
 ├─────────────────────────────────────────────────────────────┤
-│ version: u8                    // Format version (2)        │
-│ backend: u8                    // 0=Lattice, 1=EC-Pairing,  │
-│                                // 2=EC-secp256k1            │
-│ wrapped_key_len: u32           // Length of wrapped key     │
-│ wrapped_key: [u8]              // PRE-encrypted key bundle  │
-│ bao_hash: [u8; 32]             // Bao root of ciphertext    │
-│ bao_outboard_len: u64          // Length of Bao tree        │
-│ bao_outboard: [u8]             // Bao verification tree     │
-│ ciphertext_len: u64            // Length of ciphertext      │
-│ ciphertext: [u8]               // XChaCha20 encrypted data  │
+│ wrapped_key: Ciphertext        // PRE-encrypted key bundle  │
+│ bao_hash:    [u8; 32]          // Blake3 root of ciphertext │
+│ ciphertext:  [u8]              // XChaCha20 encrypted data  │
+│ signature:   Option<MultiSig>  // ED25519 + ML-DSA-87       │
 └─────────────────────────────────────────────────────────────┘
+
+Stored alongside (never inside the envelope):
+  {bao_hash}.obao  — bao-tree outboard, sibling storage object.
+                     Absent for files ≤ 16 KiB (single chunk group).
 ```
 
 **Notes:**
 
-- No Poly1305 auth tag—Bao root + signature provides equivalent security
+- No Poly1305 auth tag — Bao root + signature provides equivalent security
 - `plaintext_hash` and `plaintext_size` are INSIDE `wrapped_key` (encrypted)
-- `bao_outboard` can be stored separately or inline
+- The bao outboard is **not** an envelope field; it lives as a sibling storage
+  object keyed `{base58(bao_hash)}.obao` and is fetched independently by the
+  streaming decrypt path. Field 4 (`bao_outboard`) is retired in the wire
+  schema.
 - Ciphertext is pure XChaCha20 (seekable, no per-chunk overhead)
 
 ### Wrapped Key Bundle (PRE-Encrypted)
@@ -447,7 +448,7 @@ Only someone who can unwrap the key can see the plaintext hash.
 | Field            | Location                     | Visible Without Decryption?                |
 | ---------------- | ---------------------------- | ------------------------------------------ |
 | `bao_hash`       | Public metadata              | ✅ Yes — needed for streaming verification |
-| `bao_outboard`   | Public (or separate storage) | ✅ Yes — Bao tree for verification         |
+| `{hash}.obao`    | Sibling storage object       | ✅ Yes — bao-tree outboard (absent for files ≤ 16 KiB) |
 | `ciphertext`     | Public                       | ✅ Yes — encrypted data                    |
 | `symmetric_key`  | Inside wrapped_key           | ❌ No — PRE encrypted                      |
 | `nonce`          | Inside wrapped_key           | ❌ No — PRE encrypted                      |

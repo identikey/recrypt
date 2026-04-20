@@ -1,6 +1,15 @@
+> **Historical:** original design sketch. Code examples below show the
+> pre-streaming `EncryptedFile` layout (with inline `bao_outboard`). As of
+> the 2026-04-06 streaming sprint the outboard is a sibling storage object
+> (`{hash}.obao`), not an envelope field. See
+> [hybrid-encryption-architecture.md](hybrid-encryption-architecture.md)
+> for the current layout and
+> [plans/2026-04-06-bao-streaming-and-storage-simplification.md](plans/2026-04-06-bao-streaming-and-storage-simplification.md)
+> for the migration rationale.
+
 # PRE Backend Trait Hierarchy
 
-**Status:** 📐 DESIGN SKETCH  
+**Status:** 📐 DESIGN SKETCH
 **Purpose:** Pluggable backend system for proxy recryption
 
 ---

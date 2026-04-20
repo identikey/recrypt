@@ -4032,6 +4032,7 @@ dependencies = [
  "blake3",
  "bs58",
  "chrono",
+ "criterion",
  "ed25519-dalek",
  "figment",
  "http 1.4.0",

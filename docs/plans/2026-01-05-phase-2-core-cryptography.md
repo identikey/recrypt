@@ -1,3 +1,9 @@
+> **Historical:** Phase 2 planning. The `EncryptedFile` layout below shows
+> an inline `bao_outboard` field that was removed in the 2026-04-06 Bao
+> streaming sprint — the outboard now lives as a sibling `{hash}.obao`
+> storage object. See [hybrid-encryption-architecture.md](../hybrid-encryption-architecture.md)
+> for the current envelope shape.
+
 # Phase 2: Core Cryptography Implementation Plan
 
 ## Overview
