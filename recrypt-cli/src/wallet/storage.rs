@@ -6,6 +6,7 @@ use directories::ProjectDirs;
 use rand::RngCore;
 use std::fs;
 use std::path::PathBuf;
+use zeroize::Zeroize;
 
 use super::credential::{default_provider_for, CredentialProvider};
 use super::format::{
@@ -46,6 +47,12 @@ pub struct Wallet {
     path: PathBuf,
     key: [u8; 32],
     salt: [u8; 32],
+}
+
+impl Drop for Wallet {
+    fn drop(&mut self) {
+        self.key.zeroize();
+    }
 }
 
 impl Wallet {
@@ -153,7 +160,7 @@ impl Wallet {
             fs::create_dir_all(parent)?;
         }
 
-        fs::write(&self.path, encrypted)
+        write_secret_file(&self.path, &encrypted)
             .with_context(|| format!("Failed to write wallet to {}", self.path.display()))?;
 
         Ok(())
@@ -185,6 +192,44 @@ impl Wallet {
     }
 }
 
+/// Write a file containing secret material with restrictive permissions.
+///
+/// On Unix the file is created with mode 0o600 atomically (no read window where
+/// the file is world-readable). On other platforms falls back to a plain write
+/// — callers should document the lack of OS-level protection there.
+pub fn write_secret_file(path: &std::path::Path, contents: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent)?;
+        }
+    }
+
+    // Atomic write via temp file in the same directory + rename.
+    let dir = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or_else(|| std::path::Path::new("."));
+    let file_name = path.file_name().ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, "path has no file name")
+    })?;
+    let tmp_path = dir.join(format!(".{}.tmp", file_name.to_string_lossy()));
+
+    {
+        let mut opts = fs::OpenOptions::new();
+        opts.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            opts.mode(0o600);
+        }
+        let mut file = opts.open(&tmp_path)?;
+        file.write_all(contents)?;
+        file.sync_all()?;
+    }
+
+    fs::rename(&tmp_path, path)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -205,16 +250,16 @@ mod tests {
                 created_at: 1704067200,
                 fingerprint: "test-fingerprint".to_string(),
                 ed25519: KeyPair {
-                    public: "ed25519-pub".to_string(),
-                    secret: "ed25519-sec".to_string(),
+                    public: b"ed25519-pub".to_vec(),
+                    secret: b"ed25519-sec".to_vec(),
                 },
                 ml_dsa: KeyPair {
-                    public: "mldsa-pub".to_string(),
-                    secret: "mldsa-sec".to_string(),
+                    public: b"mldsa-pub".to_vec(),
+                    secret: b"mldsa-sec".to_vec(),
                 },
                 pre: KeyPair {
-                    public: "pre-pub".to_string(),
-                    secret: "pre-sec".to_string(),
+                    public: b"pre-pub".to_vec(),
+                    secret: b"pre-sec".to_vec(),
                 },
                 pre_backend: recrypt_core::pre::BackendId::Mock,
             },
@@ -254,16 +299,16 @@ mod tests {
                 created_at: 1704067200,
                 fingerprint: "fp".to_string(),
                 ed25519: KeyPair {
-                    public: "p".to_string(),
-                    secret: "s".to_string(),
+                    public: b"p".to_vec(),
+                    secret: b"s".to_vec(),
                 },
                 ml_dsa: KeyPair {
-                    public: "p".to_string(),
-                    secret: "s".to_string(),
+                    public: b"p".to_vec(),
+                    secret: b"s".to_vec(),
                 },
                 pre: KeyPair {
-                    public: "p".to_string(),
-                    secret: "s".to_string(),
+                    public: b"p".to_vec(),
+                    secret: b"s".to_vec(),
                 },
                 pre_backend: recrypt_core::pre::BackendId::Mock,
             },
@@ -300,16 +345,16 @@ mod tests {
                 created_at: 1704153600,
                 fingerprint: "new-fp".to_string(),
                 ed25519: KeyPair {
-                    public: "pub".to_string(),
-                    secret: "sec".to_string(),
+                    public: b"pub".to_vec(),
+                    secret: b"sec".to_vec(),
                 },
                 ml_dsa: KeyPair {
-                    public: "pub".to_string(),
-                    secret: "sec".to_string(),
+                    public: b"pub".to_vec(),
+                    secret: b"sec".to_vec(),
                 },
                 pre: KeyPair {
-                    public: "pub".to_string(),
-                    secret: "sec".to_string(),
+                    public: b"pub".to_vec(),
+                    secret: b"sec".to_vec(),
                 },
                 pre_backend: recrypt_core::pre::BackendId::Mock,
             },

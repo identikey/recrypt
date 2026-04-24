@@ -1,0 +1,17 @@
+{
+  "assertions_absent": [],
+  "assertions_present": [
+    "ed25519-public",
+    "ed25519-secret",
+    "ml-dsa-public",
+    "ml-dsa-secret",
+    "name",
+    "created",
+    "pre-backend",
+    "pre-public",
+    "pre-secret"
+  ],
+  "byte_length": 7958,
+  "description": "Full recrypt identity: ed25519+ml-dsa keypairs, name='alice', created, PRE backend='lattice-bfv' with placeholder key bytes.",
+  "fingerprint_hex": "af3da09f0f0b45c64f3259fb3870249e810be4383c4c5c89eeeb5f14a2723e51"
+}

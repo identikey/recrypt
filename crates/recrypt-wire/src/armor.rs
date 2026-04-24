@@ -26,6 +26,7 @@ pub enum ArmorType {
     Capability,
     RecryptKey,
     EncryptedFile,
+    Identity,
 }
 
 impl ArmorType {
@@ -37,6 +38,7 @@ impl ArmorType {
             Self::Capability => "CAPABILITY",
             Self::RecryptKey => "RECRYPT KEY",
             Self::EncryptedFile => "ENCRYPTED FILE",
+            Self::Identity => "IDENTITY",
         }
     }
 
@@ -47,6 +49,7 @@ impl ArmorType {
             "MESSAGE" => Some(Self::Message),
             "CAPABILITY" => Some(Self::Capability),
             "RECRYPT KEY" => Some(Self::RecryptKey),
+            "IDENTITY" => Some(Self::Identity),
             "ENCRYPTED FILE" => Some(Self::EncryptedFile),
             _ => None,
         }

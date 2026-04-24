@@ -1,6 +1,6 @@
 use anyhow::{Context as _, Result};
 use base64::Engine;
-use clap::Subcommand;
+use clap::{Subcommand, ValueEnum};
 use colored::Colorize;
 use serde::Serialize;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -13,7 +13,14 @@ use recrypt_ffi::liboqs::{pq_keygen, PqAlgorithm};
 use super::Context;
 use crate::config::Config;
 use crate::output::{print_info, print_json, print_success};
-use crate::wallet::{Identity, KeyPair, Wallet};
+use crate::wallet::{write_secret_file, Identity, KeyPair, Wallet};
+
+#[derive(Debug, Clone, ValueEnum, Default)]
+pub enum ExportFormat {
+    #[default]
+    Envelope,
+    Json,
+}
 
 #[derive(Subcommand)]
 pub enum IdentityCommand {
@@ -48,6 +55,9 @@ pub enum IdentityCommand {
         /// Output file
         #[arg(long)]
         output: String,
+        /// Output format: envelope (default) or json
+        #[arg(long, value_enum, default_value = "envelope")]
+        format: ExportFormat,
     },
     /// Import an identity
     Import {
@@ -66,7 +76,7 @@ pub async fn run(action: IdentityCommand, ctx: &Context) -> Result<()> {
         IdentityCommand::Show { name } => show_identity(name, ctx).await,
         IdentityCommand::Use { name } => use_identity(name, ctx).await,
         IdentityCommand::Delete { name } => delete_identity(name, ctx).await,
-        IdentityCommand::Export { name, output } => export_identity(name, output, ctx).await,
+        IdentityCommand::Export { name, output, format } => export_identity(name, output, format, ctx).await,
         IdentityCommand::Import { file, name } => import_identity(file, name, ctx).await,
     }
 }
@@ -359,7 +369,7 @@ async fn delete_identity(name: String, ctx: &Context) -> Result<()> {
     Ok(())
 }
 
-async fn export_identity(name: String, output: String, ctx: &Context) -> Result<()> {
+async fn export_identity(name: String, output: String, format: ExportFormat, ctx: &Context) -> Result<()> {
     let wallet = Wallet::load(ctx.wallet_override.as_deref())?;
 
     let identity = wallet
@@ -368,8 +378,22 @@ async fn export_identity(name: String, output: String, ctx: &Context) -> Result<
         .get(&name)
         .ok_or_else(|| anyhow::anyhow!("Identity '{name}' not found"))?;
 
-    let json = serde_json::to_string_pretty(identity)?;
-    std::fs::write(&output, json)?;
+    let output_path = std::path::Path::new(&output);
+    match format {
+        ExportFormat::Json => {
+            let json = serde_json::to_string_pretty(identity)?;
+            write_secret_file(output_path, json.as_bytes())
+                .with_context(|| format!("Failed to write {output}"))?;
+        }
+        ExportFormat::Envelope => {
+            let wire_id = wire_identity_from_wallet(&name, identity)?;
+            let bytes = wire_id
+                .to_envelope_bytes()
+                .map_err(|e| anyhow::anyhow!("Failed to serialize envelope: {e}"))?;
+            write_secret_file(output_path, &bytes)
+                .with_context(|| format!("Failed to write {output}"))?;
+        }
+    }
 
     if ctx.json_output {
         #[derive(Serialize)]
@@ -388,11 +412,28 @@ async fn export_identity(name: String, output: String, ctx: &Context) -> Result<
 async fn import_identity(file: String, name: Option<String>, ctx: &Context) -> Result<()> {
     let mut wallet = Wallet::load(ctx.wallet_override.as_deref())?;
 
-    let json = std::fs::read_to_string(&file).with_context(|| format!("Failed to read {file}"))?;
-    let identity: Identity = serde_json::from_str(&json).context("Invalid identity file format")?;
+    let bytes = std::fs::read(&file).with_context(|| format!("Failed to read {file}"))?;
+
+    // Detect format. CBOR envelopes start with the dCBOR tag-200 prefix
+    // (0xd8 0xc8). JSON may have leading whitespace or a UTF-8 BOM, so skip
+    // those before checking for an opening brace.
+    let identity = if bytes.starts_with(&[0xd8, 0xc8]) {
+        let wire_id = recrypt_wire::Identity::from_envelope_bytes(&bytes)
+            .map_err(|e| anyhow::anyhow!("Failed to parse identity envelope: {e}"))?;
+        wallet_identity_from_wire(&wire_id)?
+    } else {
+        let probe = bytes.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&bytes);
+        let first_non_ws = probe.iter().find(|b| !b.is_ascii_whitespace()).copied();
+        if first_non_ws == Some(b'{') {
+            serde_json::from_slice(&bytes).context("Invalid JSON identity file")?
+        } else {
+            anyhow::bail!(
+                "Unrecognized identity file format (expected CBOR envelope starting with 0xd8 0xc8, or JSON starting with '{{')"
+            );
+        }
+    };
 
     let identity_name = name.unwrap_or_else(|| {
-        // Auto-generate name
         let mut i = 1;
         loop {
             let candidate = format!("imported-{i}");
@@ -426,6 +467,119 @@ async fn import_identity(file: String, name: Option<String>, ctx: &Context) -> R
     }
 
     Ok(())
+}
+
+// Conversion helpers between wallet Identity and wire Identity
+
+fn wire_identity_from_wallet(name: &str, id: &Identity) -> Result<recrypt_wire::Identity> {
+    let ed25519_public: [u8; 32] = id.ed25519.public.as_slice().try_into().map_err(|_| {
+        anyhow::anyhow!(
+            "ed25519 public key in wallet is {} bytes, expected 32",
+            id.ed25519.public.len()
+        )
+    })?;
+    let ed25519_secret: Option<[u8; 32]> = id.ed25519.secret.as_slice().try_into().ok();
+
+    // The wallet's stored fingerprint is informational; recompute the
+    // canonical fingerprint from the ed25519 public key. If the stored
+    // value disagrees, treat it as wallet corruption rather than silently
+    // healing — surface the error so the operator can investigate.
+    let computed: [u8; 32] = *blake3::hash(&ed25519_public).as_bytes();
+    let stored = bs58::decode(&id.fingerprint).into_vec().map_err(|e| {
+        anyhow::anyhow!(
+            "wallet fingerprint for '{name}' is not valid base58: {e}"
+        )
+    })?;
+    let stored: [u8; 32] = stored.try_into().map_err(|v: Vec<u8>| {
+        anyhow::anyhow!(
+            "wallet fingerprint for '{name}' is {} bytes, expected 32",
+            v.len()
+        )
+    })?;
+    if stored != computed {
+        anyhow::bail!(
+            "wallet corruption: stored fingerprint for '{name}' does not match Blake3(ed25519_public)"
+        );
+    }
+
+    Ok(recrypt_wire::Identity {
+        fingerprint: computed,
+        ed25519_public,
+        ed25519_secret,
+        name: Some(name.to_string()),
+        created: Some(id.created_at),
+        ml_dsa: Some(recrypt_wire::MlDsaKeyPair {
+            public: id.ml_dsa.public.clone(),
+            secret: Some(id.ml_dsa.secret.clone()),
+        }),
+        pre: Some(recrypt_wire::PreKeyMaterial {
+            backend: id.pre_backend.to_string(),
+            public: id.pre.public.clone(),
+            secret: Some(id.pre.secret.clone()),
+        }),
+        unknown_assertions: vec![],
+    })
+}
+
+fn wallet_identity_from_wire(wi: &recrypt_wire::Identity) -> Result<Identity> {
+    let ml_dsa = wi.ml_dsa.as_ref().ok_or_else(|| {
+        anyhow::anyhow!(
+            "Identity envelope is missing ml-dsa keys — only full identities (with all key material) can be imported into a wallet"
+        )
+    })?;
+    let ml_dsa_secret = ml_dsa.secret.as_ref().ok_or_else(|| {
+        anyhow::anyhow!(
+            "Identity envelope has ml-dsa public key but no secret key — only full identities can be imported into a wallet"
+        )
+    })?;
+
+    let pre = wi.pre.as_ref().ok_or_else(|| {
+        anyhow::anyhow!(
+            "Identity envelope is missing PRE keys — only full identities (with all key material) can be imported into a wallet"
+        )
+    })?;
+    let pre_secret = pre.secret.as_ref().ok_or_else(|| {
+        anyhow::anyhow!(
+            "Identity envelope has PRE public key but no secret key — only full identities can be imported into a wallet"
+        )
+    })?;
+
+    let ed25519_secret = wi.ed25519_secret.ok_or_else(|| {
+        anyhow::anyhow!(
+            "Identity envelope is missing ed25519 secret key — only full identities can be imported into a wallet"
+        )
+    })?;
+
+    let backend_id: recrypt_core::pre::BackendId = pre.backend.parse()
+        .map_err(|_| anyhow::anyhow!("Unknown PRE backend: '{}'", pre.backend))?;
+
+    let created_at = wi.created.unwrap_or_else(|| {
+        tracing::debug!(
+            "imported envelope has no 'created' assertion; falling back to current time"
+        );
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0)
+    });
+
+    Ok(Identity {
+        created_at,
+        fingerprint: bs58::encode(wi.fingerprint).into_string(),
+        ed25519: KeyPair {
+            public: wi.ed25519_public.to_vec(),
+            secret: ed25519_secret.to_vec(),
+        },
+        ml_dsa: KeyPair {
+            public: ml_dsa.public.clone(),
+            secret: ml_dsa_secret.clone(),
+        },
+        pre: KeyPair {
+            public: pre.public.clone(),
+            secret: pre_secret.clone(),
+        },
+        pre_backend: backend_id,
+    })
 }
 
 // Helper functions

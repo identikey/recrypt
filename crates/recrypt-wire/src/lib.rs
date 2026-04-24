@@ -17,8 +17,10 @@ pub mod armor;
 pub mod convert;
 pub mod error;
 pub mod format;
+pub mod identity;
 pub mod impls;
 
 pub use armor::{ArmorType, armor_decode, armor_encode};
 pub use error::{WireError, WireResult};
 pub use format::{Format, MultiFormat, detect_format};
+pub use identity::{Identity, MlDsaKeyPair, PreKeyMaterial};

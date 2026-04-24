@@ -7,6 +7,7 @@ use chacha20poly1305::{
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 const MAGIC: &[u8; 4] = b"DCYW";
 const VERSION: u8 = 1;
@@ -42,8 +43,9 @@ fn default_backend() -> recrypt_core::pre::BackendId {
     recrypt_core::pre::BackendId::Mock
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct KeyPair {
+    #[zeroize(skip)]
     pub public: Vec<u8>,
     pub secret: Vec<u8>,
 }
@@ -67,7 +69,7 @@ impl Default for WalletData {
 /// Encrypt wallet with password (for tests and backward compat)
 #[cfg(test)]
 pub fn encrypt_wallet(data: &WalletData, password: &str) -> Result<Vec<u8>> {
-    let json = serde_json::to_vec(data)?;
+    let json = zeroize::Zeroizing::new(serde_json::to_vec(data)?);
 
     // Generate salt and nonce
     let mut salt = [0u8; 32];
@@ -152,9 +154,11 @@ pub fn decrypt_wallet_with_key(data: &[u8], key: &[u8; 32]) -> Result<WalletData
 
     let cipher = XChaCha20Poly1305::new_from_slice(key)?;
     let nonce_arr: [u8; 24] = nonce.try_into()?;
-    let plaintext = cipher
-        .decrypt(&nonce_arr.into(), ciphertext)
-        .map_err(|_| anyhow!("Decryption failed (wrong key?)"))?;
+    let plaintext = zeroize::Zeroizing::new(
+        cipher
+            .decrypt(&nonce_arr.into(), ciphertext)
+            .map_err(|_| anyhow!("Decryption failed (wrong key?)"))?,
+    );
 
     let wallet: WalletData = serde_json::from_slice(&plaintext)?;
     Ok(wallet)
@@ -166,7 +170,7 @@ pub fn encrypt_wallet_with_key(
     key: &[u8; 32],
     salt: &[u8; 32],
 ) -> Result<Vec<u8>> {
-    let json = serde_json::to_vec(data)?;
+    let json = zeroize::Zeroizing::new(serde_json::to_vec(data)?);
 
     let mut nonce = [0u8; 24];
     rand::thread_rng().fill_bytes(&mut nonce);
@@ -199,16 +203,16 @@ mod tests {
                 created_at: 1704067200,
                 fingerprint: "test-fp".to_string(),
                 ed25519: KeyPair {
-                    public: "test-pub".to_string(),
-                    secret: "test-sec".to_string(),
+                    public: b"test-pub".to_vec(),
+                    secret: b"test-sec".to_vec(),
                 },
                 ml_dsa: KeyPair {
-                    public: "test-pub".to_string(),
-                    secret: "test-sec".to_string(),
+                    public: b"test-pub".to_vec(),
+                    secret: b"test-sec".to_vec(),
                 },
                 pre: KeyPair {
-                    public: "test-pub".to_string(),
-                    secret: "test-sec".to_string(),
+                    public: b"test-pub".to_vec(),
+                    secret: b"test-sec".to_vec(),
                 },
                 pre_backend: recrypt_core::pre::BackendId::Mock,
             },
@@ -271,16 +275,16 @@ mod tests {
                 created_at: 1704067200,
                 fingerprint: "test-fp".to_string(),
                 ed25519: KeyPair {
-                    public: "ed-pub".to_string(),
-                    secret: "ed-sec".to_string(),
+                    public: b"ed-pub".to_vec(),
+                    secret: b"ed-sec".to_vec(),
                 },
                 ml_dsa: KeyPair {
-                    public: "ml-pub".to_string(),
-                    secret: "ml-sec".to_string(),
+                    public: b"ml-pub".to_vec(),
+                    secret: b"ml-sec".to_vec(),
                 },
                 pre: KeyPair {
-                    public: "pre-pub".to_string(),
-                    secret: "pre-sec".to_string(),
+                    public: b"pre-pub".to_vec(),
+                    secret: b"pre-sec".to_vec(),
                 },
                 pre_backend: recrypt_core::pre::BackendId::Mock,
             },

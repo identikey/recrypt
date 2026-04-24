@@ -3946,6 +3946,7 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
+ "zeroize",
 ]
 
 [[package]]
@@ -4080,16 +4081,20 @@ name = "recrypt-wire"
 version = "0.1.0"
 dependencies = [
  "base64",
+ "bc-components",
  "bc-envelope",
  "blake3",
  "bs58",
  "ed25519-dalek",
+ "hex",
  "proptest",
  "recrypt-core",
  "recrypt-ffi",
  "serde",
  "serde_json",
  "thiserror 2.0.17",
+ "tracing",
+ "zeroize",
 ]
 
 [[package]]

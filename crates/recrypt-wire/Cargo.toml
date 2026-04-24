@@ -7,6 +7,13 @@ edition.workspace = true
 # Gordian Envelope (dCBOR wire format)
 # Pinned per migration plan alpha-status mitigation.
 bc-envelope = "=0.43.0"
+bc-components = "=0.31.1"
+
+# Instrumentation
+tracing = "0.1"
+
+# Hex encoding (used in signature debug logs)
+hex = "0.4"
 
 # Serialization (JSON for debug output, serde for config compat)
 serde = { version = "1", features = ["derive"] }
@@ -26,6 +33,11 @@ thiserror.workspace = true
 # Blake3 for hashing
 blake3 = { version = "1.5", features = ["traits-preview"] }
 
+# Zeroization of secret material
+zeroize.workspace = true
+
 [dev-dependencies]
 proptest.workspace = true
 recrypt-ffi = { path = "../recrypt-ffi" }
+hex = "0.4"
+ed25519-dalek.workspace = true

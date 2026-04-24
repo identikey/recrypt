@@ -1,0 +1,19 @@
+{
+  "assertions_absent": [
+    "pre-backend",
+    "pre-public",
+    "pre-secret"
+  ],
+  "assertions_present": [
+    "ed25519-public",
+    "ed25519-secret",
+    "ml-dsa-public",
+    "ml-dsa-secret",
+    "name",
+    "created",
+    "dreamball-lineage"
+  ],
+  "byte_length": 7803,
+  "description": "Dreamball-shaped identity: ed25519+ml-dsa keypairs, name, created, NO PRE. Contains unknown assertion 'dreamball-lineage' (ByteString [0xDE,0xAD,0xBE,0xEF]). Proves round-trip preservation of externally-authored assertions.",
+  "fingerprint_hex": "34a374a71ce45a64cef46deae14583ab4a1754f8e3539b44f346c813844851c3"
+}

@@ -1,0 +1,18 @@
+{
+  "assertions_absent": [
+    "ed25519-secret",
+    "name",
+    "created",
+    "ml-dsa-public",
+    "ml-dsa-secret",
+    "pre-backend",
+    "pre-public",
+    "pre-secret"
+  ],
+  "assertions_present": [
+    "ed25519-public"
+  ],
+  "byte_length": 144,
+  "description": "Minimal identity: ed25519 public key only. No name, no created, no secrets, no ml-dsa, no PRE.",
+  "fingerprint_hex": "4a78877c4a0926fc5d5cb282bb45c11c8489b202fe1890fa0c6593e6192b9f75"
+}
