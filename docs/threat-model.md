@@ -337,10 +337,8 @@ Two additional cryptographic assumptions introduced in Phase 8:
 
 ## 8. Wire-format and signature design (added 2026-04-08)
 
-This section documents threat-model commitments introduced by the
-[protobuf → Gordian Envelope migration](plans/2026-04-08-gordian-envelope-migration.md).
-It supersedes the original §4 / §6 references to "the protobuf
-signature payload" wherever they conflict.
+This section documents threat-model commitments for the Gordian
+Envelope wire format (see [wire-protocol.md](wire-protocol.md)).
 
 ### 8.1 Hybrid signature: Ed25519 + ML-DSA-87
 
@@ -429,8 +427,7 @@ The rule is load-bearing and must be tested explicitly:
 - An envelope with both signatures, where both verify, is
   accepted.
 
-See FR-3 in the [migration plan](plans/2026-04-08-gordian-envelope-migration.md#functional-requirements)
-for the corresponding test gate.
+This is enforced by the verifier in `recrypt-wire`.
 
 ### 8.2 Wrapped-key envelopes are unsigned
 
@@ -546,8 +543,7 @@ only the digest of the salted triple — which is infeasible to
 brute-force.
 
 The full per-field policy is in
-[wire-protocol.md §6](wire-protocol.md) and the
-[envelope sketch spike](spikes/2026-04-08-envelope-sketch.md).
+[wire-protocol.md §6](wire-protocol.md).
 
 #### 8.3.3 Salt freshness invariant
 

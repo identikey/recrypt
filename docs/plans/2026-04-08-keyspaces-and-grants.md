@@ -703,8 +703,6 @@ removed (base tier cannot enforce deletion).
   persistence foundation
 - [2026-04-07 next-steps backlog](2026-04-07-next-steps-backlog.md) —
   follow-up work including personal-list expansion
-- [2026-04-08 envelope sketch spike](../spikes/2026-04-08-envelope-sketch.md) —
-  parallel envelope work
 - [crates/identikey-storage-auth/src/grant.rs](../../crates/identikey-storage-auth/src/grant.rs) —
   existing grant scaffolding (this sprint extends it)
 - [crates/identikey-storage-auth/src/capability.rs](../../crates/identikey-storage-auth/src/capability.rs) —

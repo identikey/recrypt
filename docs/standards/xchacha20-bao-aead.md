@@ -4,7 +4,7 @@
 **Date:** 2026-04-08
 **Authors:** Duke Jones (recrypt project)
 **Reviewers needed:** RWOT / Blockchain Commons cryptography reviewers
-**Related:** [Migration plan](plans/2026-04-08-gordian-envelope-migration.md), [verification architecture](verification-architecture.md)
+**Related:** [verification architecture](../verification-architecture.md), [wire protocol](../wire-protocol.md)
 
 ## Abstract
 

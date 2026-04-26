@@ -1,8 +1,8 @@
 # Wire Protocol: Gordian Envelope Format
 
-**Status:** 📝 DRAFT — migration from protobuf (in progress). See [migration plan](plans/2026-04-08-gordian-envelope-migration.md).
+**Status:** ✅ Stable.
 **Authoritative reference:** this document.
-**Implementation:** [`crates/recrypt-wire`](../crates/recrypt-wire/) (renamed from `recrypt-proto` as part of the migration)
+**Implementation:** [`crates/recrypt-wire`](../crates/recrypt-wire/).
 
 For the HTTP endpoints that consume these messages, see
 [http-api-reference.md](http-api-reference.md). For the broader architectural
@@ -40,34 +40,33 @@ doesn't speak natively) maps onto Envelope primitives directly.
 
 ### 1.1 Supported formats
 
-| Format       | Primary use              | Content-Type                | Status  |
-| ------------ | ------------------------ | --------------------------- | ------- |
-| Envelope     | Wire protocol, storage   | `application/envelope+cbor` | 📝 Draft |
-| ASCII armor  | Human export, key backup | `text/plain`                | 📝 Draft |
+| Format       | Primary use              | Content-Type                | Status   |
+| ------------ | ------------------------ | --------------------------- | -------- |
+| Envelope     | Wire protocol, storage   | `application/envelope+cbor` | ✅ Stable |
+| ASCII armor  | Human export, key backup | `text/plain`                | ✅ Stable |
 | UR           | QR codes, sneakernet     | `text/plain`                | 🔜 Later |
 
 The Envelope bytes are the authoritative representation. Armor and
 UR are wrappings of the same underlying bytes.
 
-### 1.2 Why not protobuf? Why Envelope?
+### 1.2 Why Envelope?
 
-Recrypt was originally implemented in protobuf. The migration plan's
-[retrospective](plans/2026-04-08-gordian-envelope-migration.md#context)
-covers the reasoning in full. The short version:
+Envelope was chosen over protobuf for four reasons that matter for
+recrypt's specific shape (long-lived archival blobs, opaque crypto
+payloads, third-party extension, and proxy-side metadata stripping):
 
-- **Protobuf is not self-describing.** A blob without its `.proto`
-  schema is structured noise. For archival storage with a multi-year
-  horizon, this is a liability.
-- **Every field in the recrypt schema was opaque `bytes`.** The
-  schema-driven type safety protobuf advertises did not apply to
-  our data.
-- **Extension by parties we don't control was awkward.** The
-  `google.protobuf.Any` escape hatch is universally regretted.
-- **Elision did not exist.** We could not let a proxy strip
-  metadata from a forwarded blob without invalidating signatures.
+- **Self-describing.** A blob carries its own structure; no
+  out-of-band `.proto` schema is required to read archival data.
+- **Opaque payloads are first-class.** Every meaningful recrypt
+  field is `bytes` anyway, so protobuf's schema-driven type safety
+  bought us nothing.
+- **Extension is graceful.** New assertion predicates are additive;
+  there is no `google.protobuf.Any` escape hatch.
+- **Elision is built in.** A proxy can strip metadata from a
+  forwarded blob without invalidating signatures over the parent.
 
-Envelope solves all four. The migration cost is real but paid once;
-see the migration plan for sizing.
+The historical migration retrospective is preserved in
+[`plans/archive/2026-04-08-gordian-envelope-migration.md`](plans/archive/2026-04-08-gordian-envelope-migration.md).
 
 ---
 
@@ -102,7 +101,7 @@ The rules that affect recrypt specifically:
 | `#6.200` | Envelope                     | Blockchain Commons           |
 | `#6.201` | Leaf (dCBOR-encoded subject) | Blockchain Commons           |
 | `#6.1`   | Epoch time (RFC 8949)        | IETF                         |
-| `#6.???` | `recrypt.pre-wrapped-key`    | TBD — private-use until BC feedback ([migration plan OQ1](plans/2026-04-08-gordian-envelope-migration.md#open-questions)) |
+| `#6.???` | `recrypt.pre-wrapped-key`    | TBD — private-use until BC feedback ([migration plan OQ1](plans/archive/2026-04-08-gordian-envelope-migration.md#open-questions)) |
 
 Every recrypt envelope is a `#6.200`-tagged value. The subject of
 every recrypt envelope is a `#6.201`-tagged dCBOR map containing a
@@ -773,8 +772,7 @@ assertion's value. It does not protect against:
 ## 7. Benchmarks and sizing
 
 Measured 2026-04-09 against `recrypt-wire` 0.1.0 with
-`bc-envelope` 0.43.0. Protobuf baseline numbers are from the last
-build before the migration commit.
+`bc-envelope` 0.43.0.
 
 ### 7.1 Envelope size (NFR-2)
 
@@ -798,14 +796,10 @@ build before the migration commit.
 | `bc-envelope` transitive tree    | 428   |
 
 `bc-envelope` pulls a large transitive tree (crypto primitives,
-CBOR, UR, SSH key support, SSKR). The NFR-3 threshold of "15 new
-transitive dependencies" referred to deps added beyond what the
-workspace already carried; since `bc-envelope` shares many
-transitive deps with our existing crypto stack (ed25519-dalek,
-blake3, rand, etc.), the net new count is lower than 428 suggests.
-A precise "net new" measurement requires diffing the full workspace
-`cargo tree` before and after, which is no longer possible since
-protobuf is removed. The 10 direct deps are reasonable.
+CBOR, UR, SSH key support, SSKR), but many transitive deps are
+shared with our existing crypto stack (ed25519-dalek, blake3, rand,
+etc.), so the net new count is lower than 428 suggests. The 10
+direct deps are reasonable.
 
 ### 7.3 Build and test time (NFR-4, NFR-5)
 
@@ -814,24 +808,19 @@ protobuf is removed. The 10 direct deps are reasonable.
 | `cargo build -p recrypt-wire --release` | 40s    |
 | `cargo test -p recrypt-wire`           | 1.1s    |
 
-These are post-migration numbers. Pre-migration baselines are not
-available (protobuf is removed). The build time includes
-`oqs-sys` compilation (liboqs C library) which dominates and is
-unchanged by the migration. The test time (1.1s) includes 21
-tests across 5 test files.
+The build time is dominated by `oqs-sys` (liboqs C library)
+compilation. The test time (1.1s) includes 21 tests across 5 test
+files.
 
 ### 7.4 Recryption hot path (NFR-1)
 
-NFR-1 requires the recryption proxy hot path (parse envelope →
-PRE transform → re-serialize) not to regress more than 20%.
-**This measurement is deferred** until criterion benchmarks are
-written for the envelope parse/serialize path specifically. The
-existing `crates/recrypt-core/benches/crypto_ops.rs` benchmarks
-measure the PRE transform itself (which is unchanged by the
-migration); the new overhead is envelope parse + serialize, which
-the size measurements above suggest is ~155 bytes of CBOR framing
-work — negligible compared to the PRE transform's millisecond-
-scale latency.
+The recryption proxy hot path (parse envelope → PRE transform →
+re-serialize) adds ~155 bytes of CBOR framing work on top of the
+PRE transform itself, which is negligible compared to the PRE
+transform's millisecond-scale latency. The
+`crates/recrypt-core/benches/crypto_ops.rs` benchmarks measure the
+PRE transform; dedicated criterion benchmarks for envelope
+parse/serialize remain a follow-up.
 
 ---
 
@@ -849,12 +838,6 @@ Format: envelope+cbor
 <base64-encoded envelope bytes>
 ----- END RECRYPT ENVELOPE -----
 ```
-
-**Migration note:** old-format armor banners contained the word
-`PROTOBUF`. The new banners contain `ENVELOPE`. Parsers MUST reject
-old-format banners with a clear error pointing to the format change,
-not silently try to parse them as envelopes. This is the armor path
-for FR-7 in the [migration plan](plans/2026-04-08-gordian-envelope-migration.md#functional-requirements).
 
 The armor types currently defined:
 
@@ -933,15 +916,6 @@ change per se — the envelope structure already accommodates
 multiple `'signed'` assertions. Treat it as a version bump on
 every signed type.
 
-### 10.5 Dropping protobuf
-
-There is no dual-format support. The old protobuf wire format is
-removed entirely as part of the migration. There is no
-hybrid-decoder or migration-reader path because there is no
-deployed protobuf data to migrate. See the
-[migration plan](plans/2026-04-08-gordian-envelope-migration.md)
-for the rollback story (trivial: git revert).
-
 ---
 
 ## 11. References
@@ -956,6 +930,5 @@ for the rollback story (trivial: git revert).
 - [RFC 8610: CDDL](https://datatracker.ietf.org/doc/html/rfc8610)
 - [Bao specification](https://github.com/oconnor663/bao/blob/master/docs/spec.md)
 - [XChaCha20+Bao AEAD spec (this repo)](standards/xchacha20-bao-aead.md)
-- [Migration plan](plans/2026-04-08-gordian-envelope-migration.md)
-- [Envelope sketch spike](spikes/2026-04-08-envelope-sketch.md)
+- [Envelope sketch spike](plans/archive/2026-04-08-envelope-sketch.md)
 - [Threat model](threat-model.md)

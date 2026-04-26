@@ -155,13 +155,10 @@ networking, FFI specifics, or the chunking of large files.
 
 ---
 
-### `recrypt-wire` — wire format (renamed from `recrypt-proto`)
+### `recrypt-wire` — wire format
 
-> **Migration note:** this crate was renamed from `recrypt-proto` as part
-> of the [Gordian Envelope migration](plans/2026-04-08-gordian-envelope-migration.md).
-> The protobuf schema, `prost` codegen, and generated types are removed.
-> The wire format is now [Gordian Envelope](https://developer.blockchaincommons.com/envelope/)
-> (dCBOR). See [wire-protocol.md](wire-protocol.md) for the full spec.
+The wire format is [Gordian Envelope](https://developer.blockchaincommons.com/envelope/)
+(dCBOR). See [wire-protocol.md](wire-protocol.md) for the full spec.
 
 **Owns:**
 
@@ -171,12 +168,11 @@ networking, FFI specifics, or the chunking of large files.
   is a Gordian `Envelope` (option B — envelope-native domain types).
 
 - **Recrypt-specific CBOR tags** — the tag for `recrypt.pre-wrapped-key`
-  (TBD pending [BC team feedback](spikes/2026-04-08-bc-team-email-draft.md);
-  private-use tag until then).
+  is currently a private-use tag, pending Blockchain Commons assignment.
 
 - **`armor.rs`** — ASCII-armor variants (PublicKey, SecretKey, Capability,
   RecryptKey, EncryptedFile) with PGP-style headers and base64-wrapped
-  envelope payloads. Banners updated from `PROTOBUF` to `ENVELOPE`.
+  envelope payloads.
 
 - **Multi-signature helpers** — Ed25519 + ML-DSA-87 hybrid signing via
   `Envelope::add_signatures`, and the "all must verify" verifier.
