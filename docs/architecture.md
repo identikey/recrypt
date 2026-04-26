@@ -449,10 +449,10 @@ multi-signatures on anything it receives.
 | HTTP API reference       | [http-api-reference.md](http-api-reference.md)          |
 | Storage + chunking       | [storage-design.md](storage-design.md)                  |
 | Blake3/Bao verification  | [verification-architecture.md](verification-architecture.md) |
-| Hashing conventions      | [hashing-standard.md](hashing-standard.md)              |
+| Hashing conventions      | [standards/hashing-standard.md](standards/hashing-standard.md) |
 | OpenFHE threading        | [openfhe-threading-model.md](openfhe-threading-model.md) |
 | Threat model (stub)      | [threat-model.md](threat-model.md)                      |
-| Phase roadmap            | [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)        |
+| Phase roadmap (archived) | [plans/archive/](plans/archive/)                        |
 | Phase plans              | [plans/](plans/)                                        |
 
 ---

@@ -233,7 +233,7 @@ When implementing a dCBOR encoder (Zig side):
 
 ## See also
 
-- [Wire Protocol: dCBOR section](wire-protocol.md#21-dcbor) — detailed dCBOR rules for all recrypt types
+- [Wire Protocol: dCBOR section](../wire-protocol.md#21-dcbor) — detailed dCBOR rules for all recrypt types
 - [Wallet Envelope Format: Identity section](wallet-envelope-format.md#32-identity-envelope) — full identity envelope structure
 - [RFC 8949 §4.2: Preferred Encoding](https://datatracker.ietf.org/doc/html/rfc8949#section-4.2)
 - [Blockchain Commons dCBOR](https://cborbook.com/part_2/cbor_cde_dcbor.html)

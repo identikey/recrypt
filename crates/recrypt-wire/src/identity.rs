@@ -85,7 +85,7 @@ impl Identity {
     /// pre-public, etc.) and not just the subject's fingerprint.
     ///
     /// Wire shape: `wrap(identity-envelope) + 'signed': Signature(ed25519, ...)`.
-    /// See `docs/identity-self-signature.md` for the full spec.
+    /// See `docs/standards/identity-self-signature.md` for the full spec.
     ///
     /// Requires `self.ed25519_secret.is_some()`.
     pub fn sign_self_ed25519(&self) -> WireResult<Vec<u8>> {

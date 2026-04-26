@@ -163,22 +163,35 @@ recrypt share download <share-id> --output myfile.txt
 
 ## Documentation
 
-- **[docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md)** - Master implementation plan
-- **python-prototype/docs/** - Original specifications (archived)
+Start with [`docs/architecture.md`](docs/architecture.md) for the
+system overview. Historical phase plans are in
+[`docs/plans/archive/`](docs/plans/archive/).
 
-### Design Documents
+### Design documents
 
-| Document                                 | Description                         |
-| ---------------------------------------- | ----------------------------------- |
-| `docs/hybrid-encryption-architecture.md` | KEM-DEM with pluggable PRE backends |
-| `docs/pre-backend-traits.md`             | `PreBackend` trait hierarchy        |
-| `docs/storage-design.md`                 | S3 + auth service architecture      |
+| Document                                 | Description                            |
+| ---------------------------------------- | -------------------------------------- |
+| `docs/architecture.md`                   | System overview, per-crate ownership   |
+| `docs/hybrid-encryption-architecture.md` | KEM-DEM with pluggable PRE backends    |
+| `docs/pre-backend-traits.md`             | `PreBackend` trait hierarchy           |
+| `docs/storage-design.md`                 | S3 + auth service architecture         |
 | `docs/wire-protocol.md`                  | Gordian Envelope + ASCII armor formats |
-| `docs/verification-architecture.md`      | Blake3/Bao streaming verification   |
-| `docs/hashing-standard.md`               | Blake3 standardization              |
-| `docs/non-determinism.md`                | Crypto testing strategy             |
-| `docs/hdprint-specification.md`          | HDprint identifier system           |
-| `docs/hmac-analysis.md`                  | HMAC usage (HDprint only)           |
+| `docs/verification-architecture.md`      | Blake3/Bao streaming verification      |
+| `docs/threat-model.md`                   | Threat model and security commitments  |
+| `docs/security-tiers.md`                 | Security tier hierarchy                |
+| `docs/non-determinism.md`                | Crypto testing strategy                |
+| `docs/openfhe-threading-model.md`        | OpenFHE global-state threading rules   |
+
+### Standards (interop specs)
+
+| Document                                       | Description                                |
+| ---------------------------------------------- | ------------------------------------------ |
+| `docs/standards/recrypt-key-material-v1.md`    | Key material serialization                 |
+| `docs/standards/xchacha20-bao-aead.md`         | Streaming AEAD construction                |
+| `docs/standards/wallet-envelope-format.md`     | Encrypted wallet envelope format           |
+| `docs/standards/identity-self-signature.md`    | Identity self-signature wire shape         |
+| `docs/standards/dcbor-determinism.md`          | dCBOR interop contract                     |
+| `docs/standards/hashing-standard.md`           | Blake3 standardization                     |
 
 ---
 

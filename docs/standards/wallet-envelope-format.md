@@ -3,7 +3,7 @@
 **Status:** Design proposal
 **Date:** 2026-04-09
 **Supersedes:** The JSON-in-XChaCha20-Poly1305 wallet format in `recrypt-cli/src/wallet/format.rs`
-**Follows:** [wire-protocol.md](wire-protocol.md) conventions (subject/assertion rule, salting policy, multi-sig)
+**Follows:** [wire-protocol.md](../wire-protocol.md) conventions (subject/assertion rule, salting policy, multi-sig)
 
 ---
 
@@ -38,7 +38,7 @@ The wallet is always encrypted at rest. Why not just use a flat CBOR map?
 
 ## 3. Envelope structure
 
-Shown in CBOR diagnostic notation, following [wire-protocol.md](wire-protocol.md) conventions.
+Shown in CBOR diagnostic notation, following [wire-protocol.md](../wire-protocol.md) conventions.
 
 ### 3.1 Top-level wallet envelope
 
@@ -184,7 +184,7 @@ Offset  Size  Field
 
 ## 6. Determinism and round-trip guarantee
 
-The wallet envelope MUST produce byte-identical output when re-serialized without modification. This is guaranteed by dCBOR's deterministic encoding rules (see [wire-protocol.md §2.1](wire-protocol.md#21-dcbor)).
+The wallet envelope MUST produce byte-identical output when re-serialized without modification. This is guaranteed by dCBOR's deterministic encoding rules (see [wire-protocol.md §2.1](../wire-protocol.md#21-dcbor)).
 
 However, a **save-after-load without changes** will NOT produce an identical *file* because the outer shell uses a fresh random nonce on every write. The envelope bytes inside the ciphertext are identical; the ciphertext itself differs. This is by design — nonce reuse in XChaCha20-Poly1305 is catastrophic.
 
@@ -295,7 +295,7 @@ The outer shell (encryption/decryption) stays in `wallet/format.rs` — it just 
 
 ## See also
 
-- [Wire Protocol](wire-protocol.md) — conventions this format follows
+- [Wire Protocol](../wire-protocol.md) — conventions this format follows
 - [dCBOR Determinism](dcbor-determinism.md) — interop contract for identity envelope serialization
-- [Security Tiers](security-tiers.md) — keyspace membership and capability extensions
+- [Security Tiers](../security-tiers.md) — keyspace membership and capability extensions
 - [Identity Self-Signature](identity-self-signature.md) — spec for `sign_self_ed25519` / `verify_self_signature_ed25519`
