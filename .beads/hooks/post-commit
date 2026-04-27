@@ -1,0 +1,21 @@
+#!/bin/bash
+# HumanLayer thoughts auto-sync
+# Version: 3
+
+# Check if we're in a worktree
+if [ -f .git ]; then
+    # Skip auto-sync in worktrees to avoid repository boundary confusion
+    # See: https://linear.app/humanlayer/issue/ENG-1455
+    exit 0
+fi
+
+# Get the commit message
+COMMIT_MSG=$(git log -1 --pretty=%B)
+
+# Auto-sync thoughts after each commit (only in non-worktree repos)
+humanlayer thoughts sync --message "Auto-sync with commit: $COMMIT_MSG" >/dev/null 2>&1 &
+
+# Call any existing post-commit hook
+if [ -f "/Users/dukejones/work/Identikey/recrypt/.git/hooks/post-commit.old" ]; then
+    "/Users/dukejones/work/Identikey/recrypt/.git/hooks/post-commit.old" "$@"
+fi

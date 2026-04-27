@@ -41,3 +41,8 @@ thoughts/
 # Buf generated code (use buf.build registry instead)
 gen/
 .omc
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key

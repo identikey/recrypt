@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "recrypt",
+  "project_id": "f07f4554-9499-4073-af95-698a758a60a8"
+}
