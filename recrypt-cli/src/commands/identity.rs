@@ -270,23 +270,23 @@ async fn show_identity(name: Option<String>, ctx: &Context) -> Result<()> {
             pre_public: String,
             pre_backend: String,
         }
-        let ed25519_b58 = bs58::encode(&identity.ed25519.public).into_string();
-        let ml_dsa_b58 = bs58::encode(&identity.ml_dsa.public).into_string();
-        let pre_b58 = bs58::encode(&identity.pre.public).into_string();
+        let ed25519_enc = encode_key_display(&identity.ed25519.public);
+        let ml_dsa_enc = encode_key_display(&identity.ml_dsa.public);
+        let pre_enc = encode_key_display(&identity.pre.public);
 
         print_json(&Output {
             name: identity_name,
             fingerprint: bs58::encode(identity.fingerprint).into_string(),
             created_at: identity.created_at,
-            ed25519_public: ed25519_b58,
-            ml_dsa_public: ml_dsa_b58,
-            pre_public: pre_b58,
+            ed25519_public: ed25519_enc,
+            ml_dsa_public: ml_dsa_enc,
+            pre_public: pre_enc,
             pre_backend: identity.pre_backend.to_string(),
         })?;
     } else {
-        let ed25519_b58 = bs58::encode(&identity.ed25519.public).into_string();
-        let ml_dsa_b58 = bs58::encode(&identity.ml_dsa.public).into_string();
-        let pre_b58 = bs58::encode(&identity.pre.public).into_string();
+        let ed25519_enc = encode_key_display(&identity.ed25519.public);
+        let ml_dsa_enc = encode_key_display(&identity.ml_dsa.public);
+        let pre_enc = encode_key_display(&identity.pre.public);
 
         println!("{}", format!("Identity: {identity_name}").bold());
         println!("  {}: {}", "Fingerprint".dimmed(), bs58::encode(identity.fingerprint).into_string());
@@ -300,17 +300,17 @@ async fn show_identity(name: Option<String>, ctx: &Context) -> Result<()> {
         println!(
             "    {}: {}",
             "ED25519".dimmed(),
-            truncate(&ed25519_b58, 32)
+            truncate(&ed25519_enc, 32)
         );
         println!(
             "    {}: {}",
             "ML-DSA-87".dimmed(),
-            truncate(&ml_dsa_b58, 32)
+            truncate(&ml_dsa_enc, 32)
         );
         println!(
             "    {}: {}",
             "PRE".dimmed(),
-            truncate(&pre_b58, 32)
+            truncate(&pre_enc, 32)
         );
     }
 
@@ -609,5 +609,16 @@ fn truncate(s: &str, max_len: usize) -> String {
         s.to_string()
     } else {
         format!("{}...", &s[..max_len])
+    }
+}
+
+/// Encode a key for display per docs/standards/encoding-conventions.md §4:
+/// short stable IDs (≤256 B) → base58; multi-KB blobs → base64. base58 is
+/// O(n²); never feed it ML-DSA or lattice-PRE keys.
+fn encode_key_display(bytes: &[u8]) -> String {
+    if bytes.len() <= 256 {
+        bs58::encode(bytes).into_string()
+    } else {
+        base64::engine::general_purpose::STANDARD.encode(bytes)
     }
 }
