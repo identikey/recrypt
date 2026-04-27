@@ -1,4 +1,5 @@
 pub mod credential;
+pub mod envelope;
 pub mod format;
 pub mod storage;
 

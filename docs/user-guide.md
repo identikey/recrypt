@@ -497,6 +497,19 @@ The cached key may be stale. Clear it and re-enter your password:
 - **macOS**: Delete "recrypt-wallet-key" in Keychain Access
 - **Linux**: Use `secret-tool clear service recrypt`
 
+### "Wallet format v1 is no longer supported"
+
+The wallet on disk uses the legacy JSON-in-XChaCha20-Poly1305 format. There is
+no migration path — back up the file if you need it, then create a fresh
+wallet:
+
+```bash
+recrypt identity new
+```
+
+The current format is the Gordian Envelope (dCBOR) wallet body documented in
+[`docs/standards/wallet-envelope-format.md`](standards/wallet-envelope-format.md).
+
 ### "Connection refused" / Server errors
 
 1. Check server is running: `curl http://localhost:7222/health`

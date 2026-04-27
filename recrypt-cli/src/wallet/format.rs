@@ -5,28 +5,31 @@ use chacha20poly1305::{
     XChaCha20Poly1305,
 };
 use rand::RngCore;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
+use super::envelope;
+
 const MAGIC: &[u8; 5] = b"IKEYW";
-const VERSION: u8 = 1;
+const VERSION: u8 = 2;
+
+/// Error message for v1 wallets — exact string per wallet-envelope-format.md §7.
+const V1_REJECTION_MSG: &str =
+    "Wallet format v1 is no longer supported. Create a new wallet with `recrypt identity new`.";
 
 // Argon2 params (OWASP recommendations)
 const ARGON2_M_COST: u32 = 65536; // 64 MiB
 const ARGON2_T_COST: u32 = 3; // 3 iterations
 const ARGON2_P_COST: u32 = 4; // 4 parallelism
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Debug)]
 pub struct WalletData {
-    pub version: u8,
     pub identities: HashMap<String, Identity>,
     /// Active identity name — lives in the wallet, single source of truth.
-    #[serde(default)]
     pub active_identity: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct Identity {
     pub created_at: u64,
     /// Blake3(ed25519_public). Raw bytes; encode with bs58 for display/wire.
@@ -34,16 +37,10 @@ pub struct Identity {
     pub ed25519: KeyPair,
     pub ml_dsa: KeyPair,
     pub pre: KeyPair,
-    /// PRE backend used for this identity (defaults to "mock" for backward compat)
-    #[serde(default = "default_backend")]
     pub pre_backend: recrypt_core::pre::BackendId,
 }
 
-fn default_backend() -> recrypt_core::pre::BackendId {
-    recrypt_core::pre::BackendId::Mock
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, Zeroize, ZeroizeOnDrop)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct KeyPair {
     #[zeroize(skip)]
     pub public: Vec<u8>,
@@ -53,7 +50,6 @@ pub struct KeyPair {
 impl WalletData {
     pub fn new() -> Self {
         Self {
-            version: 1,
             identities: HashMap::new(),
             active_identity: None,
         }
@@ -69,7 +65,7 @@ impl Default for WalletData {
 /// Encrypt wallet with password (for tests and backward compat)
 #[cfg(test)]
 pub fn encrypt_wallet(data: &WalletData, password: &str) -> Result<Vec<u8>> {
-    let json = zeroize::Zeroizing::new(serde_json::to_vec(data)?);
+    let plaintext = zeroize::Zeroizing::new(envelope::to_envelope(data)?);
 
     // Generate salt and nonce
     let mut salt = [0u8; 32];
@@ -89,7 +85,7 @@ pub fn encrypt_wallet(data: &WalletData, password: &str) -> Result<Vec<u8>> {
     // Encrypt with XChaCha20-Poly1305
     let cipher = XChaCha20Poly1305::new_from_slice(&key)?;
     let ciphertext = cipher
-        .encrypt(&nonce.into(), json.as_slice())
+        .encrypt(&nonce.into(), plaintext.as_slice())
         .map_err(|e| anyhow!("Encryption failed: {e}"))?;
 
     // Assemble: magic || version || salt || nonce || ciphertext (includes tag)
@@ -111,13 +107,23 @@ pub fn decrypt_wallet(data: &[u8], password: &str) -> Result<WalletData> {
     decrypt_wallet_with_key(data, &key)
 }
 
-/// Extract salt from encrypted wallet header (for key derivation)
+/// Extract salt from encrypted wallet header (for key derivation).
+///
+/// Also checks the magic and version bytes, returning the spec'd error
+/// for v1 wallets so callers can avoid wasting an Argon2 derivation.
 pub fn extract_salt(data: &[u8]) -> Result<[u8; 32]> {
     if data.len() < 5 + 1 + 32 {
         return Err(anyhow!("Wallet file too short for salt extraction"));
     }
     if &data[0..5] != MAGIC {
         return Err(anyhow!("Invalid wallet file (bad magic)"));
+    }
+    let version = data[5];
+    if version == 1 {
+        return Err(anyhow!(V1_REJECTION_MSG));
+    }
+    if version != VERSION {
+        return Err(anyhow!("Unsupported wallet version: {version}"));
     }
     let mut salt = [0u8; 32];
     salt.copy_from_slice(&data[6..38]);
@@ -145,6 +151,9 @@ pub fn decrypt_wallet_with_key(data: &[u8], key: &[u8; 32]) -> Result<WalletData
         return Err(anyhow!("Invalid wallet file (bad magic)"));
     }
     let version = data[5];
+    if version == 1 {
+        return Err(anyhow!(V1_REJECTION_MSG));
+    }
     if version != VERSION {
         return Err(anyhow!("Unsupported wallet version: {version}"));
     }
@@ -160,8 +169,7 @@ pub fn decrypt_wallet_with_key(data: &[u8], key: &[u8; 32]) -> Result<WalletData
             .map_err(|_| anyhow!("Decryption failed (wrong key?)"))?,
     );
 
-    let wallet: WalletData = serde_json::from_slice(&plaintext)?;
-    Ok(wallet)
+    envelope::from_envelope(&plaintext)
 }
 
 /// Encrypt wallet with pre-derived key and salt (no password prompt needed)
@@ -170,14 +178,14 @@ pub fn encrypt_wallet_with_key(
     key: &[u8; 32],
     salt: &[u8; 32],
 ) -> Result<Vec<u8>> {
-    let json = zeroize::Zeroizing::new(serde_json::to_vec(data)?);
+    let plaintext = zeroize::Zeroizing::new(envelope::to_envelope(data)?);
 
     let mut nonce = [0u8; 24];
     rand::thread_rng().fill_bytes(&mut nonce);
 
     let cipher = XChaCha20Poly1305::new_from_slice(key)?;
     let ciphertext = cipher
-        .encrypt(&nonce.into(), json.as_slice())
+        .encrypt(&nonce.into(), plaintext.as_slice())
         .map_err(|e| anyhow!("Encryption failed: {e}"))?;
 
     let mut output = Vec::with_capacity(5 + 1 + 32 + 24 + ciphertext.len());
@@ -191,38 +199,41 @@ pub fn encrypt_wallet_with_key(
 }
 
 #[cfg(test)]
+pub(crate) fn test_identity(seed: u8) -> Identity {
+    let ed_public = vec![seed; 32];
+    let fingerprint = *blake3::hash(&ed_public).as_bytes();
+    Identity {
+        created_at: 1_704_067_200,
+        fingerprint,
+        ed25519: KeyPair {
+            public: ed_public,
+            secret: vec![seed.wrapping_add(1); 32],
+        },
+        ml_dsa: KeyPair {
+            public: vec![seed.wrapping_add(2); 16],
+            secret: vec![seed.wrapping_add(3); 32],
+        },
+        pre: KeyPair {
+            public: vec![seed.wrapping_add(4); 8],
+            secret: vec![seed.wrapping_add(5); 16],
+        },
+        pre_backend: recrypt_core::pre::BackendId::Mock,
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_wallet_encryption_roundtrip() {
         let mut wallet = WalletData::new();
-        wallet.identities.insert(
-            "test".to_string(),
-            Identity {
-                created_at: 1704067200,
-                fingerprint: [0u8; 32],
-                ed25519: KeyPair {
-                    public: b"test-pub".to_vec(),
-                    secret: b"test-sec".to_vec(),
-                },
-                ml_dsa: KeyPair {
-                    public: b"test-pub".to_vec(),
-                    secret: b"test-sec".to_vec(),
-                },
-                pre: KeyPair {
-                    public: b"test-pub".to_vec(),
-                    secret: b"test-sec".to_vec(),
-                },
-                pre_backend: recrypt_core::pre::BackendId::Mock,
-            },
-        );
+        wallet.identities.insert("test".to_string(), test_identity(1));
 
         let password = "test-password-123";
         let encrypted = encrypt_wallet(&wallet, password).unwrap();
         let decrypted = decrypt_wallet(&encrypted, password).unwrap();
 
-        assert_eq!(wallet.version, decrypted.version);
         assert_eq!(wallet.identities.len(), decrypted.identities.len());
     }
 
@@ -269,26 +280,7 @@ mod tests {
     #[test]
     fn test_encrypt_decrypt_with_key() {
         let mut wallet = WalletData::new();
-        wallet.identities.insert(
-            "test".to_string(),
-            Identity {
-                created_at: 1704067200,
-                fingerprint: [0u8; 32],
-                ed25519: KeyPair {
-                    public: b"ed-pub".to_vec(),
-                    secret: b"ed-sec".to_vec(),
-                },
-                ml_dsa: KeyPair {
-                    public: b"ml-pub".to_vec(),
-                    secret: b"ml-sec".to_vec(),
-                },
-                pre: KeyPair {
-                    public: b"pre-pub".to_vec(),
-                    secret: b"pre-sec".to_vec(),
-                },
-                pre_backend: recrypt_core::pre::BackendId::Mock,
-            },
-        );
+        wallet.identities.insert("test".to_string(), test_identity(7));
 
         let key = [0xABu8; 32];
         let salt = [0xCDu8; 32];
@@ -298,5 +290,77 @@ mod tests {
 
         assert_eq!(wallet.identities.len(), decrypted.identities.len());
         assert!(decrypted.identities.contains_key("test"));
+    }
+
+    #[test]
+    fn test_v1_wallet_rejected_with_spec_string() {
+        // Build a v1-byte wallet header (magic + version=1 + zeroed salt/nonce/16B tag).
+        let mut data = Vec::new();
+        data.extend_from_slice(MAGIC);
+        data.push(1u8);
+        data.extend_from_slice(&[0u8; 32]); // salt
+        data.extend_from_slice(&[0u8; 24]); // nonce
+        data.extend_from_slice(&[0u8; 16]); // ciphertext (any 16+ bytes)
+
+        let result = decrypt_wallet_with_key(&data, &[0u8; 32]);
+        let err = result.unwrap_err();
+        let msg = err.to_string();
+        assert_eq!(
+            msg,
+            "Wallet format v1 is no longer supported. Create a new wallet with `recrypt identity new`."
+        );
+
+        // Same check via the salt-extract pre-Argon2 fast path.
+        let result = extract_salt(&data);
+        let msg = result.unwrap_err().to_string();
+        assert_eq!(
+            msg,
+            "Wallet format v1 is no longer supported. Create a new wallet with `recrypt identity new`."
+        );
+    }
+
+    #[test]
+    fn test_unknown_version_rejected() {
+        let mut data = Vec::new();
+        data.extend_from_slice(MAGIC);
+        data.push(99u8);
+        data.extend_from_slice(&[0u8; 32]);
+        data.extend_from_slice(&[0u8; 24]);
+        data.extend_from_slice(&[0u8; 16]);
+
+        let err = decrypt_wallet_with_key(&data, &[0u8; 32]).unwrap_err();
+        assert_eq!(err.to_string(), "Unsupported wallet version: 99");
+
+        let err = extract_salt(&data).unwrap_err();
+        assert_eq!(err.to_string(), "Unsupported wallet version: 99");
+    }
+
+    #[test]
+    fn test_active_identity_preserved_through_aead() {
+        let mut wallet = WalletData::new();
+        wallet.identities.insert("alice".to_string(), test_identity(10));
+        wallet.identities.insert("bob".to_string(), test_identity(20));
+        wallet.active_identity = Some("bob".to_string());
+
+        let key = [0x33u8; 32];
+        let salt = [0x44u8; 32];
+        let encrypted = encrypt_wallet_with_key(&wallet, &key, &salt).unwrap();
+        let decrypted = decrypt_wallet_with_key(&encrypted, &key).unwrap();
+
+        assert_eq!(decrypted.active_identity, Some("bob".to_string()));
+        assert_eq!(decrypted.identities.len(), 2);
+    }
+
+    #[test]
+    fn test_tampered_ciphertext_fails_aead() {
+        let mut wallet = WalletData::new();
+        wallet.identities.insert("alice".to_string(), test_identity(50));
+        let key = [0x12u8; 32];
+        let salt = [0x34u8; 32];
+        let mut encrypted = encrypt_wallet_with_key(&wallet, &key, &salt).unwrap();
+        // Flip a bit in the ciphertext (after header bytes 0..62).
+        encrypted[80] ^= 0x01;
+        let err = decrypt_wallet_with_key(&encrypted, &key).unwrap_err();
+        assert!(err.to_string().contains("Decryption failed"));
     }
 }

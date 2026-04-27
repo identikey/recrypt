@@ -235,7 +235,7 @@ mod tests {
     use super::*;
     use crate::wallet::credential::MemoryProvider;
     use crate::wallet::format::{
-        decrypt_wallet_with_key, encrypt_wallet_with_key, Identity, KeyPair,
+        decrypt_wallet_with_key, encrypt_wallet_with_key, test_identity,
     };
     use tempfile::NamedTempFile;
 
@@ -244,26 +244,8 @@ mod tests {
         let salt = [0x24u8; 32];
 
         let mut data = WalletData::new();
-        data.identities.insert(
-            "test-identity".to_string(),
-            Identity {
-                created_at: 1704067200,
-                fingerprint: [0u8; 32],
-                ed25519: KeyPair {
-                    public: b"ed25519-pub".to_vec(),
-                    secret: b"ed25519-sec".to_vec(),
-                },
-                ml_dsa: KeyPair {
-                    public: b"mldsa-pub".to_vec(),
-                    secret: b"mldsa-sec".to_vec(),
-                },
-                pre: KeyPair {
-                    public: b"pre-pub".to_vec(),
-                    secret: b"pre-sec".to_vec(),
-                },
-                pre_backend: recrypt_core::pre::BackendId::Mock,
-            },
-        );
+        data.identities
+            .insert("test-identity".to_string(), test_identity(0x11));
 
         let encrypted = encrypt_wallet_with_key(&data, &key, &salt).unwrap();
         let file = NamedTempFile::new().unwrap();
@@ -293,26 +275,8 @@ mod tests {
 
         // Re-encrypt with password-derived key
         let mut data = WalletData::new();
-        data.identities.insert(
-            "test".to_string(),
-            Identity {
-                created_at: 1704067200,
-                fingerprint: [0u8; 32],
-                ed25519: KeyPair {
-                    public: b"p".to_vec(),
-                    secret: b"s".to_vec(),
-                },
-                ml_dsa: KeyPair {
-                    public: b"p".to_vec(),
-                    secret: b"s".to_vec(),
-                },
-                pre: KeyPair {
-                    public: b"p".to_vec(),
-                    secret: b"s".to_vec(),
-                },
-                pre_backend: recrypt_core::pre::BackendId::Mock,
-            },
-        );
+        data.identities
+            .insert("test".to_string(), test_identity(0x77));
         let encrypted = encrypt_wallet_with_key(&data, &derived_key, &salt).unwrap();
         std::fs::write(file.path(), encrypted).unwrap();
 
@@ -339,26 +303,10 @@ mod tests {
             salt: [0x24u8; 32],
         };
 
-        wallet.data.identities.insert(
-            "new-identity".to_string(),
-            Identity {
-                created_at: 1704153600,
-                fingerprint: [0u8; 32],
-                ed25519: KeyPair {
-                    public: b"pub".to_vec(),
-                    secret: b"sec".to_vec(),
-                },
-                ml_dsa: KeyPair {
-                    public: b"pub".to_vec(),
-                    secret: b"sec".to_vec(),
-                },
-                pre: KeyPair {
-                    public: b"pub".to_vec(),
-                    secret: b"sec".to_vec(),
-                },
-                pre_backend: recrypt_core::pre::BackendId::Mock,
-            },
-        );
+        wallet
+            .data
+            .identities
+            .insert("new-identity".to_string(), test_identity(0x55));
 
         // Save without password prompt (not new)
         wallet.save_with_provider(false, &provider).unwrap();

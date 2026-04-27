@@ -1,7 +1,8 @@
 # Wallet Serialization: Gordian Envelope Format
 
-**Status:** Design proposal
-**Date:** 2026-04-09
+**Status:** ✅ Stable
+**Date:** 2026-04-09 (proposal); stabilized 2026-04-27
+**Implementation:** `recrypt-cli/src/wallet/envelope.rs` (encode/decode), `recrypt-cli/src/wallet/format.rs` (outer encryption shell)
 **Supersedes:** The JSON-in-XChaCha20-Poly1305 wallet format in `recrypt-cli/src/wallet/format.rs`
 **Follows:** [wire-protocol.md](../wire-protocol.md) conventions (subject/assertion rule, salting policy, multi-sig)
 
@@ -233,63 +234,73 @@ All well within the "instant load" performance envelope. No lazy loading or stre
 
 ---
 
-## 10. Implementation sketch
+## 10. Implementation
+
+The encode/decode lives in `recrypt-cli/src/wallet/envelope.rs` as two free
+functions (the wallet stays free of `recrypt-wire` dependencies — see epic
+design notes). The outer encryption shell in `recrypt-cli/src/wallet/format.rs`
+dispatches into them in place of the previous `serde_json::{to_vec, from_slice}`
+calls.
 
 ```rust
-// In recrypt-wire: new MultiFormat impl
+// recrypt-cli/src/wallet/envelope.rs
 
-impl MultiFormat for WalletData {
-    fn envelope_type() -> &'static str {
-        "recrypt.wallet"
+pub fn to_envelope(wallet: &WalletData) -> Result<Vec<u8>>;
+pub fn from_envelope(bytes: &[u8]) -> Result<WalletData>;
+
+fn wallet_to_envelope(wallet: &WalletData) -> Result<Envelope> {
+    let mut subject = Map::new();
+    subject.insert("type", "recrypt.wallet");
+    subject.insert("format-version", 2_u32);
+
+    let mut envelope = Envelope::new(CBOR::from(subject));
+
+    if let Some(ref active) = wallet.active_identity {
+        envelope = envelope.add_assertion("active-identity", active.as_str());
     }
 
-    fn to_envelope(&self) -> WireResult<Vec<u8>> {
-        let mut subject = Map::new();
-        subject.insert("type", "recrypt.wallet");
-        subject.insert("format-version", 2_u32);
-
-        let mut envelope = Envelope::new(CBOR::from(subject));
-
-        if let Some(ref active) = self.active_identity {
-            envelope = envelope.add_assertion("active-identity", active.as_str());
-        }
-
-        for (name, identity) in &self.identities {
-            let id_envelope = identity_to_envelope(name, identity);
-            envelope = envelope.add_assertion("identity", id_envelope);
-        }
-
-        Ok(envelope.to_cbor_data())
+    // Identities iterated in name-sorted order so the encoded bytes are stable
+    // across runs even though HashMap iteration order isn't.
+    let mut names: Vec<&String> = wallet.identities.keys().collect();
+    names.sort();
+    for name in names {
+        let id_envelope = identity_to_envelope(name, &wallet.identities[name])?;
+        envelope = envelope.add_assertion("identity", id_envelope);
     }
 
-    fn from_envelope(bytes: &[u8]) -> WireResult<Self> {
-        let envelope = Envelope::try_from_cbor_data(bytes.to_vec())?;
-        // ... extract subject, verify type + version, iterate identity assertions
-    }
+    Ok(envelope)
 }
 
-fn identity_to_envelope(name: &str, id: &Identity) -> Envelope {
-    let fingerprint_bytes: Vec<u8> = /* blake3(ed25519_public) */;
+fn identity_to_envelope(name: &str, id: &Identity) -> Result<Envelope> {
+    // The fingerprint MUST equal Blake3(ed25519-public). We verify on both
+    // encode (catch construction errors) and decode (catch tampering).
+    let expected = blake3::hash(&id.ed25519.public);
+    if id.fingerprint != *expected.as_bytes() {
+        return Err(anyhow!("fingerprint does not match Blake3(ed25519-public)"));
+    }
 
     let mut subject = Map::new();
     subject.insert("type", "recrypt.identity");
     subject.insert("format-version", 1_u32);
-    subject.insert("fingerprint", ByteString::from(fingerprint_bytes));
+    subject.insert("fingerprint", ByteString::from(id.fingerprint.to_vec()));
 
-    Envelope::new(CBOR::from(subject))
+    Ok(Envelope::new(CBOR::from(subject))
         .add_assertion("name", name)
-        .add_assertion("created", /* CBOR tag 1 epoch */)
-        .add_assertion("ed25519-public", ByteString::from(id.ed25519_pk.clone()))
-        .add_assertion("ed25519-secret", ByteString::from(id.ed25519_sk.clone()))
-        .add_assertion("ml-dsa-public",  ByteString::from(id.ml_dsa_pk.clone()))
-        .add_assertion("ml-dsa-secret",  ByteString::from(id.ml_dsa_sk.clone()))
-        .add_assertion("pre-backend",    backend_to_string(id.pre_backend))
-        .add_assertion("pre-public",     ByteString::from(id.pre_pk.clone()))
-        .add_assertion("pre-secret",     ByteString::from(id.pre_sk.clone()))
+        .add_assertion("created", CBOR::to_tagged_value(Tag::with_value(1), id.created_at))
+        .add_assertion("ed25519-public", ByteString::from(id.ed25519.public.clone()))
+        .add_assertion("ed25519-secret", ByteString::from(id.ed25519.secret.clone()))
+        .add_assertion("ml-dsa-public",  ByteString::from(id.ml_dsa.public.clone()))
+        .add_assertion("ml-dsa-secret",  ByteString::from(id.ml_dsa.secret.clone()))
+        .add_assertion("pre-backend",    id.pre_backend.to_string())
+        .add_assertion("pre-public",     ByteString::from(id.pre.public.clone()))
+        .add_assertion("pre-secret",     ByteString::from(id.pre.secret.clone())))
 }
 ```
 
-The outer shell (encryption/decryption) stays in `wallet/format.rs` — it just dispatches to `WalletData::to_envelope()` / `WalletData::from_envelope()` instead of `serde_json`.
+The outer shell (encryption/decryption) in `wallet/format.rs` reads the
+version byte before deriving the Argon2 key, returning the §7 v1 rejection
+string immediately if `version == 1` to avoid wasting a 64-MiB derivation
+on a definitely-incompatible file.
 
 ---
 
