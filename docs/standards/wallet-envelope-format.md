@@ -297,5 +297,6 @@ The outer shell (encryption/decryption) stays in `wallet/format.rs` — it just 
 
 - [Wire Protocol](../wire-protocol.md) — conventions this format follows
 - [dCBOR Determinism](dcbor-determinism.md) — interop contract for identity envelope serialization
+- [Encoding Conventions](encoding-conventions.md) — normative rules for raw bytes / base58 / base64 / hex
 - [Security Tiers](../security-tiers.md) — keyspace membership and capability extensions
 - [Identity Self-Signature](identity-self-signature.md) — spec for `sign_self_ed25519` / `verify_self_signature_ed25519`

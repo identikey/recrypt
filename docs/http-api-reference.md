@@ -65,9 +65,12 @@ trailing field is always the nonce string exactly as it appears in the
 | `GET    /accounts/{fp}/shares`        | `LIST_SHARES` | `LIST_SHARES:{fingerprint}:{nonce}`                              |
 
 **Field encodings** (used in both the body/path values and the canonical
-message string):
+message string). See [Encoding Conventions](standards/encoding-conventions.md)
+for the project-wide rules:
 
 - `ed25519_pk`, `ml_dsa_pk`, `pre_pk` — base58-encoded raw public-key bytes
+  (note: `ml_dsa_pk` and lattice `pre_pk` are multi-KB and should migrate to
+  base64 in a future protocol version — see encoding-conventions §5)
 - `fingerprint`, `from_fingerprint`, `to_fingerprint`, `requester_fingerprint`
   — base58 of `blake3(ed25519_pk_bytes)`
 - `file_hash` — base58 of `blake3(ciphertext_bytes)`
