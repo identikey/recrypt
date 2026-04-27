@@ -1,17 +1,29 @@
 //! Gordian Envelope encode/decode for wallet body.
 //!
-//! Spec: docs/standards/wallet-envelope-format.md (§3.1, §3.2).
+//! Spec: docs/standards/wallet-envelope-format.md (§3.1, §3.2, §8).
 //!
 //! Each identity inside the wallet is encoded by `recrypt_wire::Identity` —
 //! the same encoder used for on-the-wire identity envelopes. This guarantees
 //! the bytes for a given identity are byte-identical whether the identity is
 //! sitting in a wallet on disk or being shipped over HTTP. See
 //! `recrypt-cli/src/wallet/envelope.rs::tests::wallet_identity_bytes_match_wire`.
+//!
+//! ## §8 forward-compatibility: unknown assertions
+//!
+//! The wallet envelope decoder collects any wallet-level assertion whose
+//! predicate is not in [`KNOWN_PREDICATES`] into `WalletData::unknown_assertions`,
+//! and re-emits them in their original order on encode. Identity-level unknowns
+//! are round-tripped through `recrypt_wire::Identity::unknown_assertions`,
+//! which uses the same pattern in `crates/recrypt-wire/src/identity.rs`.
+//! This preserves additive spec extensions (e.g. `keyspace-membership`,
+//! `recovery-share`) across a load+save by an older client that doesn't
+//! understand them.
 
 use anyhow::{anyhow, Context as _, Result};
 use bc_envelope::prelude::*;
 use std::collections::HashMap;
 use std::str::FromStr;
+use std::sync::OnceLock;
 
 use recrypt_core::pre::BackendId;
 use recrypt_wire::{Identity as WireIdentity, MlDsaKeyPair, MultiFormat, PreKeyMaterial};
@@ -20,6 +32,21 @@ use super::format::{Identity, KeyPair, WalletData};
 
 const WALLET_TYPE: &str = "recrypt.wallet";
 const WALLET_FORMAT_VERSION: u32 = 2;
+
+/// Wallet-level predicates the encoder/decoder recognizes. Any other predicate
+/// is treated as an unknown forward-compat assertion (§8) and round-tripped
+/// verbatim via `WalletData::unknown_assertions`.
+const KNOWN_PREDICATES: &[&str] = &["active-identity", "identity"];
+
+fn known_predicate_digests() -> &'static [Digest] {
+    static CELL: OnceLock<Vec<Digest>> = OnceLock::new();
+    CELL.get_or_init(|| {
+        KNOWN_PREDICATES
+            .iter()
+            .map(|p| Envelope::new(*p).digest())
+            .collect()
+    })
+}
 
 /// Encode a wallet to dCBOR envelope bytes.
 pub fn to_envelope(wallet: &WalletData) -> Result<Vec<u8>> {
@@ -52,6 +79,15 @@ fn wallet_to_envelope(wallet: &WalletData) -> Result<Envelope> {
         let identity = &wallet.identities[name];
         let id_envelope = identity_to_envelope(name, identity)?;
         envelope = envelope.add_assertion("identity", id_envelope);
+    }
+
+    // Re-emit unknown wallet-level assertions in their original order so
+    // additive spec extensions (§8) survive a load+save round-trip.
+    for (pred, obj) in &wallet.unknown_assertions {
+        let assertion = Envelope::new_assertion(pred.clone(), obj.clone());
+        envelope = envelope
+            .add_assertion_envelope(assertion)
+            .map_err(|e| anyhow!("add unknown wallet assertion: {e}"))?;
     }
 
     Ok(envelope)
@@ -88,12 +124,22 @@ fn wallet_from_envelope(envelope: &Envelope) -> Result<WalletData> {
         .extract_optional_object_for_predicate::<String>("active-identity")
         .unwrap_or(None);
 
+    let known = known_predicate_digests();
     let mut identities: HashMap<String, Identity> = HashMap::new();
+    let mut unknown_assertions: Vec<(Envelope, Envelope)> = Vec::new();
     for assertion in envelope.assertions() {
-        let pred = match assertion.as_predicate() {
-            Some(p) => p,
-            None => continue,
+        let (pred, obj) = match (assertion.as_predicate(), assertion.as_object()) {
+            (Some(p), Some(o)) => (p, o),
+            _ => continue,
         };
+
+        if !known.contains(&pred.digest()) {
+            unknown_assertions.push((pred, obj));
+            continue;
+        }
+
+        // Known predicate. `active-identity` was already extracted above; we
+        // only need to dispatch the `identity` arm here.
         let pred_str: String = match pred.try_leaf() {
             Ok(c) => match c.try_into_text() {
                 Ok(s) => s,
@@ -104,9 +150,6 @@ fn wallet_from_envelope(envelope: &Envelope) -> Result<WalletData> {
         if pred_str != "identity" {
             continue;
         }
-        let obj = assertion
-            .as_object()
-            .ok_or_else(|| anyhow!("'identity' assertion missing object"))?;
         let (name, identity) = identity_from_envelope(&obj)?;
         if identities.insert(name.clone(), identity).is_some() {
             return Err(anyhow!("Duplicate identity name: {name}"));
@@ -116,6 +159,7 @@ fn wallet_from_envelope(envelope: &Envelope) -> Result<WalletData> {
     Ok(WalletData {
         identities,
         active_identity,
+        unknown_assertions,
     })
 }
 
@@ -172,7 +216,7 @@ fn wallet_to_wire_identity(name: &str, id: &Identity) -> Result<WireIdentity> {
             public: id.pre.public.clone(),
             secret: Some(id.pre.secret.clone()),
         }),
-        unknown_assertions: Vec::new(),
+        unknown_assertions: id.unknown_assertions.clone(),
     })
 }
 
@@ -226,6 +270,7 @@ fn wire_to_wallet_identity(wire: WireIdentity) -> Result<(String, Identity)> {
             secret: pre_secret,
         },
         pre_backend,
+        unknown_assertions: wire.unknown_assertions.clone(),
     };
     Ok((name, identity))
 }
@@ -253,6 +298,7 @@ mod tests {
                 secret: vec![0xEE; 16],
             },
             pre_backend: BackendId::Mock,
+            unknown_assertions: Vec::new(),
         };
         (name.to_string(), identity)
     }
@@ -293,6 +339,7 @@ mod tests {
         let mut wallet = WalletData {
             identities: HashMap::new(),
             active_identity: Some(name.clone()),
+            unknown_assertions: Vec::new(),
         };
         wallet.identities.insert(name, identity);
 
@@ -306,6 +353,7 @@ mod tests {
         let mut wallet = WalletData {
             identities: HashMap::new(),
             active_identity: Some("bob".to_string()),
+            unknown_assertions: Vec::new(),
         };
         for (name, id) in [
             mock_identity("alice", 1),
@@ -326,6 +374,7 @@ mod tests {
         let wallet = WalletData {
             identities: HashMap::new(),
             active_identity: None,
+            unknown_assertions: Vec::new(),
         };
         let bytes = to_envelope(&wallet).unwrap();
         let decoded = from_envelope(&bytes).unwrap();
@@ -340,6 +389,7 @@ mod tests {
         let mut wallet = WalletData {
             identities: HashMap::new(),
             active_identity: Some(name.clone()),
+            unknown_assertions: Vec::new(),
         };
         wallet.identities.insert(name, identity);
 
@@ -355,6 +405,7 @@ mod tests {
         let mut wallet = WalletData {
             identities: HashMap::new(),
             active_identity: None,
+            unknown_assertions: Vec::new(),
         };
         wallet.identities.insert(name, identity);
 
@@ -403,6 +454,7 @@ mod tests {
             let mut wallet = WalletData {
                 identities: HashMap::new(),
                 active_identity: None,
+                unknown_assertions: Vec::new(),
             };
             wallet.identities.insert(name.clone(), identity);
 
@@ -431,6 +483,89 @@ mod tests {
         assert_eq!(
             wallet_bytes, wire_bytes,
             "wallet identity envelope bytes must equal recrypt-wire identity envelope bytes"
+        );
+    }
+
+    /// §8 forward-compat: a wallet-level assertion with an unknown predicate
+    /// (e.g. a future `keyspace-membership` extension) must survive a
+    /// load+save round-trip — both decoded into `unknown_assertions` and
+    /// re-emitted byte-stably on encode.
+    #[test]
+    fn wallet_level_unknown_assertion_roundtrips() {
+        let wallet = WalletData {
+            identities: HashMap::new(),
+            active_identity: None,
+            unknown_assertions: vec![(
+                Envelope::new("keyspace-membership"),
+                Envelope::new("future-namespace-value"),
+            )],
+        };
+
+        let bytes = to_envelope(&wallet).unwrap();
+        let decoded = from_envelope(&bytes).unwrap();
+        assert_eq!(
+            decoded.unknown_assertions.len(),
+            1,
+            "wallet-level unknown assertion was dropped on decode"
+        );
+        let pred_text: String = decoded.unknown_assertions[0]
+            .0
+            .clone()
+            .try_leaf()
+            .unwrap()
+            .try_into_text()
+            .unwrap();
+        assert_eq!(pred_text, "keyspace-membership");
+
+        let bytes_again = to_envelope(&decoded).unwrap();
+        assert_eq!(
+            bytes, bytes_again,
+            "wallet-level unknowns are not byte-stable across load+save"
+        );
+    }
+
+    /// §8 forward-compat: an identity-level assertion with an unknown
+    /// predicate (e.g. a future `recovery-share` extension) must survive a
+    /// wallet load+save by round-tripping through
+    /// `recrypt_wire::Identity::unknown_assertions`.
+    #[test]
+    fn identity_level_unknown_assertion_roundtrips() {
+        let (name, mut identity) = mock_identity("alice", 9);
+        identity.unknown_assertions.push((
+            Envelope::new("recovery-share"),
+            Envelope::new("future-share-blob"),
+        ));
+        let mut wallet = WalletData {
+            identities: HashMap::new(),
+            active_identity: Some(name.clone()),
+            unknown_assertions: Vec::new(),
+        };
+        wallet.identities.insert(name.clone(), identity);
+
+        let bytes = to_envelope(&wallet).unwrap();
+        let decoded = from_envelope(&bytes).unwrap();
+        let id_decoded = decoded
+            .identities
+            .get(&name)
+            .expect("identity missing after roundtrip");
+        assert_eq!(
+            id_decoded.unknown_assertions.len(),
+            1,
+            "identity-level unknown assertion was dropped on decode"
+        );
+        let pred_text: String = id_decoded.unknown_assertions[0]
+            .0
+            .clone()
+            .try_leaf()
+            .unwrap()
+            .try_into_text()
+            .unwrap();
+        assert_eq!(pred_text, "recovery-share");
+
+        let bytes_again = to_envelope(&decoded).unwrap();
+        assert_eq!(
+            bytes, bytes_again,
+            "identity-level unknowns are not byte-stable across load+save"
         );
     }
 }

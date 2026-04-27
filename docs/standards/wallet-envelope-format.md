@@ -215,7 +215,7 @@ These assertions can be added later without a format-version bump (additive chan
 | `"backup-metadata"`     | map             | Last backup time, backup provider, verification hash  |
 | `"recovery-share"`      | bytes           | SSS share for key recovery                            |
 
-Because Envelope parsers ignore unknown assertions, a wallet created by a newer client can be read by an older client — the older client simply won't see the new assertions. This is the forward-compatibility property that protobuf and JSON both struggle with for encrypted payloads.
+A wallet created by a newer client must remain readable AND writable by an older client without losing the newer assertions. The wire/wallet decoder collects any wallet-level or identity-level assertion whose predicate is not in its `KNOWN_PREDICATES` list into an `unknown_assertions` field, and re-emits it verbatim on encode. This means an older client can `load → save` a newer wallet and the additive assertions survive. (Implementations that simply "ignore" unknown assertions on parse — without preserving them on re-encode — silently break forward-compat on the next save.) This is the forward-compatibility property that protobuf and JSON both struggle with for encrypted payloads.
 
 ---
 

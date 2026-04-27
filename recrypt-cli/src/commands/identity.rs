@@ -167,6 +167,7 @@ async fn new_identity(name: Option<String>, ctx: &Context) -> Result<()> {
             secret: pre_kp.secret.as_bytes().to_vec(),
         },
         pre_backend: backend_id,
+        unknown_assertions: Vec::new(),
     };
 
     debug!("Inserting identity into wallet");
@@ -512,7 +513,7 @@ fn wire_identity_from_wallet(name: &str, id: &Identity) -> Result<recrypt_wire::
             public: id.pre.public.clone(),
             secret: Some(id.pre.secret.clone()),
         }),
-        unknown_assertions: vec![],
+        unknown_assertions: id.unknown_assertions.clone(),
     })
 }
 
@@ -576,6 +577,7 @@ fn wallet_identity_from_wire(wi: &recrypt_wire::Identity) -> Result<Identity> {
             secret: pre_secret.clone(),
         },
         pre_backend: backend_id,
+        unknown_assertions: wi.unknown_assertions.clone(),
     })
 }
 

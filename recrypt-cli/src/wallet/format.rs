@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use argon2::{Algorithm, Argon2, Params, Version};
+use bc_envelope::Envelope;
 use chacha20poly1305::{
     aead::{Aead, KeyInit},
     XChaCha20Poly1305,
@@ -29,6 +30,11 @@ pub struct WalletData {
     /// Active identity name — lives in the wallet, single source of truth.
     #[zeroize(skip)]
     pub active_identity: Option<String>,
+    /// Wallet-level assertions whose predicates are not in `KNOWN_PREDICATES`.
+    /// Preserved verbatim across decode/encode so additive spec extensions
+    /// (§8 forward-compat) survive a load+save round-trip.
+    #[zeroize(skip)]
+    pub unknown_assertions: Vec<(Envelope, Envelope)>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, ZeroizeOnDrop)]
@@ -43,6 +49,12 @@ pub struct Identity {
     pub pre: KeyPair,
     #[zeroize(skip)]
     pub pre_backend: recrypt_core::pre::BackendId,
+    /// Identity-level assertions not in the wire crate's `KNOWN_PREDICATES`.
+    /// Round-tripped through `recrypt_wire::Identity::unknown_assertions` so
+    /// additive spec extensions survive a wallet load+save (§8 forward-compat).
+    #[serde(skip)]
+    #[zeroize(skip)]
+    pub unknown_assertions: Vec<(Envelope, Envelope)>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Zeroize, ZeroizeOnDrop)]
@@ -57,6 +69,7 @@ impl WalletData {
         Self {
             identities: HashMap::new(),
             active_identity: None,
+            unknown_assertions: Vec::new(),
         }
     }
 }
@@ -223,6 +236,7 @@ pub(crate) fn test_identity(seed: u8) -> Identity {
             secret: vec![seed.wrapping_add(5); 16],
         },
         pre_backend: recrypt_core::pre::BackendId::Mock,
+        unknown_assertions: Vec::new(),
     }
 }
 
