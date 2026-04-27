@@ -53,12 +53,33 @@ async fn test_nonce_generation() {
 }
 
 #[tokio::test]
-async fn test_account_not_found() {
+async fn test_account_malformed_fingerprint() {
+    // A bare "nonexistent" path segment fails fingerprint parsing before the
+    // store lookup, so it must be 400 (BadRequest), not 404. The
+    // well-formed-but-unknown 404 case is covered by
+    // `test_account_not_found` below.
     let server = common::TestServer::start().await;
     let client = Client::new();
 
     let response = client
         .get(format!("{}/accounts/nonexistent", server.url))
+        .send()
+        .await
+        .expect("Failed to send request");
+
+    assert_eq!(response.status(), 400);
+}
+
+#[tokio::test]
+async fn test_account_not_found() {
+    // Well-formed fingerprint (32-byte base58) that no account ever
+    // registered — must reach the store lookup and return 404.
+    let server = common::TestServer::start().await;
+    let client = Client::new();
+
+    let unknown_fp = bs58::encode([0u8; 32]).into_string();
+    let response = client
+        .get(format!("{}/accounts/{unknown_fp}", server.url))
         .send()
         .await
         .expect("Failed to send request");
