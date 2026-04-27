@@ -70,7 +70,7 @@ async fn show(fingerprint_override: Option<String>, ctx: &Context) -> Result<()>
                 .identities
                 .get(&identity_name)
                 .ok_or_else(|| anyhow::anyhow!("Identity '{identity_name}' not found"))?;
-            identity.fingerprint.clone()
+            bs58::encode(identity.fingerprint).into_string()
         }
     };
 

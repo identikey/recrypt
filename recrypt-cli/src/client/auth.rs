@@ -93,7 +93,7 @@ async fn sign_with_nonce(
 
     // 5. Return headers
     Ok(AuthHeaders {
-        fingerprint: identity.fingerprint.clone(),
+        fingerprint: bs58::encode(identity.fingerprint).into_string(),
         nonce,
         ed25519_sig: BASE64.encode(ed25519_sig.to_bytes()),
         ml_dsa_sig: BASE64.encode(&ml_dsa_sig),

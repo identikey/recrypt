@@ -155,7 +155,8 @@ async fn list(ctx: &Context) -> Result<()> {
     let server_url = resolve_server_url(ctx, &config)?;
 
     let client = ApiClient::new(server_url);
-    let files = client.list_files(&identity.fingerprint).await?;
+    let fingerprint_b58 = bs58::encode(identity.fingerprint).into_string();
+    let files = client.list_files(&fingerprint_b58).await?;
 
     if ctx.json_output {
         print_json(&files)?;

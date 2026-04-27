@@ -137,10 +137,11 @@ async fn new_identity(name: Option<String>, ctx: &Context) -> Result<()> {
         .generate_keypair()
         .context("Failed to generate PRE keypair")?;
 
-    // Compute fingerprint: base58(blake3(ed25519_pk))
+    // Compute fingerprint: blake3(ed25519_pk) — raw bytes inside the wallet,
+    // base58 only at display/wire boundaries.
     debug!("Computing fingerprint");
-    let fingerprint =
-        bs58::encode(blake3::hash(ed25519_kp.verifying_key.as_bytes()).as_bytes()).into_string();
+    let fingerprint: [u8; 32] = *blake3::hash(ed25519_kp.verifying_key.as_bytes()).as_bytes();
+    let fingerprint_b58 = bs58::encode(fingerprint).into_string();
 
     debug!("Creating identity struct");
     let identity = Identity {
@@ -148,7 +149,7 @@ async fn new_identity(name: Option<String>, ctx: &Context) -> Result<()> {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs(),
-        fingerprint: fingerprint.clone(),
+        fingerprint,
         ed25519: KeyPair {
             public: ed25519_kp.verifying_key.as_bytes().to_vec(),
             secret: ed25519_kp.signing_key.as_bytes().to_vec(),
@@ -186,11 +187,11 @@ async fn new_identity(name: Option<String>, ctx: &Context) -> Result<()> {
         }
         print_json(&Output {
             name: identity_name,
-            fingerprint,
+            fingerprint: fingerprint_b58,
         })?;
     } else {
         print_success(format!("Created identity '{}'", identity_name.bold()));
-        println!("  {}: {}", "Fingerprint".dimmed(), fingerprint);
+        println!("  {}: {}", "Fingerprint".dimmed(), fingerprint_b58);
         println!("  {}: {}", "Wallet".dimmed(), wallet.path().display());
     }
 
@@ -223,7 +224,7 @@ async fn list_identities(ctx: &Context) -> Result<()> {
             .iter()
             .map(|(name, identity)| Output {
                 name: name.clone(),
-                fingerprint: identity.fingerprint.clone(),
+                fingerprint: bs58::encode(identity.fingerprint).into_string(),
                 is_active: active_identity == Some(name),
             })
             .collect();
@@ -240,7 +241,7 @@ async fn list_identities(ctx: &Context) -> Result<()> {
                 "  {} {} ({})",
                 marker,
                 name.bold(),
-                identity.fingerprint.dimmed()
+                bs58::encode(identity.fingerprint).into_string().dimmed()
             );
         }
     }
@@ -275,7 +276,7 @@ async fn show_identity(name: Option<String>, ctx: &Context) -> Result<()> {
 
         print_json(&Output {
             name: identity_name,
-            fingerprint: identity.fingerprint.clone(),
+            fingerprint: bs58::encode(identity.fingerprint).into_string(),
             created_at: identity.created_at,
             ed25519_public: ed25519_b58,
             ml_dsa_public: ml_dsa_b58,
@@ -288,7 +289,7 @@ async fn show_identity(name: Option<String>, ctx: &Context) -> Result<()> {
         let pre_b58 = bs58::encode(&identity.pre.public).into_string();
 
         println!("{}", format!("Identity: {identity_name}").bold());
-        println!("  {}: {}", "Fingerprint".dimmed(), identity.fingerprint);
+        println!("  {}: {}", "Fingerprint".dimmed(), bs58::encode(identity.fingerprint).into_string());
         println!(
             "  {}: {}",
             "Created".dimmed(),
@@ -485,18 +486,7 @@ fn wire_identity_from_wallet(name: &str, id: &Identity) -> Result<recrypt_wire::
     // value disagrees, treat it as wallet corruption rather than silently
     // healing — surface the error so the operator can investigate.
     let computed: [u8; 32] = *blake3::hash(&ed25519_public).as_bytes();
-    let stored = bs58::decode(&id.fingerprint).into_vec().map_err(|e| {
-        anyhow::anyhow!(
-            "wallet fingerprint for '{name}' is not valid base58: {e}"
-        )
-    })?;
-    let stored: [u8; 32] = stored.try_into().map_err(|v: Vec<u8>| {
-        anyhow::anyhow!(
-            "wallet fingerprint for '{name}' is {} bytes, expected 32",
-            v.len()
-        )
-    })?;
-    if stored != computed {
+    if id.fingerprint != computed {
         anyhow::bail!(
             "wallet corruption: stored fingerprint for '{name}' does not match Blake3(ed25519_public)"
         );
@@ -565,7 +555,7 @@ fn wallet_identity_from_wire(wi: &recrypt_wire::Identity) -> Result<Identity> {
 
     Ok(Identity {
         created_at,
-        fingerprint: bs58::encode(wi.fingerprint).into_string(),
+        fingerprint: wi.fingerprint,
         ed25519: KeyPair {
             public: wi.ed25519_public.to_vec(),
             secret: ed25519_secret.to_vec(),

@@ -248,7 +248,7 @@ mod tests {
             "test-identity".to_string(),
             Identity {
                 created_at: 1704067200,
-                fingerprint: "test-fingerprint".to_string(),
+                fingerprint: [0u8; 32],
                 ed25519: KeyPair {
                     public: b"ed25519-pub".to_vec(),
                     secret: b"ed25519-sec".to_vec(),
@@ -297,7 +297,7 @@ mod tests {
             "test".to_string(),
             Identity {
                 created_at: 1704067200,
-                fingerprint: "fp".to_string(),
+                fingerprint: [0u8; 32],
                 ed25519: KeyPair {
                     public: b"p".to_vec(),
                     secret: b"s".to_vec(),
@@ -343,7 +343,7 @@ mod tests {
             "new-identity".to_string(),
             Identity {
                 created_at: 1704153600,
-                fingerprint: "new-fp".to_string(),
+                fingerprint: [0u8; 32],
                 ed25519: KeyPair {
                     public: b"pub".to_vec(),
                     secret: b"sec".to_vec(),

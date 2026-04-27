@@ -21,8 +21,7 @@ const ARGON2_P_COST: u32 = 4; // 4 parallelism
 pub struct WalletData {
     pub version: u8,
     pub identities: HashMap<String, Identity>,
-    /// Active identity name — lives in the wallet so it's per-wallet, not global.
-    /// Falls back to the global config's `active_identity` for backward compat.
+    /// Active identity name — lives in the wallet, single source of truth.
     #[serde(default)]
     pub active_identity: Option<String>,
 }
@@ -30,7 +29,8 @@ pub struct WalletData {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Identity {
     pub created_at: u64,
-    pub fingerprint: String,
+    /// Blake3(ed25519_public). Raw bytes; encode with bs58 for display/wire.
+    pub fingerprint: [u8; 32],
     pub ed25519: KeyPair,
     pub ml_dsa: KeyPair,
     pub pre: KeyPair,
@@ -201,7 +201,7 @@ mod tests {
             "test".to_string(),
             Identity {
                 created_at: 1704067200,
-                fingerprint: "test-fp".to_string(),
+                fingerprint: [0u8; 32],
                 ed25519: KeyPair {
                     public: b"test-pub".to_vec(),
                     secret: b"test-sec".to_vec(),
@@ -273,7 +273,7 @@ mod tests {
             "test".to_string(),
             Identity {
                 created_at: 1704067200,
-                fingerprint: "test-fp".to_string(),
+                fingerprint: [0u8; 32],
                 ed25519: KeyPair {
                     public: b"ed-pub".to_vec(),
                     secret: b"ed-sec".to_vec(),

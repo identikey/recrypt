@@ -88,8 +88,9 @@ impl ApiClient {
         let hash = bs58::encode(blake3::hash(&file_data).as_bytes()).into_string();
 
         let nonce = self.fetch_nonce().await?;
+        let fingerprint = bs58::encode(identity.fingerprint).into_string();
 
-        let message = format!("UPLOAD:{}:{}:{}", identity.fingerprint, hash, nonce);
+        let message = format!("UPLOAD:{fingerprint}:{hash}:{nonce}");
 
         let auth =
             sign_request_with_nonce(&self.client, &self.server_url, &message, identity, nonce)
@@ -130,8 +131,9 @@ impl ApiClient {
     /// Delete a file
     pub async fn delete_file(&self, identity: &Identity, hash: &str) -> Result<()> {
         let nonce = self.fetch_nonce().await?;
+        let fingerprint = bs58::encode(identity.fingerprint).into_string();
 
-        let message = format!("DELETE:{}:{}:{}", identity.fingerprint, hash, nonce);
+        let message = format!("DELETE:{fingerprint}:{hash}:{nonce}");
 
         let auth =
             sign_request_with_nonce(&self.client, &self.server_url, &message, identity, nonce)
@@ -163,11 +165,9 @@ impl ApiClient {
         backend_id: recrypt_core::pre::BackendId,
     ) -> Result<ShareResponse> {
         let nonce = self.fetch_nonce().await?;
+        let fingerprint = bs58::encode(identity.fingerprint).into_string();
 
-        let message = format!(
-            "SHARE:{}:{}:{}:{}",
-            identity.fingerprint, to_fingerprint, file_hash, nonce
-        );
+        let message = format!("SHARE:{fingerprint}:{to_fingerprint}:{file_hash}:{nonce}");
 
         let auth =
             sign_request_with_nonce(&self.client, &self.server_url, &message, identity, nonce)
@@ -196,8 +196,9 @@ impl ApiClient {
     /// Download a shared file
     pub async fn download_share(&self, identity: &Identity, share_id: &str) -> Result<Vec<u8>> {
         let nonce = self.fetch_nonce().await?;
+        let fingerprint = bs58::encode(identity.fingerprint).into_string();
 
-        let message = format!("DOWNLOAD:{}:{}:{}", identity.fingerprint, share_id, nonce);
+        let message = format!("DOWNLOAD:{fingerprint}:{share_id}:{nonce}");
 
         let auth =
             sign_request_with_nonce(&self.client, &self.server_url, &message, identity, nonce)
@@ -228,8 +229,9 @@ impl ApiClient {
     /// Revoke a share
     pub async fn revoke_share(&self, identity: &Identity, share_id: &str) -> Result<()> {
         let nonce = self.fetch_nonce().await?;
+        let fingerprint = bs58::encode(identity.fingerprint).into_string();
 
-        let message = format!("REVOKE:{}:{}:{}", identity.fingerprint, share_id, nonce);
+        let message = format!("REVOKE:{fingerprint}:{share_id}:{nonce}");
 
         let auth =
             sign_request_with_nonce(&self.client, &self.server_url, &message, identity, nonce)
@@ -269,8 +271,9 @@ impl ApiClient {
     /// List shares for an account (requires auth)
     pub async fn list_shares(&self, identity: &Identity) -> Result<ShareListResponse> {
         let nonce = self.fetch_nonce().await?;
+        let fingerprint = bs58::encode(identity.fingerprint).into_string();
 
-        let message = format!("LIST_SHARES:{}:{}", identity.fingerprint, nonce);
+        let message = format!("LIST_SHARES:{fingerprint}:{nonce}");
 
         let auth =
             sign_request_with_nonce(&self.client, &self.server_url, &message, identity, nonce)
@@ -278,8 +281,8 @@ impl ApiClient {
 
         let response = add_auth_headers(
             self.client.get(format!(
-                "{}/accounts/{}/shares",
-                self.server_url, identity.fingerprint
+                "{}/accounts/{fingerprint}/shares",
+                self.server_url
             )),
             &auth,
         )
