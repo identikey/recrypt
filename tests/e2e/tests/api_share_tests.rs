@@ -14,13 +14,13 @@ use recrypt_wire::MultiFormat;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/// Encrypt plaintext for an identity, returning (file_bytes, file_hash_b58, wrapped_key_b58).
+/// Encrypt plaintext for an identity, returning (file_bytes, file_hash_b58, wrapped_key_b64).
 fn make_encrypted_file(encryptor: &HybridEncryptor<MockBackend>, id: &TestIdentity, plaintext: &[u8]) -> (Vec<u8>, String, String) {
     let encrypted: EncryptedFile = encryptor.encrypt(&id.pre_kp.public, plaintext).unwrap();
-    let wrapped_key_b58 = bs58::encode(encrypted.wrapped_key.to_bytes()).into_string();
+    let wrapped_key_b64 = base64::engine::general_purpose::STANDARD.encode(encrypted.wrapped_key.to_bytes());
     let file_bytes = encrypted.to_envelope().unwrap();
     let file_hash = bs58::encode(blake3::hash(&file_bytes).as_bytes()).into_string();
-    (file_bytes, file_hash, wrapped_key_b58)
+    (file_bytes, file_hash, wrapped_key_b64)
 }
 
 /// Generate a recrypt key from alice to bob, returning base58-encoded key.
@@ -29,7 +29,7 @@ fn make_recrypt_key(encryptor: &HybridEncryptor<MockBackend>, from: &TestIdentit
         .backend()
         .generate_recrypt_key(&from.pre_kp.secret, &to.pre_kp.public)
         .unwrap();
-    bs58::encode(recrypt_key.to_bytes()).into_string()
+    base64::engine::general_purpose::STANDARD.encode(recrypt_key.to_bytes())
 }
 
 /// Register an identity and assert success.
@@ -47,8 +47,8 @@ async fn upload(api: &ApiTestClient, id: &TestIdentity, file_bytes: &[u8]) -> St
 }
 
 /// Create a share and return the share_id.
-async fn create_share(api: &ApiTestClient, from: &TestIdentity, to: &TestIdentity, file_hash: &str, recrypt_key_b58: &str, wrapped_key_b58: &str) -> String {
-    let resp = api.create_share(from, to, file_hash, recrypt_key_b58, wrapped_key_b58).await;
+async fn create_share(api: &ApiTestClient, from: &TestIdentity, to: &TestIdentity, file_hash: &str, recrypt_key_b64: &str, wrapped_key_b64: &str) -> String {
+    let resp = api.create_share(from, to, file_hash, recrypt_key_b64, wrapped_key_b64).await;
     assert_eq!(resp.status(), 201, "create_share failed: {:?}", resp.text().await);
     let body: serde_json::Value = resp.json().await.unwrap();
     body["share_id"].as_str().unwrap().to_string()
@@ -69,15 +69,15 @@ async fn test_share_create_and_fetch() {
     register(&api, &alice).await;
     register(&api, &bob).await;
 
-    let (file_bytes, file_hash, wrapped_key_b58) = make_encrypted_file(&encryptor, &alice, b"share create and fetch test");
+    let (file_bytes, file_hash, wrapped_key_b64) = make_encrypted_file(&encryptor, &alice, b"share create and fetch test");
     upload(&api, &alice, &file_bytes).await;
 
     // Verify the file is downloadable (confirms storage key is correct)
     let dl = api.download_file(&file_hash).await;
     assert_eq!(dl.status(), 200, "download before share failed: {:?}", dl.text().await);
 
-    let recrypt_key_b58 = make_recrypt_key(&encryptor, &alice, &bob);
-    let share_id = create_share(&api, &alice, &bob, &file_hash, &recrypt_key_b58, &wrapped_key_b58).await;
+    let recrypt_key_b64 = make_recrypt_key(&encryptor, &alice, &bob);
+    let share_id = create_share(&api, &alice, &bob, &file_hash, &recrypt_key_b64, &wrapped_key_b64).await;
 
     // Bob fetches the share
     let resp = api.get_share(&bob, &share_id).await;
@@ -126,11 +126,11 @@ async fn test_share_revoke() {
     register(&api, &alice).await;
     register(&api, &bob).await;
 
-    let (file_bytes, file_hash, wrapped_key_b58) = make_encrypted_file(&encryptor, &alice, b"revoke test file");
+    let (file_bytes, file_hash, wrapped_key_b64) = make_encrypted_file(&encryptor, &alice, b"revoke test file");
     upload(&api, &alice, &file_bytes).await;
 
-    let recrypt_key_b58 = make_recrypt_key(&encryptor, &alice, &bob);
-    let share_id = create_share(&api, &alice, &bob, &file_hash, &recrypt_key_b58, &wrapped_key_b58).await;
+    let recrypt_key_b64 = make_recrypt_key(&encryptor, &alice, &bob);
+    let share_id = create_share(&api, &alice, &bob, &file_hash, &recrypt_key_b64, &wrapped_key_b64).await;
 
     // Verify Bob can fetch it before revocation
     let resp = api.get_share(&bob, &share_id).await;
@@ -165,11 +165,11 @@ async fn test_share_list() {
     register(&api, &alice).await;
     register(&api, &bob).await;
 
-    let (file_bytes, file_hash, wrapped_key_b58) = make_encrypted_file(&encryptor, &alice, b"list shares test");
+    let (file_bytes, file_hash, wrapped_key_b64) = make_encrypted_file(&encryptor, &alice, b"list shares test");
     upload(&api, &alice, &file_bytes).await;
 
-    let recrypt_key_b58 = make_recrypt_key(&encryptor, &alice, &bob);
-    let share_id = create_share(&api, &alice, &bob, &file_hash, &recrypt_key_b58, &wrapped_key_b58).await;
+    let recrypt_key_b64 = make_recrypt_key(&encryptor, &alice, &bob);
+    let share_id = create_share(&api, &alice, &bob, &file_hash, &recrypt_key_b64, &wrapped_key_b64).await;
 
     // List shares for Alice (the sharer)
     let resp = api.list_shares(&alice).await;
@@ -206,11 +206,11 @@ async fn test_full_recryption_roundtrip() {
     register(&api, &bob).await;
 
     let plaintext = b"full recryption roundtrip plaintext";
-    let (file_bytes, file_hash, wrapped_key_b58) = make_encrypted_file(&encryptor, &alice, plaintext);
+    let (file_bytes, file_hash, wrapped_key_b64) = make_encrypted_file(&encryptor, &alice, plaintext);
     upload(&api, &alice, &file_bytes).await;
 
-    let recrypt_key_b58 = make_recrypt_key(&encryptor, &alice, &bob);
-    let share_id = create_share(&api, &alice, &bob, &file_hash, &recrypt_key_b58, &wrapped_key_b58).await;
+    let recrypt_key_b64 = make_recrypt_key(&encryptor, &alice, &bob);
+    let share_id = create_share(&api, &alice, &bob, &file_hash, &recrypt_key_b64, &wrapped_key_b64).await;
 
     // Bob fetches the recrypted share
     let resp = api.get_share(&bob, &share_id).await;
@@ -247,11 +247,11 @@ async fn test_response_has_no_bulk_ciphertext() {
     register(&api, &alice).await;
     register(&api, &bob).await;
 
-    let (file_bytes, file_hash, wrapped_key_b58) = make_encrypted_file(&encryptor, &alice, b"no bulk ciphertext test");
+    let (file_bytes, file_hash, wrapped_key_b64) = make_encrypted_file(&encryptor, &alice, b"no bulk ciphertext test");
     upload(&api, &alice, &file_bytes).await;
 
-    let recrypt_key_b58 = make_recrypt_key(&encryptor, &alice, &bob);
-    let share_id = create_share(&api, &alice, &bob, &file_hash, &recrypt_key_b58, &wrapped_key_b58).await;
+    let recrypt_key_b64 = make_recrypt_key(&encryptor, &alice, &bob);
+    let share_id = create_share(&api, &alice, &bob, &file_hash, &recrypt_key_b64, &wrapped_key_b64).await;
 
     let resp = api.get_share(&bob, &share_id).await;
     assert_eq!(resp.status(), 200);
@@ -285,11 +285,11 @@ async fn test_ciphertext_url_resolves() {
     register(&api, &alice).await;
     register(&api, &bob).await;
 
-    let (file_bytes, file_hash, wrapped_key_b58) = make_encrypted_file(&encryptor, &alice, b"ciphertext url resolves test");
+    let (file_bytes, file_hash, wrapped_key_b64) = make_encrypted_file(&encryptor, &alice, b"ciphertext url resolves test");
     upload(&api, &alice, &file_bytes).await;
 
-    let recrypt_key_b58 = make_recrypt_key(&encryptor, &alice, &bob);
-    let share_id = create_share(&api, &alice, &bob, &file_hash, &recrypt_key_b58, &wrapped_key_b58).await;
+    let recrypt_key_b64 = make_recrypt_key(&encryptor, &alice, &bob);
+    let share_id = create_share(&api, &alice, &bob, &file_hash, &recrypt_key_b64, &wrapped_key_b64).await;
 
     let resp = api.get_share(&bob, &share_id).await;
     assert_eq!(resp.status(), 200);
@@ -331,16 +331,16 @@ async fn test_multi_recipient_share() {
     register(&api, &bob).await;
     register(&api, &carol).await;
 
-    let (file_bytes, file_hash, wrapped_key_b58) = make_encrypted_file(&encryptor, &alice, b"multi recipient test");
+    let (file_bytes, file_hash, wrapped_key_b64) = make_encrypted_file(&encryptor, &alice, b"multi recipient test");
     upload(&api, &alice, &file_bytes).await;
 
     // Share with Bob
     let recrypt_key_bob = make_recrypt_key(&encryptor, &alice, &bob);
-    let share_id_bob = create_share(&api, &alice, &bob, &file_hash, &recrypt_key_bob, &wrapped_key_b58).await;
+    let share_id_bob = create_share(&api, &alice, &bob, &file_hash, &recrypt_key_bob, &wrapped_key_b64).await;
 
     // Share with Carol
     let recrypt_key_carol = make_recrypt_key(&encryptor, &alice, &carol);
-    let share_id_carol = create_share(&api, &alice, &carol, &file_hash, &recrypt_key_carol, &wrapped_key_b58).await;
+    let share_id_carol = create_share(&api, &alice, &carol, &file_hash, &recrypt_key_carol, &wrapped_key_b64).await;
 
     // Both can fetch independently
     let resp_bob = api.get_share(&bob, &share_id_bob).await;
@@ -372,14 +372,14 @@ async fn test_revoke_one_preserves_others() {
     register(&api, &bob).await;
     register(&api, &carol).await;
 
-    let (file_bytes, file_hash, wrapped_key_b58) = make_encrypted_file(&encryptor, &alice, b"revoke one test");
+    let (file_bytes, file_hash, wrapped_key_b64) = make_encrypted_file(&encryptor, &alice, b"revoke one test");
     upload(&api, &alice, &file_bytes).await;
 
     let recrypt_key_bob = make_recrypt_key(&encryptor, &alice, &bob);
-    let share_id_bob = create_share(&api, &alice, &bob, &file_hash, &recrypt_key_bob, &wrapped_key_b58).await;
+    let share_id_bob = create_share(&api, &alice, &bob, &file_hash, &recrypt_key_bob, &wrapped_key_b64).await;
 
     let recrypt_key_carol = make_recrypt_key(&encryptor, &alice, &carol);
-    let share_id_carol = create_share(&api, &alice, &carol, &file_hash, &recrypt_key_carol, &wrapped_key_b58).await;
+    let share_id_carol = create_share(&api, &alice, &carol, &file_hash, &recrypt_key_carol, &wrapped_key_b64).await;
 
     // Revoke Bob's share
     let resp = api.revoke_share(&alice, &share_id_bob).await;
@@ -418,9 +418,9 @@ async fn test_share_nonexistent_file_fails() {
 
     // Use a fake hash that was never uploaded
     let fake_hash = "11111111111111111111111111111111111111111111";
-    let recrypt_key_b58 = make_recrypt_key(&encryptor, &alice, &bob);
+    let recrypt_key_b64 = make_recrypt_key(&encryptor, &alice, &bob);
 
-    let resp = api.create_share(&alice, &bob, fake_hash, &recrypt_key_b58, "").await;
+    let resp = api.create_share(&alice, &bob, fake_hash, &recrypt_key_b64, "").await;
     let status = resp.status().as_u16();
     assert!(
         status == 404 || status == 400 || status == 422,
@@ -440,12 +440,12 @@ async fn test_share_to_unregistered_recipient_fails() {
 
     register(&api, &alice).await;
 
-    let (file_bytes, file_hash, _wrapped_key_b58) = make_encrypted_file(&encryptor, &alice, b"unregistered recipient test");
+    let (file_bytes, file_hash, _wrapped_key_b64) = make_encrypted_file(&encryptor, &alice, b"unregistered recipient test");
     upload(&api, &alice, &file_bytes).await;
 
-    let recrypt_key_b58 = make_recrypt_key(&encryptor, &alice, &unregistered);
+    let recrypt_key_b64 = make_recrypt_key(&encryptor, &alice, &unregistered);
 
-    let resp = api.create_share(&alice, &unregistered, &file_hash, &recrypt_key_b58, "").await;
+    let resp = api.create_share(&alice, &unregistered, &file_hash, &recrypt_key_b64, "").await;
     let status = resp.status().as_u16();
     assert!(
         status == 404 || status == 400 || status == 422,
@@ -469,11 +469,11 @@ async fn test_share_by_non_owner_fails() {
     register(&api, &carol).await;
 
     // Alice uploads and shares with Bob
-    let (file_bytes, file_hash, wrapped_key_b58) = make_encrypted_file(&encryptor, &alice, b"non-owner share test");
+    let (file_bytes, file_hash, wrapped_key_b64) = make_encrypted_file(&encryptor, &alice, b"non-owner share test");
     upload(&api, &alice, &file_bytes).await;
 
-    let recrypt_key_b58 = make_recrypt_key(&encryptor, &alice, &bob);
-    let share_id = create_share(&api, &alice, &bob, &file_hash, &recrypt_key_b58, &wrapped_key_b58).await;
+    let recrypt_key_b64 = make_recrypt_key(&encryptor, &alice, &bob);
+    let share_id = create_share(&api, &alice, &bob, &file_hash, &recrypt_key_b64, &wrapped_key_b64).await;
 
     // Carol (not the recipient) tries to fetch Bob's share — should be rejected
     let resp = api.get_share(&carol, &share_id).await;
@@ -494,7 +494,7 @@ async fn test_invalid_signature_rejected() {
 
     // Build a valid registration request then corrupt the ed25519 signature
     let nonce = fresh_nonce();
-    let message = format!("CREATE:{}:{}:{}", alice.ed_pk_b58, alice.ml_dsa_pk_b58, nonce);
+    let message = format!("CREATE:{}:{}:{}", alice.ed_pk_b58, alice.ml_dsa_pk_b64, nonce);
     let (ed_sig, ml_sig) = alice.sign(&message);
 
     // Corrupt the ed25519 signature by flipping bytes in the base64
@@ -513,7 +513,7 @@ async fn test_invalid_signature_rejected() {
         .header("X-Signature-MlDsa", &ml_sig)
         .json(&serde_json::json!({
             "ed25519_pk": alice.ed_pk_b58,
-            "ml_dsa_pk": alice.ml_dsa_pk_b58,
+            "ml_dsa_pk": alice.ml_dsa_pk_b64,
         }))
         .send()
         .await
@@ -560,7 +560,7 @@ async fn test_nonce_replay_rejected() {
 
     // First request with a fixed nonce — should succeed
     let nonce = fresh_nonce();
-    let message1 = format!("CREATE:{}:{}:{}", alice.ed_pk_b58, alice.ml_dsa_pk_b58, nonce);
+    let message1 = format!("CREATE:{}:{}:{}", alice.ed_pk_b58, alice.ml_dsa_pk_b64, nonce);
     let (ed_sig1, ml_sig1) = alice.sign(&message1);
 
     let resp1 = api.client
@@ -571,7 +571,7 @@ async fn test_nonce_replay_rejected() {
         .header("X-Signature-MlDsa", &ml_sig1)
         .json(&serde_json::json!({
             "ed25519_pk": alice.ed_pk_b58,
-            "ml_dsa_pk": alice.ml_dsa_pk_b58,
+            "ml_dsa_pk": alice.ml_dsa_pk_b64,
         }))
         .send()
         .await
@@ -579,7 +579,7 @@ async fn test_nonce_replay_rejected() {
     assert_eq!(resp1.status(), 201, "first request should succeed: {:?}", resp1.text().await);
 
     // Second request reusing the same nonce — should be rejected
-    let message2 = format!("CREATE:{}:{}:{}", alice2.ed_pk_b58, alice2.ml_dsa_pk_b58, nonce);
+    let message2 = format!("CREATE:{}:{}:{}", alice2.ed_pk_b58, alice2.ml_dsa_pk_b64, nonce);
     let (ed_sig2, ml_sig2) = alice2.sign(&message2);
 
     let resp2 = api.client
@@ -590,7 +590,7 @@ async fn test_nonce_replay_rejected() {
         .header("X-Signature-MlDsa", &ml_sig2)
         .json(&serde_json::json!({
             "ed25519_pk": alice2.ed_pk_b58,
-            "ml_dsa_pk": alice2.ml_dsa_pk_b58,
+            "ml_dsa_pk": alice2.ml_dsa_pk_b64,
         }))
         .send()
         .await
@@ -660,6 +660,6 @@ async fn test_get_account_public() {
     let ed_pk = body["ed25519_pk"].as_str().unwrap_or("");
     let ml_pk = body["ml_dsa_pk"].as_str().unwrap_or("");
     assert_eq!(ed_pk, alice.ed_pk_b58, "ed25519_pk mismatch");
-    assert_eq!(ml_pk, alice.ml_dsa_pk_b58, "ml_dsa_pk mismatch");
+    assert_eq!(ml_pk, alice.ml_dsa_pk_b64, "ml_dsa_pk mismatch");
 }
 

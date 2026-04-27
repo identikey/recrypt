@@ -7,13 +7,14 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
 };
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use identikey_storage_auth::{AccountRecord, PublicKeyFingerprint};
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize)]
 pub struct CreateAccountRequest {
-    pub ed25519_pk: String, // base58
-    pub ml_dsa_pk: String,  // base58
+    pub ed25519_pk: String, // base58 (32B)
+    pub ml_dsa_pk: String,  // base64 (multi-KB; see encoding-conventions.md §4)
 }
 
 #[derive(Serialize)]
@@ -36,9 +37,9 @@ pub async fn create_account(
     let ed25519_pk = bs58::decode(&body.ed25519_pk)
         .into_vec()
         .map_err(|_| ServerError::BadRequest("Invalid base58 in ed25519_pk".into()))?;
-    let ml_dsa_pk = bs58::decode(&body.ml_dsa_pk)
-        .into_vec()
-        .map_err(|_| ServerError::BadRequest("Invalid base58 in ml_dsa_pk".into()))?;
+    let ml_dsa_pk = BASE64
+        .decode(&body.ml_dsa_pk)
+        .map_err(|_| ServerError::BadRequest("Invalid base64 in ml_dsa_pk".into()))?;
 
     // Compute fingerprint from ED25519 public key
     let fingerprint = compute_fingerprint(&ed25519_pk);
@@ -123,7 +124,7 @@ pub async fn get_account(
     Ok(Json(AccountResponse {
         fingerprint: account.fingerprint.clone(),
         ed25519_pk: bs58::encode(&account.ed25519_pk).into_string(),
-        ml_dsa_pk: bs58::encode(&account.ml_dsa_pk).into_string(),
+        ml_dsa_pk: BASE64.encode(&account.ml_dsa_pk),
         created_at: account.created_at,
     }))
 }

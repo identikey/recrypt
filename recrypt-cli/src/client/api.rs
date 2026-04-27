@@ -1,6 +1,7 @@
 // API client for recrypt-server
 
 use anyhow::{Context as AnyhowContext, Result};
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use reqwest::{Client, Response};
 use serde::{Deserialize, Serialize};
 
@@ -39,9 +40,11 @@ impl ApiClient {
 
     /// Register an account on the server
     pub async fn register_account(&self, identity: &Identity) -> Result<RegisterResponse> {
+        // ed25519 (32B) → base58; ml-dsa-87 (~2.5KB) → base64
+        // (encoding-conventions.md §4: base58 is O(n²); use base64 for >256B)
         let request_body = RegisterRequest {
             ed25519_pk: bs58::encode(&identity.ed25519.public).into_string(),
-            ml_dsa_pk: bs58::encode(&identity.ml_dsa.public).into_string(),
+            ml_dsa_pk: BASE64.encode(&identity.ml_dsa.public),
         };
 
         let nonce = self.fetch_nonce().await?;
@@ -176,7 +179,8 @@ impl ApiClient {
         let request_body = CreateShareRequest {
             to_fingerprint,
             file_hash,
-            recrypt_key: bs58::encode(&recrypt_key).into_string(),
+            // base64: lattice recryption keys are multi-KB (encoding-conventions.md §4)
+            recrypt_key: BASE64.encode(&recrypt_key),
             backend_id: backend_id.to_string(),
         };
 

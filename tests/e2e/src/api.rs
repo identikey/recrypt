@@ -15,7 +15,7 @@ pub struct TestIdentity {
     pub ed_key: ed25519_dalek::SigningKey,
     pub ed_pk_b58: String,
     pub ml_dsa_secret: Vec<u8>,
-    pub ml_dsa_pk_b58: String,
+    pub ml_dsa_pk_b64: String,
     pub pre_kp: pre::KeyPair,
 }
 
@@ -36,7 +36,7 @@ impl TestIdentity {
             ed_key: ed_kp.signing_key,
             ed_pk_b58: bs58::encode(ed_pk_bytes).into_string(),
             ml_dsa_secret: pq_kp.secret_key,
-            ml_dsa_pk_b58: bs58::encode(&pq_kp.public_key).into_string(),
+            ml_dsa_pk_b64: base64::engine::general_purpose::STANDARD.encode(&pq_kp.public_key),
             pre_kp,
         }
     }
@@ -84,7 +84,7 @@ impl ApiTestClient {
     /// Register an identity on the server. Returns the HTTP response.
     pub async fn register(&self, id: &TestIdentity) -> reqwest::Response {
         let nonce = fresh_nonce();
-        let message = format!("CREATE:{}:{}:{}", id.ed_pk_b58, id.ml_dsa_pk_b58, nonce);
+        let message = format!("CREATE:{}:{}:{}", id.ed_pk_b58, id.ml_dsa_pk_b64, nonce);
         let (ed_sig, ml_sig) = id.sign(&message);
 
         self.client
@@ -95,7 +95,7 @@ impl ApiTestClient {
             .header("X-Signature-MlDsa", &ml_sig)
             .json(&serde_json::json!({
                 "ed25519_pk": id.ed_pk_b58,
-                "ml_dsa_pk": id.ml_dsa_pk_b58,
+                "ml_dsa_pk": id.ml_dsa_pk_b64,
             }))
             .send()
             .await
@@ -175,8 +175,8 @@ impl ApiTestClient {
         from: &TestIdentity,
         to: &TestIdentity,
         file_hash: &str,
-        recrypt_key_b58: &str,
-        wrapped_key_b58: &str,
+        recrypt_key_b64: &str,
+        wrapped_key_b64: &str,
     ) -> reqwest::Response {
         let nonce = fresh_nonce();
         let message = format!(
@@ -194,8 +194,8 @@ impl ApiTestClient {
             .json(&serde_json::json!({
                 "to_fingerprint": to.fingerprint,
                 "file_hash": file_hash,
-                "recrypt_key": recrypt_key_b58,
-                "wrapped_key": wrapped_key_b58,
+                "recrypt_key": recrypt_key_b64,
+                "wrapped_key": wrapped_key_b64,
                 "backend_id": "mock",
             }))
             .send()

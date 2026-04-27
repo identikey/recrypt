@@ -68,13 +68,14 @@ trailing field is always the nonce string exactly as it appears in the
 message string). See [Encoding Conventions](standards/encoding-conventions.md)
 for the project-wide rules:
 
-- `ed25519_pk`, `ml_dsa_pk`, `pre_pk` — base58-encoded raw public-key bytes
-  (note: `ml_dsa_pk` and lattice `pre_pk` are multi-KB and should migrate to
-  base64 in a future protocol version — see encoding-conventions §5)
+- `ed25519_pk` — base58 (32 B)
+- `ml_dsa_pk` — base64 (~2.5 KB; base58 is O(n²) on multi-KB blobs)
+- `pre_pk` — base58 for mock backend (32 B); base64 for lattice (multi-KB)
 - `fingerprint`, `from_fingerprint`, `to_fingerprint`, `requester_fingerprint`
   — base58 of `blake3(ed25519_pk_bytes)`
 - `file_hash` — base58 of `blake3(ciphertext_bytes)`
 - `share_id` — base58 of `blake3("{from}:{to}:{file_hash}")`
+- `recrypt_key`, `wrapped_key` (in `POST /recryption/share`) — base64 (multi-KB for lattice)
 - `nonce` — plain `{unix_ms}:{uuid}` string, not re-encoded
 
 A CLI-side reference implementation of message construction and signing lives

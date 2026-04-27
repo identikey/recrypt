@@ -53,7 +53,7 @@ struct TestIdentity {
     ed_key: ed25519_dalek::SigningKey,
     ed_pk_b58: String,
     ml_dsa_secret: Vec<u8>,
-    ml_dsa_pk_b58: String,
+    ml_dsa_pk_b64: String,
     pre_kp: recrypt_core::pre::KeyPair,
 }
 
@@ -74,7 +74,7 @@ impl TestIdentity {
             ed_key: ed_kp.signing_key,
             ed_pk_b58: bs58::encode(ed_pk_bytes).into_string(),
             ml_dsa_secret: pq_kp.secret_key,
-            ml_dsa_pk_b58: bs58::encode(&pq_kp.public_key).into_string(),
+            ml_dsa_pk_b64: base64::engine::general_purpose::STANDARD.encode(&pq_kp.public_key),
             pre_kp,
         }
     }
@@ -102,8 +102,8 @@ async fn test_recryption_share_returns_control_plane_response() {
     {
         let nonce = now_nonce();
         let message = format!(
-            "CREATE:{}:{}::{}",
-            alice.ed_pk_b58, alice.ml_dsa_pk_b58, nonce
+            "CREATE:{}:{}:{}",
+            alice.ed_pk_b58, alice.ml_dsa_pk_b64, nonce
         );
         let (ed_sig, ml_sig) = sign_headers(&message, &alice.ed_key, &alice.ml_dsa_secret);
 
@@ -115,7 +115,7 @@ async fn test_recryption_share_returns_control_plane_response() {
             .header("X-Signature-MlDsa", &ml_sig)
             .json(&serde_json::json!({
                 "ed25519_pk": alice.ed_pk_b58,
-                "ml_dsa_pk": alice.ml_dsa_pk_b58,
+                "ml_dsa_pk": alice.ml_dsa_pk_b64,
             }))
             .send()
             .await
@@ -127,8 +127,8 @@ async fn test_recryption_share_returns_control_plane_response() {
     {
         let nonce = now_nonce();
         let message = format!(
-            "CREATE:{}:{}::{}",
-            bob.ed_pk_b58, bob.ml_dsa_pk_b58, nonce
+            "CREATE:{}:{}:{}",
+            bob.ed_pk_b58, bob.ml_dsa_pk_b64, nonce
         );
         let (ed_sig, ml_sig) = sign_headers(&message, &bob.ed_key, &bob.ml_dsa_secret);
 
@@ -140,7 +140,7 @@ async fn test_recryption_share_returns_control_plane_response() {
             .header("X-Signature-MlDsa", &ml_sig)
             .json(&serde_json::json!({
                 "ed25519_pk": bob.ed_pk_b58,
-                "ml_dsa_pk": bob.ml_dsa_pk_b58,
+                "ml_dsa_pk": bob.ml_dsa_pk_b64,
             }))
             .send()
             .await
@@ -179,7 +179,9 @@ async fn test_recryption_share_returns_control_plane_response() {
         .backend()
         .generate_recrypt_key(&alice.pre_kp.secret, &bob.pre_kp.public)
         .unwrap();
-    let recrypt_key_b58 = bs58::encode(recrypt_key.to_bytes()).into_string();
+    let recrypt_key_b64 = base64::engine::general_purpose::STANDARD.encode(recrypt_key.to_bytes());
+    let wrapped_key_b64 =
+        base64::engine::general_purpose::STANDARD.encode(encrypted.wrapped_key.to_bytes());
 
     let share_id = {
         let nonce = now_nonce();
@@ -198,7 +200,8 @@ async fn test_recryption_share_returns_control_plane_response() {
             .json(&serde_json::json!({
                 "to_fingerprint": bob.fingerprint,
                 "file_hash": file_hash_b58,
-                "recrypt_key": recrypt_key_b58,
+                "recrypt_key": recrypt_key_b64,
+                "wrapped_key": wrapped_key_b64,
                 "backend_id": "mock",
             }))
             .send()

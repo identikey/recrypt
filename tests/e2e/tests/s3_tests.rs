@@ -11,6 +11,7 @@
 
 #![cfg(feature = "s3-tests")]
 
+use base64::Engine as _;
 use recrypt_core::{HybridEncryptor, pre::backends::MockBackend};
 use recrypt_e2e_tests::{
     api::TestIdentity,
@@ -152,11 +153,11 @@ async fn test_share_through_s3() {
         .backend()
         .generate_recrypt_key(&alice.pre_kp.secret, &bob.pre_kp.public)
         .expect("generate_recrypt_key failed");
-    let recrypt_key_b58 = bs58::encode(recrypt_key.to_bytes()).into_string();
+    let recrypt_key_b64 = base64::engine::general_purpose::STANDARD.encode(recrypt_key.to_bytes());
 
     // Alice creates a share.
     let share_resp = api
-        .create_share(&alice, &bob, &file_hash, &recrypt_key_b58, "")
+        .create_share(&alice, &bob, &file_hash, &recrypt_key_b64, "")
         .await;
     assert_eq!(share_resp.status().as_u16(), 201, "create_share failed");
     let share_json: serde_json::Value = share_resp.json().await.unwrap();

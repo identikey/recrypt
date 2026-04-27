@@ -6,7 +6,7 @@ use axum::{
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
 };
-use base64::Engine as _;
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use recrypt_core::pre::BackendId;
 use recrypt_core::{EncryptedFile, HybridEncryptor};
 use recrypt_wire::MultiFormat;
@@ -69,12 +69,12 @@ pub struct RecryptionShareResponse {
 #[derive(Deserialize)]
 pub struct CreateShareRequest {
     pub to_fingerprint: String,
-    pub file_hash: String,   // base58
-    pub recrypt_key: String, // base58
-    /// Serialized original wrapped key (`Ciphertext::to_bytes()`) as base58.
+    pub file_hash: String,   // base58 (32B)
+    pub recrypt_key: String, // base64 (multi-KB; see encoding-conventions.md §4)
+    /// Serialized original wrapped key (`Ciphertext::to_bytes()`) as base64.
     /// Required so the proxy can recrypt it later without re-fetching the full
     /// file envelope (which does not embed the wrapped key by design).
-    pub wrapped_key: String, // base58
+    pub wrapped_key: String, // base64 (multi-KB)
     pub backend_id: String,  // "mock" or "lattice"
 }
 
@@ -149,15 +149,15 @@ pub async fn create_share(
         recrypt_core::sign::VerifyPolicy::PqRequired,
     )?;
 
-    // Decode recrypt key
-    let recrypt_key_bytes = bs58::decode(&body.recrypt_key)
-        .into_vec()
-        .map_err(|_| ServerError::BadRequest("Invalid base58 in recrypt_key".into()))?;
+    // Decode recrypt key (base64; multi-KB lattice keys would be O(n²) in base58)
+    let recrypt_key_bytes = BASE64
+        .decode(&body.recrypt_key)
+        .map_err(|_| ServerError::BadRequest("Invalid base64 in recrypt_key".into()))?;
 
     // Decode wrapped key (original PRE ciphertext, needed for recryption)
-    let wrapped_key_bytes = bs58::decode(&body.wrapped_key)
-        .into_vec()
-        .map_err(|_| ServerError::BadRequest("Invalid base58 in wrapped_key".into()))?;
+    let wrapped_key_bytes = BASE64
+        .decode(&body.wrapped_key)
+        .map_err(|_| ServerError::BadRequest("Invalid base64 in wrapped_key".into()))?;
 
     // Parse backend ID
     let backend_id: BackendId = body

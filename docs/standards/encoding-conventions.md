@@ -61,10 +61,12 @@ This table is normative — when implementing a new boundary, check here first.
 
 ## 5. Known violations
 
-These exist in the codebase as of 2026-04-27 and must be migrated to base64:
+None as of 2026-04-27. All multi-KB blobs (ml_dsa_pk, recrypt_key, wrapped_key, lattice PRE keys) use base64; short stable IDs (ed25519, fingerprints, file hashes, mock PRE) use base58.
 
-- `recrypt-cli/src/client/api.rs:179` — `CreateShareRequest.recrypt_key` is base58-encoded. For the lattice backend the recryption key is multi-KB; encoding cost is quadratic. Tracked: `recrypt-jtw`.
-- `docs/http-api-reference.md` §1.3 — `ml_dsa_pk` is base58 in the `CREATE` canonical message. Multi-KB; quadratic. Migrating requires a coordinated server/client change (protocol version bump). Tracked: `recrypt-fil`.
+Historical fixes:
+- `recrypt-jtw` (closed 2026-04-27) — migrated `CreateShareRequest.recrypt_key` and `wrapped_key` from base58 to base64.
+- `recrypt-fil` (closed 2026-04-27) — migrated `ml_dsa_pk` (REST body + `CREATE` canonical signature message) from base58 to base64.
+- `recrypt-n1e` (closed 2026-04-27) — fixed `identity show` hanging on bs58::encode of multi-MB lattice PRE pubkey; display path now picks base58 vs base64 by size.
 
 ## 6. References
 
