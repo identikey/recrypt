@@ -394,9 +394,18 @@ async fn export_identity(
         }
         ExportFormat::Envelope => {
             let wire_id = wire_identity_from_wallet(&name, identity)?;
-            let bytes = wire_id
-                .to_envelope_bytes()
-                .map_err(|e| anyhow::anyhow!("Failed to serialize envelope: {e}"))?;
+            // Wrap-then-sign so the export commits to all key material, not
+            // just the ed25519 fingerprint. Prefer hybrid (ed25519 + ML-DSA-87)
+            // when ML-DSA secret is available; fall back to ed25519-only.
+            // Spec: docs/standards/identity-self-signature.md.
+            let bytes = match wire_id.ml_dsa.as_ref().and_then(|kp| kp.secret.as_ref()) {
+                Some(ml_dsa_secret) => wire_id
+                    .sign_self_hybrid(ml_dsa_secret)
+                    .map_err(|e| anyhow::anyhow!("Failed to hybrid-sign envelope: {e}"))?,
+                None => wire_id
+                    .sign_self_ed25519()
+                    .map_err(|e| anyhow::anyhow!("Failed to ed25519-sign envelope: {e}"))?,
+            };
             write_secret_file(output_path, &bytes)
                 .with_context(|| format!("Failed to write {output}"))?;
         }
@@ -425,8 +434,7 @@ async fn import_identity(file: String, name: Option<String>, ctx: &Context) -> R
     // (0xd8 0xc8). JSON may have leading whitespace or a UTF-8 BOM, so skip
     // those before checking for an opening brace.
     let identity = if bytes.starts_with(&[0xd8, 0xc8]) {
-        let wire_id = recrypt_wire::Identity::from_envelope_bytes(&bytes)
-            .map_err(|e| anyhow::anyhow!("Failed to parse identity envelope: {e}"))?;
+        let wire_id = parse_identity_envelope(&bytes)?;
         wallet_identity_from_wire(&wire_id)?
     } else {
         let probe = bytes.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&bytes);
@@ -579,6 +587,48 @@ fn wallet_identity_from_wire(wi: &recrypt_wire::Identity) -> Result<Identity> {
         pre_backend: backend_id,
         unknown_assertions: wi.unknown_assertions.clone(),
     })
+}
+
+/// Parse an identity envelope (CBOR bytes), verifying its self-signature when
+/// the bytes are wrapped/signed. Bare unsigned envelopes are accepted as a
+/// backward-compat path for files exported by older clients.
+///
+/// Wire shape produced by current exports:
+///   `wrap(identity-envelope) + 'signed': Signature(ed25519, ...) [+ "mldsa-signature": h'...']`
+fn parse_identity_envelope(bytes: &[u8]) -> Result<recrypt_wire::Identity> {
+    use bc_envelope::prelude::*;
+
+    let outer = Envelope::try_from_cbor_data(bytes.to_vec())
+        .map_err(|e| anyhow::anyhow!("Failed to parse identity envelope: {e}"))?;
+
+    let Ok(inner) = outer.try_unwrap() else {
+        // Not a wrapped envelope — treat as a bare (unsigned) identity for
+        // backward compat with files exported before signed exports landed.
+        debug!("identity envelope is bare (unsigned); accepting for backward-compat");
+        return recrypt_wire::Identity::from_envelope_bytes(bytes)
+            .map_err(|e| anyhow::anyhow!("Failed to parse identity envelope: {e}"));
+    };
+
+    // Wrapped envelope: must verify before trust. Choose verifier by whether
+    // the outer carries the ML-DSA-87 sibling assertion.
+    let has_mldsa_sig = outer.assertions().iter().any(|a| {
+        a.as_predicate()
+            .and_then(|p| p.try_leaf().ok())
+            .and_then(|c| c.try_into_text().ok())
+            .map(|s| s == "mldsa-signature")
+            .unwrap_or(false)
+    });
+    if has_mldsa_sig {
+        recrypt_wire::Identity::verify_self_signature_hybrid(bytes)
+            .map_err(|e| anyhow::anyhow!("hybrid self-signature verification failed: {e}"))?;
+    } else {
+        recrypt_wire::Identity::verify_self_signature_ed25519(bytes)
+            .map_err(|e| anyhow::anyhow!("ed25519 self-signature verification failed: {e}"))?;
+    }
+
+    let inner_bytes = inner.to_cbor_data();
+    recrypt_wire::Identity::from_envelope_bytes(&inner_bytes)
+        .map_err(|e| anyhow::anyhow!("Failed to parse inner identity envelope: {e}"))
 }
 
 // Helper functions

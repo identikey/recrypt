@@ -285,6 +285,154 @@ fn import_auto_detect_both_formats() {
 }
 
 #[test]
+fn export_envelope_is_self_signed_hybrid() {
+    let (tmp, wallet_path, config_dir) = setup();
+
+    recrypt_cmd(&wallet_path, &config_dir)
+        .args(["identity", "new", "--name", "alice"])
+        .assert()
+        .success();
+
+    let output_path = tmp.path().join("alice.envelope");
+    recrypt_cmd(&wallet_path, &config_dir)
+        .args([
+            "identity",
+            "export",
+            "alice",
+            "--output",
+            output_path.to_str().unwrap(),
+            "--format",
+            "envelope",
+        ])
+        .assert()
+        .success();
+
+    let bytes = fs::read(&output_path).unwrap();
+
+    // The exported envelope must verify under the hybrid path. This
+    // guarantees the file is wrapped, carries the ed25519 'signed'
+    // assertion, and carries the ML-DSA-87 'mldsa-signature' sibling
+    // assertion — all three are required for an export to be considered
+    // hybrid-signed.
+    recrypt_wire::Identity::verify_self_signature_hybrid(&bytes)
+        .expect("exported envelope should verify under the hybrid self-signature path");
+}
+
+#[test]
+fn import_tampered_signed_envelope_rejected() {
+    let (tmp, wallet_path, config_dir) = setup();
+
+    recrypt_cmd(&wallet_path, &config_dir)
+        .args(["identity", "new", "--name", "alice"])
+        .assert()
+        .success();
+
+    let output_path = tmp.path().join("alice.envelope");
+    recrypt_cmd(&wallet_path, &config_dir)
+        .args([
+            "identity",
+            "export",
+            "alice",
+            "--output",
+            output_path.to_str().unwrap(),
+            "--format",
+            "envelope",
+        ])
+        .assert()
+        .success();
+
+    // Flip a byte deep in the file (likely inside the ML-DSA signature blob
+    // or the trailing sibling assertions). Importing must fail rather than
+    // silently accepting forged key material.
+    let mut bytes = fs::read(&output_path).unwrap();
+    let idx = bytes.len() - 10;
+    bytes[idx] ^= 0x01;
+    let tampered_path = tmp.path().join("alice-tampered.envelope");
+    fs::write(&tampered_path, &bytes).unwrap();
+
+    let import_out = recrypt_cmd(&wallet_path, &config_dir)
+        .args([
+            "identity",
+            "import",
+            tampered_path.to_str().unwrap(),
+            "--name",
+            "should-fail",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        !import_out.status.success(),
+        "importing a tampered signed envelope must fail"
+    );
+    let stderr = String::from_utf8_lossy(&import_out.stderr);
+    assert!(
+        stderr.to_lowercase().contains("signature")
+            || stderr.to_lowercase().contains("verification")
+            || stderr.contains("envelope"),
+        "error should mention signature/verification/envelope; got: {stderr}"
+    );
+}
+
+#[test]
+fn import_bare_unsigned_envelope_backward_compat() {
+    use bc_envelope::prelude::*;
+
+    let (tmp, wallet_path, config_dir) = setup();
+
+    // Produce a normal (signed) export, then strip the wrapper to simulate
+    // a bare envelope from a pre-signing client.
+    recrypt_cmd(&wallet_path, &config_dir)
+        .args(["identity", "new", "--name", "alice"])
+        .assert()
+        .success();
+
+    let signed_path = tmp.path().join("alice-signed.envelope");
+    recrypt_cmd(&wallet_path, &config_dir)
+        .args([
+            "identity",
+            "export",
+            "alice",
+            "--output",
+            signed_path.to_str().unwrap(),
+            "--format",
+            "envelope",
+        ])
+        .assert()
+        .success();
+
+    let signed_bytes = fs::read(&signed_path).unwrap();
+    let outer = Envelope::try_from_cbor_data(signed_bytes).unwrap();
+    let inner = outer
+        .try_unwrap()
+        .expect("current export should be wrapped+signed");
+    let bare_bytes = inner.to_cbor_data();
+    let bare_path = tmp.path().join("alice-bare.envelope");
+    fs::write(&bare_path, &bare_bytes).unwrap();
+
+    // Drop the original to free the name, then import the bare envelope.
+    recrypt_cmd(&wallet_path, &config_dir)
+        .args(["identity", "delete", "alice"])
+        .assert()
+        .success();
+
+    let import_out = recrypt_cmd(&wallet_path, &config_dir)
+        .args([
+            "identity",
+            "import",
+            bare_path.to_str().unwrap(),
+            "--name",
+            "alice-bare",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        import_out.status.success(),
+        "bare unsigned envelopes must remain importable for backward compat: {}",
+        String::from_utf8_lossy(&import_out.stderr)
+    );
+}
+
+#[test]
 fn import_ed25519_only_envelope_rejected() {
     let fixture_path = concat!(
         env!("CARGO_MANIFEST_DIR"),
