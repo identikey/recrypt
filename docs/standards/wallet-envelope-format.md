@@ -15,13 +15,13 @@ The new format is a Gordian Envelope wrapped in an **outer encryption shell**. T
 
 ```
 File on disk:
-  MAGIC ("DCYW") || version (2) || salt (32B) || nonce (24B)
+  MAGIC ("IKEYW") || version (2) || salt (32B) || nonce (24B)
   || XChaCha20-Poly1305(
        Gordian Envelope bytes (dCBOR)
      )
 ```
 
-The outer shell is unchanged from v1 — same magic, same Argon2id parameters, same AEAD. Only the plaintext payload changes from JSON to a Gordian Envelope.
+The outer shell uses the same Argon2id parameters and same AEAD as v1; the magic ("IKEYW", short for Identikey Wallet) and version byte both change to make v1→v2 wallets unambiguously distinct on sight, and the plaintext payload changes from JSON to a Gordian Envelope.
 
 ---
 
@@ -161,11 +161,11 @@ The file-on-disk format wraps the envelope in an authenticated encryption shell:
 
 ```
 Offset  Size  Field
-0       4     Magic bytes: "DCYW"
-4       1     Shell version: 2
-5       32    Salt (random, for Argon2id)
-37      24    Nonce (random, for XChaCha20-Poly1305)
-61      var   Ciphertext + Poly1305 tag (16 bytes)
+0       5     Magic bytes: "IKEYW"
+5       1     Shell version: 2
+6       32    Salt (random, for Argon2id)
+38      24    Nonce (random, for XChaCha20-Poly1305)
+62      var   Ciphertext + Poly1305 tag (16 bytes)
 ```
 
 **Shell version 2** signals that the plaintext is a Gordian Envelope (dCBOR), not JSON. Parsers that see version 1 know the payload is JSON; version 2 is dCBOR.

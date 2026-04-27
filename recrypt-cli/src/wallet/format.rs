@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-const MAGIC: &[u8; 4] = b"DCYW";
+const MAGIC: &[u8; 5] = b"IKEYW";
 const VERSION: u8 = 1;
 
 // Argon2 params (OWASP recommendations)
@@ -93,7 +93,7 @@ pub fn encrypt_wallet(data: &WalletData, password: &str) -> Result<Vec<u8>> {
         .map_err(|e| anyhow!("Encryption failed: {e}"))?;
 
     // Assemble: magic || version || salt || nonce || ciphertext (includes tag)
-    let mut output = Vec::with_capacity(4 + 1 + 32 + 24 + ciphertext.len());
+    let mut output = Vec::with_capacity(5 + 1 + 32 + 24 + ciphertext.len());
     output.extend_from_slice(MAGIC);
     output.push(VERSION);
     output.extend_from_slice(&salt);
@@ -113,14 +113,14 @@ pub fn decrypt_wallet(data: &[u8], password: &str) -> Result<WalletData> {
 
 /// Extract salt from encrypted wallet header (for key derivation)
 pub fn extract_salt(data: &[u8]) -> Result<[u8; 32]> {
-    if data.len() < 4 + 1 + 32 {
+    if data.len() < 5 + 1 + 32 {
         return Err(anyhow!("Wallet file too short for salt extraction"));
     }
-    if &data[0..4] != MAGIC {
+    if &data[0..5] != MAGIC {
         return Err(anyhow!("Invalid wallet file (bad magic)"));
     }
     let mut salt = [0u8; 32];
-    salt.copy_from_slice(&data[5..37]);
+    salt.copy_from_slice(&data[6..38]);
     Ok(salt)
 }
 
@@ -138,19 +138,19 @@ pub fn derive_key(password: &str, salt: &[u8; 32]) -> Result<[u8; 32]> {
 
 /// Decrypt wallet with pre-derived key (no password prompt needed)
 pub fn decrypt_wallet_with_key(data: &[u8], key: &[u8; 32]) -> Result<WalletData> {
-    if data.len() < 4 + 1 + 32 + 24 + 16 {
+    if data.len() < 5 + 1 + 32 + 24 + 16 {
         return Err(anyhow!("Wallet file too short"));
     }
-    if &data[0..4] != MAGIC {
+    if &data[0..5] != MAGIC {
         return Err(anyhow!("Invalid wallet file (bad magic)"));
     }
-    let version = data[4];
+    let version = data[5];
     if version != VERSION {
         return Err(anyhow!("Unsupported wallet version: {version}"));
     }
 
-    let nonce = &data[37..61];
-    let ciphertext = &data[61..];
+    let nonce = &data[38..62];
+    let ciphertext = &data[62..];
 
     let cipher = XChaCha20Poly1305::new_from_slice(key)?;
     let nonce_arr: [u8; 24] = nonce.try_into()?;
@@ -180,7 +180,7 @@ pub fn encrypt_wallet_with_key(
         .encrypt(&nonce.into(), json.as_slice())
         .map_err(|e| anyhow!("Encryption failed: {e}"))?;
 
-    let mut output = Vec::with_capacity(4 + 1 + 32 + 24 + ciphertext.len());
+    let mut output = Vec::with_capacity(5 + 1 + 32 + 24 + ciphertext.len());
     output.extend_from_slice(MAGIC);
     output.push(VERSION);
     output.extend_from_slice(salt);
