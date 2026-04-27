@@ -3,6 +3,24 @@ name = "recrypt-wire"
 version.workspace = true
 edition.workspace = true
 
+[features]
+default = ["mock-backend", "pq-self-sign"]
+# `mock-backend` enables wire-format encode/decode of `BackendId::Mock`.
+# Mock provides ZERO security (it's no-op encryption); production deploys
+# should opt out with `default-features = false` so the wire crate refuses
+# to accept mock-tagged envelopes:
+#
+#   recrypt-wire = { path = "...", default-features = false }
+#
+# Tests across the workspace assume mock-backend is enabled.
+mock-backend = []
+# `pq-self-sign` enables `Identity::sign_self_hybrid` /
+# `Identity::verify_self_signature_hybrid`, which combine bc-envelope's
+# ed25519 self-signature with a sibling `"mldsa-signature"` assertion
+# carrying raw ML-DSA-87 bytes. Pulls in liboqs via `recrypt-ffi`. The
+# ed25519-only path (`sign_self_ed25519`) is always available.
+pq-self-sign = ["dep:recrypt-ffi"]
+
 [dependencies]
 # Gordian Envelope (dCBOR wire format)
 # Pinned per migration plan alpha-status mitigation.
@@ -15,17 +33,19 @@ tracing = "0.1"
 # Hex encoding (used in signature debug logs)
 hex = "0.4"
 
-# Serialization (JSON for debug output, serde for config compat)
+# Serialization (serde for config compat; nothing in this crate produces JSON)
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
 
-# Encoding
+# Encoding (base64 for ASCII armor payload)
 base64 = "0.22"
-bs58 = "0.5"
 
 # Core types (we serialize these)
 recrypt-core = { path = "../recrypt-core" }
 ed25519-dalek.workspace = true
+
+# Used by the `pq-self-sign` feature for ML-DSA-87 sign/verify on the
+# self-signed identity envelope.
+recrypt-ffi = { path = "../recrypt-ffi", optional = true }
 
 # Error handling
 thiserror.workspace = true
@@ -38,6 +58,9 @@ zeroize.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
-recrypt-ffi = { path = "../recrypt-ffi" }
 hex = "0.4"
 ed25519-dalek.workspace = true
+# Used only by tests/fixture_regenerate.rs to write fixture metadata sidecars.
+serde_json = "1"
+# Tests for hybrid self-signature need ML-DSA keygen.
+recrypt-ffi = { path = "../recrypt-ffi" }

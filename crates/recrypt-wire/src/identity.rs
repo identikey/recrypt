@@ -5,9 +5,9 @@ use bc_envelope::prelude::*;
 use std::sync::OnceLock;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
+use crate::armor::{ArmorType, armor_decode, armor_encode};
 use crate::error::{WireError, WireResult};
 use crate::format::MultiFormat;
-use crate::armor::{ArmorType, armor_decode, armor_encode};
 
 const KNOWN_PREDICATES: &[&str] = &[
     "created",
@@ -96,12 +96,137 @@ impl Identity {
         let inner = self.to_envelope_inner()?;
         let wrapped = inner.wrap();
 
-        let private_key = SigningPrivateKey::new_ed25519(
-            Ed25519PrivateKey::from_data(secret_bytes),
-        );
+        let private_key =
+            SigningPrivateKey::new_ed25519(Ed25519PrivateKey::from_data(secret_bytes));
 
         let signed_envelope = wrapped.add_signature(&private_key);
         Ok(signed_envelope.to_cbor_data())
+    }
+
+    /// Sign with ed25519 AND ML-DSA-87 in a hybrid wrap-then-sign pattern.
+    ///
+    /// Wire shape: `wrap(inner) + 'signed': Signature(ed25519, ...) +
+    /// "mldsa-signature": h'<raw ML-DSA-87 signature bytes>'`. Both
+    /// signatures commit to the same payload (the wrapped envelope's
+    /// subject digest, i.e. the inner envelope's digest). The ed25519
+    /// half uses bc-envelope's native `'signed'` machinery; the ML-DSA
+    /// half is a sibling raw-bytes assertion because bc-envelope's
+    /// `Signature` type does not yet model ML-DSA.
+    ///
+    /// Requires both `self.ed25519_secret` and the supplied
+    /// `ml_dsa_secret` to be present.
+    ///
+    /// See `docs/standards/identity-self-signature.md`.
+    #[cfg(feature = "pq-self-sign")]
+    pub fn sign_self_hybrid(&self, ml_dsa_secret: &[u8]) -> WireResult<Vec<u8>> {
+        use recrypt_ffi::liboqs::{PqAlgorithm, pq_sign};
+
+        let ed25519_sk = self.ed25519_secret.ok_or_else(|| {
+            WireError::InvalidFormat("ed25519 secret key required for hybrid signing".into())
+        })?;
+
+        let inner = self.to_envelope_inner()?;
+        let wrapped = inner.wrap();
+
+        // ed25519 via bc-envelope (canonical 'signed' assertion).
+        let priv_ed = SigningPrivateKey::new_ed25519(Ed25519PrivateKey::from_data(ed25519_sk));
+        let ed_signed = wrapped.add_signature(&priv_ed);
+
+        // ML-DSA over the wrapped envelope's subject digest — the same
+        // bytes ed25519 commits to. (bc-envelope's signature mechanism
+        // signs over the wrapper's subject digest internally.)
+        let payload = wrapped.subject().digest().data().to_vec();
+        let ml_dsa_sig = pq_sign(ml_dsa_secret, PqAlgorithm::MlDsa87, &payload)
+            .map_err(|e| WireError::Envelope(format!("ML-DSA-87 self-signature failed: {e}")))?;
+
+        let final_envelope =
+            ed_signed.add_assertion("mldsa-signature", ByteString::from(ml_dsa_sig));
+        Ok(final_envelope.to_cbor_data())
+    }
+
+    /// Verify a hybrid (ed25519 + ML-DSA-87) self-signature.
+    ///
+    /// Both signatures must verify against the same payload. Returns
+    /// `Err` for any failure mode (missing ML-DSA pubkey on the inner
+    /// identity, fingerprint mismatch, ed25519 invalid, ML-DSA invalid,
+    /// or `mldsa-signature` assertion absent).
+    #[cfg(feature = "pq-self-sign")]
+    pub fn verify_self_signature_hybrid(envelope_bytes: &[u8]) -> WireResult<()> {
+        use recrypt_ffi::liboqs::{PqAlgorithm, pq_verify};
+
+        let outer = Envelope::try_from_cbor_data(envelope_bytes.to_vec())
+            .map_err(|e| WireError::Envelope(format!("parse envelope: {e}")))?;
+
+        let inner = outer.try_unwrap().map_err(|e| {
+            tracing::debug!(error = %e, "expected wrapped (signed) identity envelope");
+            WireError::SignatureVerification("signature verification failed".into())
+        })?;
+
+        let identity = Self::from_envelope_inner(&inner)?;
+
+        // ed25519 first (cheaper; fail fast).
+        let public_key =
+            SigningPublicKey::from_ed25519(Ed25519PublicKey::from_data(identity.ed25519_public));
+        let ed_ok = outer.has_signature_from(&public_key).map_err(|e| {
+            tracing::debug!(
+                fingerprint = hex::encode(identity.fingerprint),
+                error = %e,
+                "ed25519 signature check returned error"
+            );
+            WireError::SignatureVerification("signature verification failed".into())
+        })?;
+        if !ed_ok {
+            tracing::debug!(
+                fingerprint = hex::encode(identity.fingerprint),
+                "no valid 'signed' assertion found on wrapped envelope"
+            );
+            return Err(WireError::SignatureVerification(
+                "signature verification failed".into(),
+            ));
+        }
+
+        // ML-DSA: pubkey from the inner identity, signature from the
+        // outer envelope's "mldsa-signature" assertion, payload is the
+        // wrapped subject digest (same bytes ed25519 just verified).
+        let ml_dsa_public = identity
+            .ml_dsa
+            .as_ref()
+            .map(|kp| kp.public.as_slice())
+            .ok_or_else(|| {
+                WireError::SignatureVerification("inner identity has no ml-dsa public key".into())
+            })?;
+
+        let ml_dsa_sig: ByteString = outer
+            .extract_object_for_predicate("mldsa-signature")
+            .map_err(|_| {
+                WireError::SignatureVerification(
+                    "missing 'mldsa-signature' assertion on hybrid envelope".into(),
+                )
+            })?;
+
+        // Reconstruct the payload: wrap(inner)'s subject digest. We have
+        // `inner` from the unwrap; the wrap's subject digest is computed
+        // from the inner envelope.
+        let wrapped = inner.wrap();
+        let payload = wrapped.subject().digest().data().to_vec();
+
+        let pq_ok = pq_verify(
+            ml_dsa_public,
+            PqAlgorithm::MlDsa87,
+            &payload,
+            &ml_dsa_sig.to_vec(),
+        )
+        .map_err(|e| {
+            tracing::debug!(error = %e, "ML-DSA verification call failed");
+            WireError::SignatureVerification("signature verification failed".into())
+        })?;
+        if !pq_ok {
+            return Err(WireError::SignatureVerification(
+                "signature verification failed".into(),
+            ));
+        }
+
+        Ok(())
     }
 
     /// Verifies the `'signed'` ed25519 self-signature on a wrap-then-signed
@@ -116,7 +241,9 @@ impl Identity {
     /// Returns `Err` if: outer is not a wrapped envelope, fingerprint mismatch,
     /// no `'signed'` assertion, or signature invalid. The caller-facing error
     /// message is intentionally generic; details are emitted via
-    /// `tracing::debug!`.
+    /// `tracing::debug!`. This verifies ED25519 ONLY — see
+    /// [`Self::verify_self_signature_hybrid`] when the file was signed with
+    /// `sign_self_hybrid`.
     pub fn verify_self_signature_ed25519(envelope_bytes: &[u8]) -> WireResult<()> {
         let outer = Envelope::try_from_cbor_data(envelope_bytes.to_vec())
             .map_err(|e| WireError::Envelope(format!("parse envelope: {e}")))?;
@@ -128,9 +255,8 @@ impl Identity {
 
         let identity = Self::from_envelope_inner(&inner)?;
 
-        let public_key = SigningPublicKey::from_ed25519(
-            Ed25519PublicKey::from_data(identity.ed25519_public),
-        );
+        let public_key =
+            SigningPublicKey::from_ed25519(Ed25519PublicKey::from_data(identity.ed25519_public));
 
         let has_sig = outer.has_signature_from(&public_key).map_err(|e| {
             tracing::debug!(
@@ -185,22 +311,15 @@ impl Identity {
         );
 
         if let Some(ref secret) = self.ed25519_secret {
-            envelope = envelope.add_assertion(
-                "ed25519-secret",
-                ByteString::from(secret.to_vec()),
-            );
+            envelope = envelope.add_assertion("ed25519-secret", ByteString::from(secret.to_vec()));
         }
 
         if let Some(ref ml_dsa) = self.ml_dsa {
-            envelope = envelope.add_assertion(
-                "ml-dsa-public",
-                ByteString::from(ml_dsa.public.clone()),
-            );
+            envelope =
+                envelope.add_assertion("ml-dsa-public", ByteString::from(ml_dsa.public.clone()));
             if let Some(ref secret) = ml_dsa.secret {
-                envelope = envelope.add_assertion(
-                    "ml-dsa-secret",
-                    ByteString::from(secret.clone()),
-                );
+                envelope =
+                    envelope.add_assertion("ml-dsa-secret", ByteString::from(secret.clone()));
             }
         }
 
@@ -210,22 +329,17 @@ impl Identity {
 
         if let Some(ref pre) = self.pre {
             envelope = envelope.add_assertion("pre-backend", pre.backend.as_str());
-            envelope = envelope.add_assertion(
-                "pre-public",
-                ByteString::from(pre.public.clone()),
-            );
+            envelope = envelope.add_assertion("pre-public", ByteString::from(pre.public.clone()));
             if let Some(ref secret) = pre.secret {
-                envelope = envelope.add_assertion(
-                    "pre-secret",
-                    ByteString::from(secret.clone()),
-                );
+                envelope = envelope.add_assertion("pre-secret", ByteString::from(secret.clone()));
             }
         }
 
         // Re-emit unknown assertions in their original order.
         for (pred, obj) in &self.unknown_assertions {
             let assertion = Envelope::new_assertion(pred.clone(), obj.clone());
-            envelope = envelope.add_assertion_envelope(assertion)
+            envelope = envelope
+                .add_assertion_envelope(assertion)
                 .map_err(|e| WireError::Envelope(format!("add unknown assertion: {e}")))?;
         }
 
@@ -294,16 +408,13 @@ impl Identity {
         }
 
         // ed25519-secret (optional)
-        let ed25519_secret: Option<[u8; 32]> = match envelope
-            .extract_optional_object_for_predicate::<ByteString>("ed25519-secret")
-        {
-            Ok(Some(bs)) => Some(
-                bs.to_vec()
-                    .try_into()
-                    .map_err(|_| WireError::InvalidFormat("ed25519-secret must be 32 bytes".into()))?,
-            ),
-            _ => None,
-        };
+        let ed25519_secret: Option<[u8; 32]> =
+            match envelope.extract_optional_object_for_predicate::<ByteString>("ed25519-secret") {
+                Ok(Some(bs)) => Some(bs.to_vec().try_into().map_err(|_| {
+                    WireError::InvalidFormat("ed25519-secret must be 32 bytes".into())
+                })?),
+                _ => None,
+            };
 
         // name (optional)
         let name: Option<String> = envelope
@@ -317,17 +428,15 @@ impl Identity {
                     .try_leaf()
                     .map_err(|e| WireError::Envelope(format!("created leaf: {e}")))?;
                 match cbor.into_case() {
-                    CBORCase::Tagged(tag, inner) if tag.value() == 1 => {
-                        match inner.into_case() {
-                            CBORCase::Unsigned(v) => Some(v),
-                            other => {
-                                return Err(WireError::InvalidFormat(format!(
-                                    "created tag 1 inner is not unsigned: {:?}",
-                                    CBOR::from(other)
-                                )));
-                            }
+                    CBORCase::Tagged(tag, inner) if tag.value() == 1 => match inner.into_case() {
+                        CBORCase::Unsigned(v) => Some(v),
+                        other => {
+                            return Err(WireError::InvalidFormat(format!(
+                                "created tag 1 inner is not unsigned: {:?}",
+                                CBOR::from(other)
+                            )));
                         }
-                    }
+                    },
                     other => {
                         return Err(WireError::InvalidFormat(format!(
                             "created is not tag 1: {:?}",
@@ -339,44 +448,66 @@ impl Identity {
             _ => None,
         };
 
-        // ml-dsa (optional)
-        let ml_dsa = match envelope
-            .extract_optional_object_for_predicate::<ByteString>("ml-dsa-public")
-        {
-            Ok(Some(pub_bs)) => {
-                let secret = envelope
-                    .extract_optional_object_for_predicate::<ByteString>("ml-dsa-secret")
-                    .ok()
-                    .flatten()
-                    .map(|bs| bs.to_vec());
-                Some(MlDsaKeyPair {
-                    public: pub_bs.to_vec(),
-                    secret,
-                })
-            }
-            _ => None,
-        };
+        // ml-dsa (optional). Absent assertion → None; present-but-malformed
+        // → InvalidFormat (don't silently treat malformed bytes as absent).
+        let ml_dsa =
+            match envelope.extract_optional_object_for_predicate::<ByteString>("ml-dsa-public") {
+                Ok(Some(pub_bs)) => {
+                    let secret = match envelope
+                        .extract_optional_object_for_predicate::<ByteString>("ml-dsa-secret")
+                    {
+                        Ok(Some(bs)) => Some(bs.to_vec()),
+                        Ok(None) => None,
+                        Err(e) => {
+                            return Err(WireError::InvalidFormat(format!(
+                                "ml-dsa-secret present but malformed: {e}"
+                            )));
+                        }
+                    };
+                    Some(MlDsaKeyPair {
+                        public: pub_bs.to_vec(),
+                        secret,
+                    })
+                }
+                Ok(None) => None,
+                Err(e) => {
+                    return Err(WireError::InvalidFormat(format!(
+                        "ml-dsa-public present but malformed: {e}"
+                    )));
+                }
+            };
 
-        // pre (optional)
-        let pre = match envelope
-            .extract_optional_object_for_predicate::<String>("pre-backend")
-        {
+        // pre (optional). Same absent-vs-malformed discipline as ml-dsa.
+        let pre = match envelope.extract_optional_object_for_predicate::<String>("pre-backend") {
             Ok(Some(backend)) => {
                 let pub_bs: ByteString = envelope
                     .extract_object_for_predicate("pre-public")
-                    .map_err(|_| WireError::MissingField("pre-public (pre-backend present)".into()))?;
-                let secret = envelope
+                    .map_err(|_| {
+                        WireError::MissingField("pre-public (pre-backend present)".into())
+                    })?;
+                let secret = match envelope
                     .extract_optional_object_for_predicate::<ByteString>("pre-secret")
-                    .ok()
-                    .flatten()
-                    .map(|bs| bs.to_vec());
+                {
+                    Ok(Some(bs)) => Some(bs.to_vec()),
+                    Ok(None) => None,
+                    Err(e) => {
+                        return Err(WireError::InvalidFormat(format!(
+                            "pre-secret present but malformed: {e}"
+                        )));
+                    }
+                };
                 Some(PreKeyMaterial {
                     backend,
                     public: pub_bs.to_vec(),
                     secret,
                 })
             }
-            _ => None,
+            Ok(None) => None,
+            Err(e) => {
+                return Err(WireError::InvalidFormat(format!(
+                    "pre-backend present but malformed: {e}"
+                )));
+            }
         };
 
         // Collect unknown assertions

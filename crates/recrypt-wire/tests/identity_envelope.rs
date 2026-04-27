@@ -120,10 +120,7 @@ fn unknown_assertion_preserved() {
     subject.insert("fingerprint", ByteString::from(fingerprint.to_vec()));
 
     let envelope = Envelope::new(CBOR::from(subject))
-        .add_assertion(
-            "ed25519-public",
-            ByteString::from(ed25519_public.to_vec()),
-        )
+        .add_assertion("ed25519-public", ByteString::from(ed25519_public.to_vec()))
         .add_assertion(
             "dreamball-lineage",
             ByteString::from(vec![0xDE, 0xAD, 0xBE, 0xEF]),
@@ -198,10 +195,14 @@ fn fingerprint_validation_on_decode() {
     subject.insert("format-version", 1_u32);
     subject.insert("fingerprint", ByteString::from(vec![0xFFu8; 32])); // bogus
 
-    let env = Envelope::new(CBOR::from(subject))
-        .add_assertion("ed25519-public", ByteString::from(test_ed25519_public().to_vec()));
+    let env = Envelope::new(CBOR::from(subject)).add_assertion(
+        "ed25519-public",
+        ByteString::from(test_ed25519_public().to_vec()),
+    );
     let bytes = env.to_cbor_data();
-    let err = Identity::from_envelope_bytes(&bytes).unwrap_err().to_string();
+    let err = Identity::from_envelope_bytes(&bytes)
+        .unwrap_err()
+        .to_string();
     assert!(
         err.contains("fingerprint"),
         "decode error must mention fingerprint: {err}"
@@ -218,15 +219,11 @@ fn missing_ed25519_public_rejected() {
     subject.insert("fingerprint", ByteString::from(fingerprint.to_vec()));
 
     // Build envelope without ed25519-public assertion
-    let envelope = Envelope::new(CBOR::from(subject))
-        .add_assertion("name", "Alice");
+    let envelope = Envelope::new(CBOR::from(subject)).add_assertion("name", "Alice");
 
     let bytes = envelope.to_cbor_data();
     let result = Identity::from_envelope_bytes(&bytes);
-    assert!(
-        result.is_err(),
-        "missing ed25519-public must be rejected"
-    );
+    assert!(result.is_err(), "missing ed25519-public must be rejected");
     let err = result.unwrap_err().to_string();
     assert!(
         err.contains("ed25519-public"),
@@ -333,11 +330,13 @@ fn self_signed_envelope_has_signed_assertion() {
     // Parse the raw envelope and confirm the 'signed' assertion is present on
     // the wrapper (wrap-then-sign).
     let envelope = Envelope::try_from_cbor_data(signed_bytes).unwrap();
-    let public_key = SigningPublicKey::from_ed25519(
-        Ed25519PublicKey::from_data(identity.ed25519_public),
-    );
+    let public_key =
+        SigningPublicKey::from_ed25519(Ed25519PublicKey::from_data(identity.ed25519_public));
     let has_sig = envelope.has_signature_from(&public_key).unwrap();
-    assert!(has_sig, "signed envelope must contain valid 'signed' assertion");
+    assert!(
+        has_sig,
+        "signed envelope must contain valid 'signed' assertion"
+    );
 }
 
 #[test]
@@ -395,4 +394,100 @@ fn signature_covers_assertions_not_just_subject() {
         result.is_err(),
         "wrapped envelope without signature must fail verification"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Hybrid (ed25519 + ML-DSA-87) self-signature
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "pq-self-sign")]
+mod hybrid {
+    use super::*;
+    use recrypt_ffi::liboqs::{PqAlgorithm, pq_keygen};
+
+    fn real_identity_with_secrets() -> Identity {
+        // Real ed25519 keypair (deterministic seed; tests don't need
+        // freshness here, just a key that bc-envelope sign/verify
+        // accepts).
+        let seed = [0xA1u8; 32];
+        let signing = ed25519_dalek::SigningKey::from_bytes(&seed);
+        let ed25519_public = signing.verifying_key().to_bytes();
+        let ed25519_secret = signing.to_bytes();
+
+        // Real ML-DSA-87 keypair.
+        let pq_kp = pq_keygen(PqAlgorithm::MlDsa87).unwrap();
+
+        Identity {
+            fingerprint: *blake3::hash(&ed25519_public).as_bytes(),
+            ed25519_public,
+            ed25519_secret: Some(ed25519_secret),
+            name: Some("Hybrid Hannah".to_string()),
+            created: Some(1_712_534_400),
+            ml_dsa: Some(MlDsaKeyPair {
+                public: pq_kp.public_key.clone(),
+                secret: Some(pq_kp.secret_key.clone()),
+            }),
+            pre: None,
+            unknown_assertions: vec![],
+        }
+    }
+
+    #[test]
+    fn hybrid_sign_and_verify_roundtrip() {
+        let identity = real_identity_with_secrets();
+        let ml_dsa_secret = identity.ml_dsa.as_ref().unwrap().secret.clone().unwrap();
+        let signed_bytes = identity.sign_self_hybrid(&ml_dsa_secret).unwrap();
+
+        Identity::verify_self_signature_hybrid(&signed_bytes)
+            .expect("hybrid roundtrip must verify");
+
+        // The ed25519-only verifier is also satisfied because the ed25519
+        // half of the hybrid uses the same `'signed'` mechanism.
+        Identity::verify_self_signature_ed25519(&signed_bytes)
+            .expect("ed25519 verifier must accept hybrid envelope");
+    }
+
+    #[test]
+    fn hybrid_verify_rejects_missing_mldsa_assertion() {
+        // An ed25519-only signed envelope has no `mldsa-signature`
+        // assertion, so the hybrid verifier must refuse it.
+        let identity = real_identity_with_secrets();
+        let signed_ed_only = identity.sign_self_ed25519().unwrap();
+        let err = Identity::verify_self_signature_hybrid(&signed_ed_only).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("mldsa-signature") || msg.contains("signature verification failed"),
+            "unexpected: {msg}"
+        );
+    }
+
+    #[test]
+    fn hybrid_verify_rejects_tampered_mldsa_signature() {
+        let identity = real_identity_with_secrets();
+        let ml_dsa_secret = identity.ml_dsa.as_ref().unwrap().secret.clone().unwrap();
+        let signed_bytes = identity.sign_self_hybrid(&ml_dsa_secret).unwrap();
+
+        // Flip a byte deep in the envelope (likely inside the ml-dsa
+        // signature). This must fail verification — either because of
+        // CBOR parse failure, ed25519 mismatch, or ml-dsa mismatch.
+        // Try several positions to find one that lands cleanly.
+        for offset in [signed_bytes.len() - 100, signed_bytes.len() - 50] {
+            let mut tampered = signed_bytes.clone();
+            tampered[offset] ^= 0xAA;
+            let _ = Identity::verify_self_signature_hybrid(&tampered).unwrap_err();
+        }
+    }
+
+    #[test]
+    fn hybrid_sign_requires_ed25519_secret() {
+        let mut identity = real_identity_with_secrets();
+        let ml_dsa_secret = identity.ml_dsa.as_ref().unwrap().secret.clone().unwrap();
+        identity.ed25519_secret = None;
+        let err = identity.sign_self_hybrid(&ml_dsa_secret).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("ed25519 secret key required"),
+            "unexpected: {msg}"
+        );
+    }
 }

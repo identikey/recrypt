@@ -22,21 +22,26 @@ const ARGON2_M_COST: u32 = 65536; // 64 MiB
 const ARGON2_T_COST: u32 = 3; // 3 iterations
 const ARGON2_P_COST: u32 = 4; // 4 parallelism
 
-#[derive(Debug)]
+#[derive(Debug, ZeroizeOnDrop)]
 pub struct WalletData {
+    #[zeroize(skip)]
     pub identities: HashMap<String, Identity>,
     /// Active identity name — lives in the wallet, single source of truth.
+    #[zeroize(skip)]
     pub active_identity: Option<String>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, ZeroizeOnDrop)]
 pub struct Identity {
+    #[zeroize(skip)]
     pub created_at: u64,
     /// Blake3(ed25519_public). Raw bytes; encode with bs58 for display/wire.
+    #[zeroize(skip)]
     pub fingerprint: [u8; 32],
     pub ed25519: KeyPair,
     pub ml_dsa: KeyPair,
     pub pre: KeyPair,
+    #[zeroize(skip)]
     pub pre_backend: recrypt_core::pre::BackendId,
 }
 
@@ -228,7 +233,9 @@ mod tests {
     #[test]
     fn test_wallet_encryption_roundtrip() {
         let mut wallet = WalletData::new();
-        wallet.identities.insert("test".to_string(), test_identity(1));
+        wallet
+            .identities
+            .insert("test".to_string(), test_identity(1));
 
         let password = "test-password-123";
         let encrypted = encrypt_wallet(&wallet, password).unwrap();
@@ -280,7 +287,9 @@ mod tests {
     #[test]
     fn test_encrypt_decrypt_with_key() {
         let mut wallet = WalletData::new();
-        wallet.identities.insert("test".to_string(), test_identity(7));
+        wallet
+            .identities
+            .insert("test".to_string(), test_identity(7));
 
         let key = [0xABu8; 32];
         let salt = [0xCDu8; 32];
@@ -338,8 +347,12 @@ mod tests {
     #[test]
     fn test_active_identity_preserved_through_aead() {
         let mut wallet = WalletData::new();
-        wallet.identities.insert("alice".to_string(), test_identity(10));
-        wallet.identities.insert("bob".to_string(), test_identity(20));
+        wallet
+            .identities
+            .insert("alice".to_string(), test_identity(10));
+        wallet
+            .identities
+            .insert("bob".to_string(), test_identity(20));
         wallet.active_identity = Some("bob".to_string());
 
         let key = [0x33u8; 32];
@@ -354,7 +367,9 @@ mod tests {
     #[test]
     fn test_tampered_ciphertext_fails_aead() {
         let mut wallet = WalletData::new();
-        wallet.identities.insert("alice".to_string(), test_identity(50));
+        wallet
+            .identities
+            .insert("alice".to_string(), test_identity(50));
         let key = [0x12u8; 32];
         let salt = [0x34u8; 32];
         let mut encrypted = encrypt_wallet_with_key(&wallet, &key, &salt).unwrap();

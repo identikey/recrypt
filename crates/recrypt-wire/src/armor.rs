@@ -124,9 +124,21 @@ pub fn armor_decode(s: &str) -> WireResult<ArmorBlock> {
             payload_start = begin_idx + 1 + i + 1;
             break;
         }
-        if let Some((key, value)) = line.split_once(": ") {
-            headers.insert(key.to_string(), value.to_string());
+        // Per docs/standards/encoding-conventions.md §6: each header line is
+        // exactly `Key: Value` (ASCII colon + space). A line that doesn't
+        // match isn't a header; reject the armor instead of silently
+        // dropping it (a typo'd header would have hidden itself).
+        let (key, value) = line.split_once(": ").ok_or_else(|| {
+            WireError::ArmorParse(format!(
+                "Malformed header line (expected 'Key: Value'): {line:?}"
+            ))
+        })?;
+        if key.is_empty() || key.chars().any(|c| c.is_whitespace()) {
+            return Err(WireError::ArmorParse(format!(
+                "Malformed header key (empty or contains whitespace): {key:?}"
+            )));
         }
+        headers.insert(key.to_string(), value.to_string());
     }
 
     // Decode base64 payload

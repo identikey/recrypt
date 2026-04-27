@@ -92,9 +92,65 @@ signature, unwrap failure).
 
 - Self-signature is not enforced on parse — `from_envelope_bytes` accepts
   unsigned envelopes. Callers that require authenticity must explicitly call
-  `verify_self_signature_ed25519`.
+  `verify_self_signature_ed25519` (or `_hybrid`).
 - There is no multi-signature support in this API (use bc-envelope's
   `add_signatures` directly for that).
 - Assertions added to the wrapper *after* signing (siblings of the
   `'signed'` assertion) are not covered by the signature. Only the inner
   wrapped envelope is covered.
+
+## Hybrid (ed25519 + ML-DSA-87) self-signature
+
+The ed25519-only path is the canonical default. When the signer wants
+post-quantum coverage as well — recrypt's hybrid posture — use the
+`pq-self-sign` feature on `recrypt-wire` and call
+`Identity::sign_self_hybrid(ml_dsa_secret)` /
+`Identity::verify_self_signature_hybrid(bytes)`.
+
+### Wire shape
+
+```
+Envelope {
+    subject: Wrapped(<identity envelope>),
+    assertions: [
+        'signed': Signature(ed25519, <64-byte signature>),     // bc-envelope native
+        "mldsa-signature": h'<raw ML-DSA-87 signature bytes>'  // sibling assertion
+    ]
+}
+```
+
+Both signatures commit to the **same payload**: the digest of the
+wrapped envelope's subject (i.e. the inner identity envelope's digest).
+ed25519 is signed by bc-envelope's `add_signature` (commits to that
+digest internally); ML-DSA-87 is signed explicitly over
+`wrapped.subject().digest().data()`.
+
+The ML-DSA half lives in a sibling string-keyed assertion rather than a
+second `'signed'` assertion because bc-envelope's `Signature` type does
+not yet model ML-DSA. When/if upstream support lands, both signatures
+can move to native `'signed'` and the `"mldsa-signature"` assertion can
+be retired (additive, no version bump on `recrypt.identity`).
+
+### Verification rules
+
+1. Parse outer, unwrap, parse inner identity (validates
+   `fingerprint == Blake3(ed25519_public)`).
+2. Verify the bc-envelope `'signed'` assertion using the validated
+   ed25519 public key. Failure → reject.
+3. Extract `"mldsa-signature"` assertion bytes. Absent → reject.
+4. Verify ML-DSA-87 using `inner.ml_dsa.public` (must be present) over
+   `wrapped.subject().digest().data()`. Failure → reject.
+
+A hybrid-signed envelope ALSO satisfies `verify_self_signature_ed25519`
+(the ed25519 half is identical). Callers that require PQ coverage MUST
+use the hybrid verifier — the ed25519-only verifier accepts envelopes
+that lack the `"mldsa-signature"` assertion.
+
+### Failure modes
+
+All failures collapse to `WireError::SignatureVerification("signature
+verification failed")` for caller-facing messages; details emit to
+`tracing::debug!`. The one exception is missing `"mldsa-signature"`
+assertion, which is a structural error rather than a cryptographic one
+and surfaces a more specific message in the error chain (still under
+`SignatureVerification`).
