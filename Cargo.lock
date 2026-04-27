@@ -3919,6 +3919,7 @@ dependencies = [
  "argon2",
  "assert_cmd",
  "base64",
+ "bc-envelope",
  "blake3",
  "bs58",
  "chacha20poly1305",

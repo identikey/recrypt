@@ -29,6 +29,9 @@ chacha20poly1305 = "0.10"
 rand = "0.8"
 zeroize = { version = "1.7", features = ["derive"] }
 
+# Wallet body serialization (Gordian Envelope / dCBOR)
+bc-envelope = "=0.43.0"
+
 # Output
 colored = "2"
 indicatif = "0.17"
