@@ -1,7 +1,7 @@
 //! Compare key generation times for different PRE backends
 
-use recrypt_core::pre::backends::LatticeBackend;
 use recrypt_core::pre::PreBackend;
+use recrypt_core::pre::backends::LatticeBackend;
 use std::time::Instant;
 
 fn main() {
@@ -18,7 +18,11 @@ fn main() {
                 match backend.generate_keypair() {
                     Ok(_kp) => {
                         let elapsed = start.elapsed();
-                        println!("KeyGen: {:.2}s ({:.0}ms)", elapsed.as_secs_f64(), elapsed.as_millis());
+                        println!(
+                            "KeyGen: {:.2}s ({:.0}ms)",
+                            elapsed.as_secs_f64(),
+                            elapsed.as_millis()
+                        );
                     }
                     Err(e) => println!("KeyGen failed: {e}"),
                 }

@@ -7,7 +7,7 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
 };
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use identikey_storage_auth::{AccountRecord, PublicKeyFingerprint};
 use serde::{Deserialize, Serialize};
 

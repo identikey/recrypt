@@ -36,11 +36,7 @@ impl EncryptedFile {
     }
 
     /// Verify the signature under `policy`.
-    pub fn verify_signature(
-        &self,
-        pks: &VerifyingKeys,
-        policy: VerifyPolicy,
-    ) -> CoreResult<bool> {
+    pub fn verify_signature(&self, pks: &VerifyingKeys, policy: VerifyPolicy) -> CoreResult<bool> {
         match &self.signature {
             Some(sig) => {
                 let payload = self.signature_payload();
@@ -51,5 +47,4 @@ impl EncryptedFile {
             )),
         }
     }
-
 }

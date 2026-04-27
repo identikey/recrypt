@@ -6,10 +6,9 @@ use axum::{
 };
 use std::sync::Arc;
 use tower_governor::{
-    GovernorLayer,
+    GovernorError, GovernorLayer,
     governor::GovernorConfigBuilder,
     key_extractor::{KeyExtractor, SmartIpKeyExtractor},
-    GovernorError,
 };
 use tower_http::trace::TraceLayer;
 
@@ -61,8 +60,12 @@ pub fn router(state: AppState) -> Router {
             .expect("valid per-fingerprint governor config"),
     );
 
-    let per_ip_layer = GovernorLayer { config: per_ip_conf };
-    let per_fp_layer = GovernorLayer { config: per_fp_conf };
+    let per_ip_layer = GovernorLayer {
+        config: per_ip_conf,
+    };
+    let per_fp_layer = GovernorLayer {
+        config: per_fp_conf,
+    };
 
     let protected = Router::new()
         .route("/accounts", post(accounts::create_account))
@@ -113,10 +116,7 @@ pub fn router(state: AppState) -> Router {
             "/keyspaces/{id}/grants",
             get(keyspaces::list_grants_by_keyspace),
         )
-        .route(
-            "/members/{fp}/keyspaces",
-            get(keyspaces::list_by_member),
-        )
+        .route("/members/{fp}/keyspaces", get(keyspaces::list_by_member))
         .route(
             "/subjects/{fp}/grants",
             get(keyspaces::list_grants_by_subject),

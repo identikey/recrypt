@@ -147,7 +147,8 @@ impl KeyringProvider {
     }
 
     fn entry(&self) -> Result<keyring::Entry> {
-        keyring::Entry::new(SERVICE_NAME, &self.account_name).map_err(|e| anyhow!("Keyring error: {e}"))
+        keyring::Entry::new(SERVICE_NAME, &self.account_name)
+            .map_err(|e| anyhow!("Keyring error: {e}"))
     }
 }
 

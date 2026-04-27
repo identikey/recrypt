@@ -74,14 +74,8 @@ fn build_hybrid_no_pre() -> (Identity, Vec<u8>) {
         .add_assertion("created", created_cbor)
         .add_assertion("ed25519-public", ByteString::from(ed25519_public.to_vec()))
         .add_assertion("ed25519-secret", ByteString::from(ed25519_secret.to_vec()))
-        .add_assertion(
-            "ml-dsa-public",
-            ByteString::from(vec![0xAAu8; 2592]),
-        )
-        .add_assertion(
-            "ml-dsa-secret",
-            ByteString::from(vec![0xBBu8; 4896]),
-        )
+        .add_assertion("ml-dsa-public", ByteString::from(vec![0xAAu8; 2592]))
+        .add_assertion("ml-dsa-secret", ByteString::from(vec![0xBBu8; 4896]))
         .add_assertion("name", "dreamball-owner")
         .add_assertion(
             "dreamball-lineage",

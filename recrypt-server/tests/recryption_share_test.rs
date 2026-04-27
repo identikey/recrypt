@@ -78,7 +78,6 @@ impl TestIdentity {
             pre_kp,
         }
     }
-
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
@@ -120,16 +119,18 @@ async fn test_recryption_share_returns_control_plane_response() {
             .send()
             .await
             .unwrap();
-        assert_eq!(resp.status(), 201, "Alice account creation failed: {:?}", resp.text().await);
+        assert_eq!(
+            resp.status(),
+            201,
+            "Alice account creation failed: {:?}",
+            resp.text().await
+        );
     }
 
     // ── Register Bob ────────────────────────────────────────────────────────
     {
         let nonce = now_nonce();
-        let message = format!(
-            "CREATE:{}:{}:{}",
-            bob.ed_pk_b58, bob.ml_dsa_pk_b64, nonce
-        );
+        let message = format!("CREATE:{}:{}:{}", bob.ed_pk_b58, bob.ml_dsa_pk_b64, nonce);
         let (ed_sig, ml_sig) = sign_headers(&message, &bob.ed_key, &bob.ml_dsa_secret);
 
         let resp = client
@@ -145,7 +146,12 @@ async fn test_recryption_share_returns_control_plane_response() {
             .send()
             .await
             .unwrap();
-        assert_eq!(resp.status(), 201, "Bob account creation failed: {:?}", resp.text().await);
+        assert_eq!(
+            resp.status(),
+            201,
+            "Bob account creation failed: {:?}",
+            resp.text().await
+        );
     }
 
     // ── Alice encrypts a file and uploads it ────────────────────────────────
@@ -171,7 +177,12 @@ async fn test_recryption_share_returns_control_plane_response() {
             .send()
             .await
             .unwrap();
-        assert_eq!(resp.status(), 201, "File upload failed: {:?}", resp.text().await);
+        assert_eq!(
+            resp.status(),
+            201,
+            "File upload failed: {:?}",
+            resp.text().await
+        );
     }
 
     // ── Alice generates a recrypt key and creates a share to Bob ────────────
@@ -207,7 +218,12 @@ async fn test_recryption_share_returns_control_plane_response() {
             .send()
             .await
             .unwrap();
-        assert_eq!(resp.status(), 201, "Share creation failed: {:?}", resp.text().await);
+        assert_eq!(
+            resp.status(),
+            201,
+            "Share creation failed: {:?}",
+            resp.text().await
+        );
         let body: serde_json::Value = resp.json().await.unwrap();
         body["share_id"].as_str().unwrap().to_string()
     };
@@ -227,7 +243,12 @@ async fn test_recryption_share_returns_control_plane_response() {
             .send()
             .await
             .unwrap();
-        assert_eq!(resp.status(), 200, "Share fetch failed: {:?}", resp.text().await);
+        assert_eq!(
+            resp.status(),
+            200,
+            "Share fetch failed: {:?}",
+            resp.text().await
+        );
         let body: serde_json::Value = resp.json().await.unwrap();
         body
     };
@@ -238,7 +259,10 @@ async fn test_recryption_share_returns_control_plane_response() {
     let wrapped_key_b64 = share_resp["wrapped_key_for_recipient"]
         .as_str()
         .expect("wrapped_key_for_recipient must be a string");
-    assert!(!wrapped_key_b64.is_empty(), "wrapped_key_for_recipient must not be empty");
+    assert!(
+        !wrapped_key_b64.is_empty(),
+        "wrapped_key_for_recipient must not be empty"
+    );
     // Must decode as valid base64
     let wrapped_key_bytes = base64::engine::general_purpose::STANDARD
         .decode(wrapped_key_b64)
@@ -251,14 +275,19 @@ async fn test_recryption_share_returns_control_plane_response() {
         .expect("bao_hash must be a string");
     assert!(!bao_hash.is_empty(), "bao_hash must not be empty");
     // Must decode to 32 bytes
-    let bao_hash_bytes = bs58::decode(bao_hash).into_vec().expect("bao_hash must be valid base58");
+    let bao_hash_bytes = bs58::decode(bao_hash)
+        .into_vec()
+        .expect("bao_hash must be valid base58");
     assert_eq!(bao_hash_bytes.len(), 32, "bao_hash must be 32 bytes");
 
     // 3. Must contain ciphertext_url (not ciphertext bytes)
     let ciphertext_url = share_resp["ciphertext_url"]
         .as_str()
         .expect("ciphertext_url must be a string");
-    assert!(!ciphertext_url.is_empty(), "ciphertext_url must not be empty");
+    assert!(
+        !ciphertext_url.is_empty(),
+        "ciphertext_url must not be empty"
+    );
     // URL must contain the bao_hash
     assert!(
         ciphertext_url.contains(bao_hash),
@@ -296,7 +325,10 @@ async fn test_recryption_share_returns_control_plane_response() {
     let decrypted_key_material = MockBackend
         .decrypt(&bob.pre_kp.secret, &new_ciphertext)
         .expect("Bob must be able to decrypt the recrypted wrapped key");
-    assert!(!decrypted_key_material.is_empty(), "decrypted key material must not be empty");
+    assert!(
+        !decrypted_key_material.is_empty(),
+        "decrypted key material must not be empty"
+    );
 }
 
 /// Structural proof: the response type has no ciphertext field.

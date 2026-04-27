@@ -201,10 +201,7 @@ fn bench_xchacha20_only_1mib(c: &mut Criterion) {
 
     c.bench_function("xchacha20_only_1mib", |b| {
         b.iter(|| {
-            let mut cipher = XChaCha20::new(
-                black_box(&key).into(),
-                black_box(&nonce).into(),
-            );
+            let mut cipher = XChaCha20::new(black_box(&key).into(), black_box(&nonce).into());
             cipher.apply_keystream(black_box(&mut data));
             black_box(data[0]);
         });
@@ -221,10 +218,7 @@ fn bench_xchacha20_only_16mib(c: &mut Criterion) {
 
     c.bench_function("xchacha20_only_16mib", |b| {
         b.iter(|| {
-            let mut cipher = XChaCha20::new(
-                black_box(&key).into(),
-                black_box(&nonce).into(),
-            );
+            let mut cipher = XChaCha20::new(black_box(&key).into(), black_box(&nonce).into());
             cipher.apply_keystream(black_box(&mut data));
             black_box(data[0]);
         });

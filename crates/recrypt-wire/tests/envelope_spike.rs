@@ -44,17 +44,18 @@ fn envelope_assertion_roundtrip() {
 /// digests from unsalted ones (decorrelation) and survive serialization.
 #[test]
 fn envelope_salted_assertion() {
-    let e1 = Envelope::new("file-a")
-        .add_assertion_salted("backend", "lattice-bfv", true);
-    let e2 = Envelope::new("file-a")
-        .add_assertion_salted("backend", "lattice-bfv", true);
+    let e1 = Envelope::new("file-a").add_assertion_salted("backend", "lattice-bfv", true);
+    let e2 = Envelope::new("file-a").add_assertion_salted("backend", "lattice-bfv", true);
 
     // Two independently salted assertions should produce different digests
     let cbor1 = e1.to_cbor_data();
     let cbor2 = e2.to_cbor_data();
 
     // The CBOR bytes should differ because of different salts
-    assert_ne!(cbor1, cbor2, "salted assertions should produce different bytes");
+    assert_ne!(
+        cbor1, cbor2,
+        "salted assertions should produce different bytes"
+    );
 
     // But both should round-trip cleanly
     let r1 = Envelope::try_from_cbor_data(cbor1).expect("deserialize 1");

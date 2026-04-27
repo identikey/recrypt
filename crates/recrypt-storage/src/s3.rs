@@ -248,10 +248,7 @@ impl BlobStorage for S3Storage {
         Ok(())
     }
 
-    async fn get_with_outboard(
-        &self,
-        hash: &[u8; 32],
-    ) -> StorageResult<(Vec<u8>, Vec<u8>)> {
+    async fn get_with_outboard(&self, hash: &[u8; 32]) -> StorageResult<(Vec<u8>, Vec<u8>)> {
         let b3_hash = Hash::from(*hash);
         let key = self.object_key(&b3_hash);
         let b58 = raw_hash_to_base58(hash);
@@ -296,16 +293,17 @@ impl BlobStorage for S3Storage {
                 .into_bytes()
                 .to_vec(),
             Err(e) if is_not_found(&e) => Vec::new(),
-            Err(e) => return Err(StorageError::Backend(format!("S3 GET outboard failed: {e}"))),
+            Err(e) => {
+                return Err(StorageError::Backend(format!(
+                    "S3 GET outboard failed: {e}"
+                )));
+            }
         };
 
         Ok((ciphertext, outboard))
     }
 
-    async fn delete_with_outboard(
-        &self,
-        hash: &[u8; 32],
-    ) -> StorageResult<()> {
+    async fn delete_with_outboard(&self, hash: &[u8; 32]) -> StorageResult<()> {
         let b3_hash = Hash::from(*hash);
         let key = self.object_key(&b3_hash);
         self.client

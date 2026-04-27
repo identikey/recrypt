@@ -6,7 +6,7 @@ use axum::{
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
 };
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use recrypt_core::pre::BackendId;
 use recrypt_core::{EncryptedFile, HybridEncryptor};
 use recrypt_wire::MultiFormat;
@@ -282,8 +282,8 @@ pub async fn get_recrypted_share(
         .map_err(|e| ServerError::Internal(format!("Recryption failed: {e}")))?;
 
     // Encode recrypted wrapped key as base64
-    let wrapped_key_b64 = base64::engine::general_purpose::STANDARD
-        .encode(new_wrapped_key.to_bytes());
+    let wrapped_key_b64 =
+        base64::engine::general_purpose::STANDARD.encode(new_wrapped_key.to_bytes());
 
     // Encode bao_hash as base58
     let bao_hash_b58 = bs58::encode(&encrypted.bao_hash).into_string();
@@ -306,8 +306,7 @@ pub async fn get_recrypted_share(
 
     // Pass through original signature (covers original wrapped_key || bao_hash)
     let signature = encrypted.signature.map(|sig| SignatureJson {
-        ed25519_sig: base64::engine::general_purpose::STANDARD
-            .encode(sig.ed25519_sig.to_bytes()),
+        ed25519_sig: base64::engine::general_purpose::STANDARD.encode(sig.ed25519_sig.to_bytes()),
         ml_dsa_sig: sig
             .ml_dsa_sig
             .as_ref()

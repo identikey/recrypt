@@ -180,7 +180,11 @@ impl KeyspaceStore for InMemoryKeyspaceStore {
             }
         }
         for m in &doc.members {
-            guard.member_index.entry(m.fingerprint).or_default().insert(doc.id);
+            guard
+                .member_index
+                .entry(m.fingerprint)
+                .or_default()
+                .insert(doc.id);
         }
 
         guard.latest.insert(doc.id, hash);
@@ -359,7 +363,10 @@ mod tests {
         };
 
         store
-            .put(v0(id_a, vec![member_shared.clone(), member_exclusive.clone()]))
+            .put(v0(
+                id_a,
+                vec![member_shared.clone(), member_exclusive.clone()],
+            ))
             .await
             .unwrap();
         store

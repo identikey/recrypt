@@ -37,14 +37,8 @@ pub trait ShareStore: Send + Sync {
     async fn create(&self, policy: SharePolicy) -> ServerResult<ShareId>;
     async fn get(&self, id: &ShareId) -> ServerResult<Option<SharePolicy>>;
     async fn delete(&self, id: &ShareId) -> ServerResult<()>;
-    async fn list_outgoing(
-        &self,
-        from: &PublicKeyFingerprint,
-    ) -> ServerResult<Vec<SharePolicy>>;
-    async fn list_incoming(
-        &self,
-        to: &PublicKeyFingerprint,
-    ) -> ServerResult<Vec<SharePolicy>>;
+    async fn list_outgoing(&self, from: &PublicKeyFingerprint) -> ServerResult<Vec<SharePolicy>>;
+    async fn list_incoming(&self, to: &PublicKeyFingerprint) -> ServerResult<Vec<SharePolicy>>;
 }
 
 /// In-memory implementation backed by `RwLock<HashMap<...>>`.
@@ -81,10 +75,7 @@ impl ShareStore for InMemoryShareStore {
         Ok(())
     }
 
-    async fn list_outgoing(
-        &self,
-        from: &PublicKeyFingerprint,
-    ) -> ServerResult<Vec<SharePolicy>> {
+    async fn list_outgoing(&self, from: &PublicKeyFingerprint) -> ServerResult<Vec<SharePolicy>> {
         Ok(self
             .inner
             .read()
@@ -95,10 +86,7 @@ impl ShareStore for InMemoryShareStore {
             .collect())
     }
 
-    async fn list_incoming(
-        &self,
-        to: &PublicKeyFingerprint,
-    ) -> ServerResult<Vec<SharePolicy>> {
+    async fn list_incoming(&self, to: &PublicKeyFingerprint) -> ServerResult<Vec<SharePolicy>> {
         Ok(self
             .inner
             .read()
@@ -167,9 +155,9 @@ fn row_to_policy(row: &rusqlite::Row<'_>) -> rusqlite::Result<SharePolicy> {
     let backend_id_s: String = row.get(6)?;
     let created_at: i64 = row.get(7)?;
 
-    let hash_bytes = bs58::decode(&file_hash_b58)
-        .into_vec()
-        .map_err(|e| rusqlite::Error::FromSqlConversionFailure(3, rusqlite::types::Type::Text, Box::new(e)))?;
+    let hash_bytes = bs58::decode(&file_hash_b58).into_vec().map_err(|e| {
+        rusqlite::Error::FromSqlConversionFailure(3, rusqlite::types::Type::Text, Box::new(e))
+    })?;
     if hash_bytes.len() != 32 {
         return Err(rusqlite::Error::FromSqlConversionFailure(
             3,
@@ -262,10 +250,7 @@ impl ShareStore for SqliteShareStore {
             .map_err(map_sqlite_err)
     }
 
-    async fn list_outgoing(
-        &self,
-        from: &PublicKeyFingerprint,
-    ) -> ServerResult<Vec<SharePolicy>> {
+    async fn list_outgoing(&self, from: &PublicKeyFingerprint) -> ServerResult<Vec<SharePolicy>> {
         let from = from.clone();
         self.conn
             .call(move |c| {
@@ -284,10 +269,7 @@ impl ShareStore for SqliteShareStore {
             .map_err(map_sqlite_err)
     }
 
-    async fn list_incoming(
-        &self,
-        to: &PublicKeyFingerprint,
-    ) -> ServerResult<Vec<SharePolicy>> {
+    async fn list_incoming(&self, to: &PublicKeyFingerprint) -> ServerResult<Vec<SharePolicy>> {
         let to = to.clone();
         self.conn
             .call(move |c| {
@@ -329,7 +311,15 @@ mod tests {
         let store = InMemoryShareStore::new();
         store.create(sample("a", "alice", "bob")).await.unwrap();
         store.create(sample("b", "alice", "carol")).await.unwrap();
-        assert_eq!(store.get(&"a".into()).await.unwrap().unwrap().to_fingerprint, "bob");
+        assert_eq!(
+            store
+                .get(&"a".into())
+                .await
+                .unwrap()
+                .unwrap()
+                .to_fingerprint,
+            "bob"
+        );
         assert_eq!(store.list_outgoing(&"alice".into()).await.unwrap().len(), 2);
         assert_eq!(store.list_incoming(&"bob".into()).await.unwrap().len(), 1);
         store.delete(&"a".into()).await.unwrap();

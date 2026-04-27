@@ -31,8 +31,7 @@ impl TestEnv {
     /// Tests run with `--test-threads=1`, so no concurrent env mutation.
     pub fn set(&mut self, key: &str, value: &str) {
         if !self.saved.contains_key(key) {
-            self.saved
-                .insert(key.to_string(), std::env::var(key).ok());
+            self.saved.insert(key.to_string(), std::env::var(key).ok());
         }
         unsafe { std::env::set_var(key, value) };
     }
@@ -43,8 +42,7 @@ impl TestEnv {
     /// Tests run with `--test-threads=1`, so no concurrent env mutation.
     pub fn remove(&mut self, key: &str) {
         if !self.saved.contains_key(key) {
-            self.saved
-                .insert(key.to_string(), std::env::var(key).ok());
+            self.saved.insert(key.to_string(), std::env::var(key).ok());
         }
         unsafe { std::env::remove_var(key) };
     }

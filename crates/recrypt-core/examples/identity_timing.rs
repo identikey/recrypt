@@ -22,9 +22,9 @@ fn main() {
     #[cfg(feature = "openfhe")]
     {
         println!("--- OpenFHE BFV PRE ---");
-        use recrypt_core::pre::backends::LatticeBackend;
         use recrypt_core::pre::PreBackend;
-        
+        use recrypt_core::pre::backends::LatticeBackend;
+
         let backend = LatticeBackend::new().expect("Failed to init backend");
         let start = Instant::now();
         let _kp = backend.generate_keypair().expect("PRE keygen failed");

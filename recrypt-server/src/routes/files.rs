@@ -29,8 +29,9 @@ pub async fn upload_file(
 
     // Look up uploader's account
     let account = {
-        let fp = identikey_storage_auth::PublicKeyFingerprint::from_base58(&sig_headers.fingerprint)
-            .ok_or_else(|| ServerError::BadRequest("Invalid fingerprint".into()))?;
+        let fp =
+            identikey_storage_auth::PublicKeyFingerprint::from_base58(&sig_headers.fingerprint)
+                .ok_or_else(|| ServerError::BadRequest("Invalid fingerprint".into()))?;
         state
             .accounts
             .get(&fp)
@@ -133,8 +134,9 @@ pub async fn delete_file(
 
     // Look up account
     let account = {
-        let fp = identikey_storage_auth::PublicKeyFingerprint::from_base58(&sig_headers.fingerprint)
-            .ok_or_else(|| ServerError::BadRequest("Invalid fingerprint".into()))?;
+        let fp =
+            identikey_storage_auth::PublicKeyFingerprint::from_base58(&sig_headers.fingerprint)
+                .ok_or_else(|| ServerError::BadRequest("Invalid fingerprint".into()))?;
         state
             .accounts
             .get(&fp)

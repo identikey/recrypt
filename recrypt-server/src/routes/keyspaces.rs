@@ -144,7 +144,8 @@ pub struct GrantResponse {
 // ---------------------------------------------------------------------------
 
 fn parse_keyspace_id(s: &str) -> ServerResult<KeyspaceId> {
-    KeyspaceId::from_str(s).map_err(|e| ServerError::BadRequest(format!("Invalid keyspace id: {e}")))
+    KeyspaceId::from_str(s)
+        .map_err(|e| ServerError::BadRequest(format!("Invalid keyspace id: {e}")))
 }
 
 fn parse_doc_hash(s: &str) -> ServerResult<KeyspaceDocHash> {
@@ -161,9 +162,9 @@ fn parse_grant_id(s: &str) -> ServerResult<GrantId> {
     let bytes = bs58::decode(s)
         .into_vec()
         .map_err(|e| ServerError::BadRequest(format!("Invalid base58 grant id: {e}")))?;
-    let arr: [u8; 32] = bytes
-        .try_into()
-        .map_err(|v: Vec<u8>| ServerError::BadRequest(format!("Expected 32 bytes, got {}", v.len())))?;
+    let arr: [u8; 32] = bytes.try_into().map_err(|v: Vec<u8>| {
+        ServerError::BadRequest(format!("Expected 32 bytes, got {}", v.len()))
+    })?;
     Ok(GrantId::from_bytes(arr))
 }
 
@@ -203,9 +204,7 @@ fn string_to_mode(s: &str) -> ServerResult<identikey_storage_auth::RotationMode>
 /// Parse `decryption_policy` JSON string. Phase-C threshold shares are
 /// not yet supported at the HTTP layer; submitting anything other than
 /// `"standalone"` is rejected loudly rather than silently rewritten.
-fn string_to_decryption_policy(
-    s: &str,
-) -> ServerResult<identikey_storage_auth::DecryptionPolicy> {
+fn string_to_decryption_policy(s: &str) -> ServerResult<identikey_storage_auth::DecryptionPolicy> {
     use identikey_storage_auth::DecryptionPolicy;
     match s {
         "standalone" => Ok(DecryptionPolicy::Standalone),
@@ -230,10 +229,18 @@ fn doc_to_json(doc: &KeyspaceDoc) -> KeyspaceDocJson {
             .iter()
             .map(|m| MemberJson {
                 fingerprint: m.fingerprint.to_base58(),
-                capabilities: m.capabilities.iter().map(|c| c.as_str().to_string()).collect(),
+                capabilities: m
+                    .capabilities
+                    .iter()
+                    .map(|c| c.as_str().to_string())
+                    .collect(),
                 decryption_policy: match &m.decryption_policy {
                     identikey_storage_auth::DecryptionPolicy::Standalone => "standalone".into(),
-                    identikey_storage_auth::DecryptionPolicy::ThresholdShare { threshold, total, .. } => {
+                    identikey_storage_auth::DecryptionPolicy::ThresholdShare {
+                        threshold,
+                        total,
+                        ..
+                    } => {
                         format!("threshold({}/{})", threshold, total)
                     }
                 },
@@ -249,19 +256,15 @@ fn doc_to_json(doc: &KeyspaceDoc) -> KeyspaceDocJson {
 
 fn json_to_doc(json: &KeyspaceDocJson) -> ServerResult<KeyspaceDoc> {
     let id = parse_keyspace_id(&json.id)?;
-    let parent = json
-        .parent
-        .as_deref()
-        .map(parse_doc_hash)
-        .transpose()?;
+    let parent = json.parent.as_deref().map(parse_doc_hash).transpose()?;
     let mode = string_to_mode(&json.mode)?;
     let root_pk = decode_bytes_tagged(&json.root_pk, "root_pk")?;
     let epoch_pre_pk_bytes = bs58::decode(&json.epoch_pre_pk)
         .into_vec()
         .map_err(|e| ServerError::BadRequest(format!("Invalid base58 epoch_pre_pk: {e}")))?;
-    let epoch_pre_pk: [u8; 32] = epoch_pre_pk_bytes
-        .try_into()
-        .map_err(|v: Vec<u8>| ServerError::BadRequest(format!("epoch_pre_pk must be 32 bytes, got {}", v.len())))?;
+    let epoch_pre_pk: [u8; 32] = epoch_pre_pk_bytes.try_into().map_err(|v: Vec<u8>| {
+        ServerError::BadRequest(format!("epoch_pre_pk must be 32 bytes, got {}", v.len()))
+    })?;
 
     let members = json
         .members
@@ -316,7 +319,11 @@ fn grant_to_json(grant: &AccessGrant, _id: &GrantId) -> AccessGrantJson {
         keyspace_version: grant.keyspace_version,
         subject: grant.subject.to_base58(),
         issuer: grant.issuer.to_base58(),
-        capabilities: grant.capabilities.iter().map(|c| c.as_str().to_string()).collect(),
+        capabilities: grant
+            .capabilities
+            .iter()
+            .map(|c| c.as_str().to_string())
+            .collect(),
         expires_at: grant.expires_at,
         delegation_depth: grant.delegation_depth,
         parent_grant: grant.parent_grant.as_ref().map(|g| g.to_base58()),
@@ -333,9 +340,9 @@ fn json_to_grant(json: &AccessGrantJson, server_created_at: u64) -> ServerResult
     let keyspace_id_bytes = bs58::decode(&json.keyspace_id)
         .into_vec()
         .map_err(|e| ServerError::BadRequest(format!("Invalid base58 keyspace_id: {e}")))?;
-    let keyspace_id: [u8; 32] = keyspace_id_bytes
-        .try_into()
-        .map_err(|v: Vec<u8>| ServerError::BadRequest(format!("keyspace_id must be 32 bytes, got {}", v.len())))?;
+    let keyspace_id: [u8; 32] = keyspace_id_bytes.try_into().map_err(|v: Vec<u8>| {
+        ServerError::BadRequest(format!("keyspace_id must be 32 bytes, got {}", v.len()))
+    })?;
     let subject = parse_fingerprint(&json.subject)?;
     let issuer = parse_fingerprint(&json.issuer)?;
     let capabilities: BTreeSet<_> = json
@@ -395,9 +402,7 @@ async fn verify_caller(
         .get(&fp)
         .await
         .map_err(|e| ServerError::Internal(format!("AccountStore error: {e}")))?
-        .ok_or_else(|| {
-            ServerError::Unauthorized("Caller account not registered".into())
-        })?;
+        .ok_or_else(|| ServerError::Unauthorized("Caller account not registered".into()))?;
 
     let mut message = Vec::with_capacity(request_tag.len() + 32 + sig_headers.nonce.len() + 2);
     message.extend_from_slice(request_tag);
@@ -481,7 +486,11 @@ pub async fn list_versions(
     Path(id): Path<String>,
 ) -> ServerResult<Json<VersionListResponse>> {
     let ks_id = parse_keyspace_id(&id)?;
-    let hashes = state.keyspaces.list_versions(&ks_id).await.map_err(auth_err)?;
+    let hashes = state
+        .keyspaces
+        .list_versions(&ks_id)
+        .await
+        .map_err(auth_err)?;
     Ok(Json(VersionListResponse {
         keyspace_id: id,
         versions: hashes.iter().map(|h| h.to_string()).collect(),
@@ -517,10 +526,9 @@ pub async fn publish_version(
         .await
         .map_err(auth_err)?
         .ok_or_else(|| ServerError::NotFound("Keyspace not found".into()))?;
-    let is_signer = prev
-        .members
-        .iter()
-        .any(|m| m.fingerprint == caller_fp && m.capabilities.contains(&MemberCapability::SignRotation));
+    let is_signer = prev.members.iter().any(|m| {
+        m.fingerprint == caller_fp && m.capabilities.contains(&MemberCapability::SignRotation)
+    });
     if !is_signer {
         return Err(ServerError::Unauthorized(
             "Caller is not a SignRotation member of the current keyspace version".into(),
@@ -569,13 +577,7 @@ pub async fn issue_grant(
 
     // Bind request to the *content* of the grant (post-created_at override).
     let grant_id = GrantId::from_grant(&grant);
-    let caller_fp = verify_caller(
-        &state,
-        &headers,
-        b"GRANT_ISSUE",
-        grant_id.as_bytes(),
-    )
-    .await?;
+    let caller_fp = verify_caller(&state, &headers, b"GRANT_ISSUE", grant_id.as_bytes()).await?;
 
     // Body-level binding: issuer must equal caller.
     if grant.issuer != caller_fp {
@@ -660,8 +662,7 @@ pub async fn revoke_grant(
         .map_err(auth_err)?
         .ok_or_else(|| ServerError::NotFound("Grant not found".into()))?;
 
-    let caller_fp =
-        verify_caller(&state, &headers, b"GRANT_REVOKE", grant_id.as_bytes()).await?;
+    let caller_fp = verify_caller(&state, &headers, b"GRANT_REVOKE", grant_id.as_bytes()).await?;
 
     if existing.issuer != caller_fp {
         return Err(ServerError::Unauthorized(
@@ -703,9 +704,9 @@ pub async fn list_grants_by_keyspace(
     let keyspace_id_bytes = bs58::decode(&id)
         .into_vec()
         .map_err(|e| ServerError::BadRequest(format!("Invalid base58 keyspace id: {e}")))?;
-    let keyspace_id: [u8; 32] = keyspace_id_bytes
-        .try_into()
-        .map_err(|v: Vec<u8>| ServerError::BadRequest(format!("Expected 32 bytes, got {}", v.len())))?;
+    let keyspace_id: [u8; 32] = keyspace_id_bytes.try_into().map_err(|v: Vec<u8>| {
+        ServerError::BadRequest(format!("Expected 32 bytes, got {}", v.len()))
+    })?;
     let grants = state
         .grants
         .list_by_keyspace(&keyspace_id)

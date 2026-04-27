@@ -6,7 +6,9 @@ use async_trait::async_trait;
 
 use crate::error::{AuthError, AuthResult};
 use crate::fingerprint::PublicKeyFingerprint;
-use crate::keyspace::{DecryptionPolicy, KeyspaceDoc, KeyspaceDocHash, KeyspaceId, MemberCapability};
+use crate::keyspace::{
+    DecryptionPolicy, KeyspaceDoc, KeyspaceDocHash, KeyspaceId, MemberCapability,
+};
 use crate::keyspace_store::{KeyspaceStore, validate_chain, warn_phase_c_placeholders};
 
 fn map_call_err(e: tokio_rusqlite::Error) -> AuthError {
@@ -53,7 +55,10 @@ impl SqliteKeyspaceStore {
 
 /// Serialize a `BTreeSet<MemberCapability>` to a comma-separated string.
 fn caps_to_string(caps: &std::collections::BTreeSet<MemberCapability>) -> String {
-    caps.iter().map(|c| c.as_str()).collect::<Vec<_>>().join(",")
+    caps.iter()
+        .map(|c| c.as_str())
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 /// Serialize `DecryptionPolicy` to a JSON string.

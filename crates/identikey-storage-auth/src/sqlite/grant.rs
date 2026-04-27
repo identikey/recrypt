@@ -54,7 +54,10 @@ impl SqliteGrantStore {
 
 /// Serialize a `BTreeSet<MemberCapability>` to a comma-separated string.
 fn caps_to_string(caps: &BTreeSet<MemberCapability>) -> String {
-    caps.iter().map(|c| c.as_str()).collect::<Vec<_>>().join(",")
+    caps.iter()
+        .map(|c| c.as_str())
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 /// Deserialize a comma-separated capability string.

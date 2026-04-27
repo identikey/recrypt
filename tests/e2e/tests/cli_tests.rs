@@ -8,7 +8,8 @@ async fn test_identity_new() {
     let harness = TestHarness::new().await;
     let result = harness
         .cli()
-        .run_ok(&["identity", "new", "--name", "alice"]).await;
+        .run_ok(&["identity", "new", "--name", "alice"])
+        .await;
     let json = result.json();
     assert_eq!(json["name"], "alice");
     assert!(
@@ -32,10 +33,7 @@ async fn test_identity_list() {
     let arr = json.as_array().expect("list should return array");
     assert_eq!(arr.len(), 2);
 
-    let names: Vec<&str> = arr
-        .iter()
-        .map(|v| v["name"].as_str().unwrap())
-        .collect();
+    let names: Vec<&str> = arr.iter().map(|v| v["name"].as_str().unwrap()).collect();
     assert!(names.contains(&"alice"), "alice should be in list");
     assert!(names.contains(&"bob"), "bob should be in list");
 }
@@ -131,7 +129,8 @@ async fn test_account_get_nonexistent() {
     let mut cli = harness.cli();
 
     // Use show with an explicit fingerprint that doesn't exist
-    cli.run_err(&["account", "show", "nonexistentfingerprint1234567890"]).await;
+    cli.run_err(&["account", "show", "nonexistentfingerprint1234567890"])
+        .await;
 }
 
 // ── Encrypt/decrypt tests (local, no server) ──────────────────────────────────
@@ -143,7 +142,6 @@ async fn test_encrypt_decrypt_roundtrip() {
     let mut cli = harness.cli();
 
     cli.run_ok(&["identity", "new", "--name", "alice"]).await;
-
 
     let input_path = harness.tmp().join("input.txt");
     let enc_path = harness.tmp().join("input.enc");
@@ -158,7 +156,8 @@ async fn test_encrypt_decrypt_roundtrip() {
         "alice",
         "--output",
         enc_path.to_str().unwrap(),
-    ]).await;
+    ])
+    .await;
 
     assert!(enc_path.exists(), "encrypted file should exist");
 
@@ -167,7 +166,8 @@ async fn test_encrypt_decrypt_roundtrip() {
         enc_path.to_str().unwrap(),
         "--output",
         dec_path.to_str().unwrap(),
-    ]).await;
+    ])
+    .await;
 
     let decrypted = fs::read(&dec_path).unwrap();
     assert_eq!(decrypted, b"Hello, recrypt world!");
@@ -180,13 +180,8 @@ async fn test_encrypt_missing_file_fails() {
 
     cli.run_ok(&["identity", "new", "--name", "alice"]).await;
 
-
-    cli.run_err(&[
-        "encrypt",
-        "/nonexistent/path/to/file.txt",
-        "--for",
-        "alice",
-    ]).await;
+    cli.run_err(&["encrypt", "/nonexistent/path/to/file.txt", "--for", "alice"])
+        .await;
 }
 
 #[tokio::test]
@@ -196,7 +191,6 @@ async fn test_encrypt_empty_file() {
     let mut cli = harness.cli();
 
     cli.run_ok(&["identity", "new", "--name", "alice"]).await;
-
 
     let input_path = harness.tmp().join("empty.txt");
     let enc_path = harness.tmp().join("empty.enc");
@@ -211,14 +205,16 @@ async fn test_encrypt_empty_file() {
         "alice",
         "--output",
         enc_path.to_str().unwrap(),
-    ]).await;
+    ])
+    .await;
 
     cli.run_ok(&[
         "decrypt",
         enc_path.to_str().unwrap(),
         "--output",
         dec_path.to_str().unwrap(),
-    ]).await;
+    ])
+    .await;
 
     let decrypted = fs::read(&dec_path).unwrap();
     assert!(decrypted.is_empty(), "decrypted empty file should be empty");
@@ -232,16 +228,10 @@ async fn test_encrypt_large_file() {
 
     cli.run_ok(&["identity", "new", "--name", "alice"]).await;
 
-
     // 10 MB of repeating pattern
     let pattern = b"LARGE_FILE_TEST_PATTERN_0123456789ABCDEF";
     let size = 10 * 1024 * 1024;
-    let data: Vec<u8> = pattern
-        .iter()
-        .cloned()
-        .cycle()
-        .take(size)
-        .collect();
+    let data: Vec<u8> = pattern.iter().cloned().cycle().take(size).collect();
 
     let input_path = harness.tmp().join("large.bin");
     let enc_path = harness.tmp().join("large.enc");
@@ -256,7 +246,8 @@ async fn test_encrypt_large_file() {
         "alice",
         "--output",
         enc_path.to_str().unwrap(),
-    ]).await;
+    ])
+    .await;
 
     assert!(enc_path.exists(), "encrypted large file should exist");
 
@@ -265,10 +256,15 @@ async fn test_encrypt_large_file() {
         enc_path.to_str().unwrap(),
         "--output",
         dec_path.to_str().unwrap(),
-    ]).await;
+    ])
+    .await;
 
     let decrypted = fs::read(&dec_path).unwrap();
-    assert_eq!(decrypted.len(), size, "decrypted size should match original");
+    assert_eq!(
+        decrypted.len(),
+        size,
+        "decrypted size should match original"
+    );
     assert_eq!(decrypted, data, "decrypted content should match original");
 }
 
@@ -298,12 +294,17 @@ async fn test_file_upload_download() {
         "alice",
         "--output",
         enc_path.to_str().unwrap(),
-    ]).await;
+    ])
+    .await;
 
     // Upload the encrypted file
-    let upload_result = cli.run_ok(&["file", "upload", enc_path.to_str().unwrap()]).await;
+    let upload_result = cli
+        .run_ok(&["file", "upload", enc_path.to_str().unwrap()])
+        .await;
     let upload_json = upload_result.json();
-    let hash = upload_json["hash"].as_str().expect("upload should return hash");
+    let hash = upload_json["hash"]
+        .as_str()
+        .expect("upload should return hash");
     assert!(!hash.is_empty());
 
     // Download by hash
@@ -313,12 +314,16 @@ async fn test_file_upload_download() {
         hash,
         "--output",
         download_path.to_str().unwrap(),
-    ]).await;
+    ])
+    .await;
 
     // Uploaded and downloaded bytes should match
     let enc_bytes = fs::read(&enc_path).unwrap();
     let downloaded_bytes = fs::read(&download_path).unwrap();
-    assert_eq!(downloaded_bytes, enc_bytes, "downloaded bytes should match uploaded bytes");
+    assert_eq!(
+        downloaded_bytes, enc_bytes,
+        "downloaded bytes should match uploaded bytes"
+    );
 }
 
 #[tokio::test]
@@ -334,7 +339,8 @@ async fn test_file_list() {
     for (name, content) in [("file1.enc", b"content one"), ("file2.enc", b"content two")] {
         let path = harness.tmp().join(name);
         fs::write(&path, content).unwrap();
-        cli.run_ok(&["file", "upload", path.to_str().unwrap()]).await;
+        cli.run_ok(&["file", "upload", path.to_str().unwrap()])
+            .await;
     }
 
     let list_result = cli.run_ok(&["file", "list"]).await;
@@ -358,11 +364,10 @@ async fn test_file_delete() {
     let file_path = harness.tmp().join("to_delete.enc");
     fs::write(&file_path, b"delete me").unwrap();
 
-    let upload_result = cli.run_ok(&["file", "upload", file_path.to_str().unwrap()]).await;
-    let hash = upload_result.json()["hash"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    let upload_result = cli
+        .run_ok(&["file", "upload", file_path.to_str().unwrap()])
+        .await;
+    let hash = upload_result.json()["hash"].as_str().unwrap().to_string();
 
     // Delete
     let del_result = cli.run_ok(&["file", "delete", &hash]).await;
@@ -376,7 +381,8 @@ async fn test_file_delete() {
         &hash,
         "--output",
         download_path.to_str().unwrap(),
-    ]).await;
+    ])
+    .await;
 }
 
 #[tokio::test]
@@ -396,7 +402,8 @@ async fn test_file_download_nonexistent() {
         bogus_hash,
         "--output",
         output_path.to_str().unwrap(),
-    ]).await;
+    ])
+    .await;
 }
 
 // ── Share tests ───────────────────────────────────────────────────────────────
@@ -411,17 +418,21 @@ async fn test_share_create_disabled() {
     cli.run_ok(&["account", "register"]).await;
 
     // share create should return an error about disabled feature
-    let result = cli.run_err(&[
-        "share",
-        "create",
-        "fakehash1234",
-        "--to",
-        "somerecipientfingerprint",
-    ]).await;
+    let result = cli
+        .run_err(&[
+            "share",
+            "create",
+            "fakehash1234",
+            "--to",
+            "somerecipientfingerprint",
+        ])
+        .await;
     // Should mention the disabled state or Keyspace/Grant
     let combined = format!("{}{}", result.stdout, result.stderr);
     assert!(
-        combined.contains("disabled") || combined.contains("Keyspace") || combined.contains("Grant"),
+        combined.contains("disabled")
+            || combined.contains("Keyspace")
+            || combined.contains("Grant"),
         "error should mention feature is disabled; got: {combined}"
     );
 }
@@ -438,8 +449,12 @@ async fn test_share_list_empty() {
     let result = cli.run_ok(&["share", "list"]).await;
     let json = result.json();
     // Should have outgoing and incoming arrays, both empty
-    let outgoing = json["outgoing"].as_array().expect("outgoing should be array");
-    let incoming = json["incoming"].as_array().expect("incoming should be array");
+    let outgoing = json["outgoing"]
+        .as_array()
+        .expect("outgoing should be array");
+    let incoming = json["incoming"]
+        .as_array()
+        .expect("incoming should be array");
     assert!(outgoing.is_empty(), "outgoing should be empty");
     assert!(incoming.is_empty(), "incoming should be empty");
 }
@@ -452,5 +467,9 @@ async fn test_health_endpoint() {
     let api = harness.api();
 
     let resp = api.health().await;
-    assert_eq!(resp.status().as_u16(), 200, "health endpoint should return 200");
+    assert_eq!(
+        resp.status().as_u16(),
+        200,
+        "health endpoint should return 200"
+    );
 }

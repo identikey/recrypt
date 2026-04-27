@@ -65,8 +65,7 @@ fn import_envelope_roundtrip() {
         .output()
         .unwrap();
     assert!(create_out.status.success());
-    let create_json: serde_json::Value =
-        serde_json::from_slice(&create_out.stdout).unwrap();
+    let create_json: serde_json::Value = serde_json::from_slice(&create_out.stdout).unwrap();
     let original_fp = create_json["fingerprint"].as_str().unwrap().to_string();
 
     // Export as envelope
@@ -132,8 +131,7 @@ fn import_json_still_works() {
         .output()
         .unwrap();
     assert!(create_out.status.success());
-    let create_json: serde_json::Value =
-        serde_json::from_slice(&create_out.stdout).unwrap();
+    let create_json: serde_json::Value = serde_json::from_slice(&create_out.stdout).unwrap();
     let original_fp = create_json["fingerprint"].as_str().unwrap().to_string();
 
     // Export as JSON
@@ -210,11 +208,27 @@ fn import_auto_detect_both_formats() {
 
     // Export both formats
     recrypt_cmd(&wallet_path, &config_dir)
-        .args(["identity", "export", "alice", "--output", env_path.to_str().unwrap(), "--format", "envelope"])
+        .args([
+            "identity",
+            "export",
+            "alice",
+            "--output",
+            env_path.to_str().unwrap(),
+            "--format",
+            "envelope",
+        ])
         .assert()
         .success();
     recrypt_cmd(&wallet_path, &config_dir)
-        .args(["identity", "export", "bob", "--output", json_path.to_str().unwrap(), "--format", "json"])
+        .args([
+            "identity",
+            "export",
+            "bob",
+            "--output",
+            json_path.to_str().unwrap(),
+            "--format",
+            "json",
+        ])
         .assert()
         .success();
 
@@ -230,11 +244,23 @@ fn import_auto_detect_both_formats() {
 
     // Import both via same `identity import` command (auto-detect)
     recrypt_cmd(&wallet_path, &config_dir)
-        .args(["identity", "import", env_path.to_str().unwrap(), "--name", "alice-env"])
+        .args([
+            "identity",
+            "import",
+            env_path.to_str().unwrap(),
+            "--name",
+            "alice-env",
+        ])
         .assert()
         .success();
     recrypt_cmd(&wallet_path, &config_dir)
-        .args(["identity", "import", json_path.to_str().unwrap(), "--name", "bob-json"])
+        .args([
+            "identity",
+            "import",
+            json_path.to_str().unwrap(),
+            "--name",
+            "bob-json",
+        ])
         .assert()
         .success();
 
@@ -251,7 +277,10 @@ fn import_auto_detect_both_formats() {
         .iter()
         .map(|v| v["name"].as_str().unwrap())
         .collect();
-    assert!(names.contains(&"alice-env"), "alice-env should be in wallet");
+    assert!(
+        names.contains(&"alice-env"),
+        "alice-env should be in wallet"
+    );
     assert!(names.contains(&"bob-json"), "bob-json should be in wallet");
 }
 

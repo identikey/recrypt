@@ -284,10 +284,8 @@ impl ApiClient {
                 .await?;
 
         let response = add_auth_headers(
-            self.client.get(format!(
-                "{}/accounts/{fingerprint}/shares",
-                self.server_url
-            )),
+            self.client
+                .get(format!("{}/accounts/{fingerprint}/shares", self.server_url)),
             &auth,
         )
         .send()

@@ -171,7 +171,10 @@ mod tests {
 
         let future = now_secs() + 600;
         assert!(s.mark_used("n1", future).await.unwrap());
-        assert!(!s.mark_used("n1", future).await.unwrap(), "replay must return false");
+        assert!(
+            !s.mark_used("n1", future).await.unwrap(),
+            "replay must return false"
+        );
 
         // Insert an expired entry and gc it.
         assert!(s.mark_used("old", now_secs() - 10).await.unwrap());

@@ -36,9 +36,9 @@ mod capability;
 mod error;
 mod fingerprint;
 mod grant;
-mod ownership;
 pub mod keyspace;
 pub mod keyspace_store;
+mod ownership;
 
 pub mod memory;
 
@@ -53,12 +53,12 @@ pub use fingerprint::PublicKeyFingerprint;
 pub use grant::{AccessGrant, GrantId, GrantStore, InMemoryGrantStore};
 pub use ownership::OwnershipStore;
 
-pub use memory::InMemoryOwnershipStore;
 pub use keyspace::{
     DecryptionPolicy, KeyspaceDoc, KeyspaceDocHash, KeyspaceId, Member, MemberCapability,
     RotationMode,
 };
-pub use keyspace_store::{KeyspaceStore, InMemoryKeyspaceStore};
+pub use keyspace_store::{InMemoryKeyspaceStore, KeyspaceStore};
+pub use memory::InMemoryOwnershipStore;
 
 #[cfg(feature = "sqlite")]
 pub use sqlite::{SqliteAccountStore, SqliteGrantStore, SqliteKeyspaceStore, SqliteOwnershipStore};

@@ -207,7 +207,10 @@ pub fn write_secret_file(path: &std::path::Path, contents: &[u8]) -> std::io::Re
     }
 
     // Atomic write via temp file in the same directory + rename.
-    let dir = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or_else(|| std::path::Path::new("."));
+    let dir = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
     let file_name = path.file_name().ok_or_else(|| {
         std::io::Error::new(std::io::ErrorKind::InvalidInput, "path has no file name")
     })?;
@@ -234,9 +237,7 @@ pub fn write_secret_file(path: &std::path::Path, contents: &[u8]) -> std::io::Re
 mod tests {
     use super::*;
     use crate::wallet::credential::MemoryProvider;
-    use crate::wallet::format::{
-        decrypt_wallet_with_key, encrypt_wallet_with_key, test_identity,
-    };
+    use crate::wallet::format::{decrypt_wallet_with_key, encrypt_wallet_with_key, test_identity};
     use tempfile::NamedTempFile;
 
     fn create_test_wallet() -> (NamedTempFile, [u8; 32], [u8; 32]) {

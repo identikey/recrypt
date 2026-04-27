@@ -12,7 +12,10 @@ use crate::sign::{SigningKeys, VerifyPolicy, VerifyingKeys};
 use bao_tree::{
     BaoTree, BlockSize, ChunkRanges,
     io::{
-        fsm::{BaoContentItem, ResponseDecoder, ResponseDecoderNext, encode_ranges, outboard_post_order},
+        fsm::{
+            BaoContentItem, ResponseDecoder, ResponseDecoderNext, encode_ranges,
+            outboard_post_order,
+        },
         outboard::PostOrderMemOutboard,
     },
 };
@@ -555,9 +558,7 @@ impl<B: PreBackend> HybridEncryptor<B> {
                             plaintext_out
                                 .write_all(&chunk[s..e])
                                 .await
-                                .map_err(|e| {
-                                    CoreError::Decryption(format!("write range: {e}"))
-                                })?;
+                                .map_err(|e| CoreError::Decryption(format!("write range: {e}")))?;
                         }
                     }
                     next_decoder
@@ -707,7 +708,10 @@ mod tests {
             .await
             .expect("encrypt_streaming failed");
 
-        assert!(result.outboard.is_empty(), "outboard should be empty for files ≤ 16 KiB");
+        assert!(
+            result.outboard.is_empty(),
+            "outboard should be empty for files ≤ 16 KiB"
+        );
 
         let mut decrypted = Vec::new();
         encryptor
@@ -795,7 +799,10 @@ mod tests {
             .await
             .expect("decrypt_range failed");
 
-        assert_eq!(range_out, plaintext[range.start as usize..range.end as usize]);
+        assert_eq!(
+            range_out,
+            plaintext[range.start as usize..range.end as usize]
+        );
     }
 
     #[tokio::test]

@@ -72,9 +72,7 @@ fn wallet_from_envelope(envelope: &Envelope) -> Result<WalletData> {
         .get("type")
         .ok_or_else(|| anyhow!("Wallet envelope subject missing 'type'"))?;
     if ty != WALLET_TYPE {
-        return Err(anyhow!(
-            "Expected wallet type '{WALLET_TYPE}', got '{ty}'"
-        ));
+        return Err(anyhow!("Expected wallet type '{WALLET_TYPE}', got '{ty}'"));
     }
 
     let version: u32 = subject
@@ -205,8 +203,12 @@ fn wire_to_wallet_identity(wire: WireIdentity) -> Result<(String, Identity)> {
         .secret
         .clone()
         .ok_or_else(|| anyhow!("wallet identity '{name}' missing 'pre-secret'"))?;
-    let pre_backend = BackendId::from_str(&pre.backend)
-        .map_err(|e| anyhow!("identity '{name}': unknown pre-backend '{}': {e}", pre.backend))?;
+    let pre_backend = BackendId::from_str(&pre.backend).map_err(|e| {
+        anyhow!(
+            "identity '{name}': unknown pre-backend '{}': {e}",
+            pre.backend
+        )
+    })?;
 
     let identity = Identity {
         created_at,
@@ -269,8 +271,14 @@ mod tests {
                 .unwrap_or_else(|| panic!("missing identity {name} after roundtrip"));
             assert_eq!(id_a.created_at, id_b.created_at, "{name}: created_at");
             assert_eq!(id_a.fingerprint, id_b.fingerprint, "{name}: fingerprint");
-            assert_eq!(id_a.ed25519.public, id_b.ed25519.public, "{name}: ed25519 pub");
-            assert_eq!(id_a.ed25519.secret, id_b.ed25519.secret, "{name}: ed25519 sec");
+            assert_eq!(
+                id_a.ed25519.public, id_b.ed25519.public,
+                "{name}: ed25519 pub"
+            );
+            assert_eq!(
+                id_a.ed25519.secret, id_b.ed25519.secret,
+                "{name}: ed25519 sec"
+            );
             assert_eq!(id_a.ml_dsa.public, id_b.ml_dsa.public, "{name}: ml_dsa pub");
             assert_eq!(id_a.ml_dsa.secret, id_b.ml_dsa.secret, "{name}: ml_dsa sec");
             assert_eq!(id_a.pre.public, id_b.pre.public, "{name}: pre pub");

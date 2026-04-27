@@ -26,10 +26,7 @@ impl MultiFormat for EncryptedFile {
 
     fn to_armor(&self) -> WireResult<String> {
         let envelope_bytes = self.to_envelope()?;
-        let headers = [
-            ("Version", "3"),
-            ("Format", "envelope+cbor"),
-        ];
+        let headers = [("Version", "3"), ("Format", "envelope+cbor")];
         Ok(armor_encode(
             ArmorType::EncryptedFile,
             &headers,

@@ -117,8 +117,7 @@ impl AccountStore for SqliteAccountStore {
         let fp = fingerprint.to_base58();
         self.conn
             .call(move |c| {
-                let mut stmt =
-                    c.prepare("SELECT 1 FROM accounts WHERE fingerprint = ? LIMIT 1")?;
+                let mut stmt = c.prepare("SELECT 1 FROM accounts WHERE fingerprint = ? LIMIT 1")?;
                 let mut rows = stmt.query([fp])?;
                 Ok::<_, rusqlite::Error>(rows.next()?.is_some())
             })
@@ -147,7 +146,9 @@ mod tests {
     async fn sqlite_account_roundtrip_file() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("recrypt.db");
-        let store = SqliteAccountStore::open(path.to_str().unwrap()).await.unwrap();
+        let store = SqliteAccountStore::open(path.to_str().unwrap())
+            .await
+            .unwrap();
 
         let r = record(9);
         let fp = PublicKeyFingerprint::from_public_key(&r.ed25519_pk);

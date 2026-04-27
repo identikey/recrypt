@@ -38,12 +38,7 @@ impl InMemoryStorage {
 
     /// Total bytes stored (ciphertext only, excludes outboards)
     pub fn total_size(&self) -> usize {
-        self.blobs
-            .read()
-            .unwrap()
-            .values()
-            .map(|v| v.len())
-            .sum()
+        self.blobs.read().unwrap().values().map(|v| v.len()).sum()
     }
 
     /// Clear all stored blobs and outboards
@@ -64,10 +59,7 @@ impl BlobStorage for InMemoryStorage {
             });
         }
 
-        self.blobs
-            .write()
-            .unwrap()
-            .insert(*hash, data.to_vec());
+        self.blobs.write().unwrap().insert(*hash, data.to_vec());
         Ok(())
     }
 
@@ -101,10 +93,7 @@ impl BlobStorage for InMemoryStorage {
     ) -> StorageResult<()> {
         let b3_hash = blake3::Hash::from(*hash);
         let key = raw_hash_to_base58(hash);
-        self.blobs
-            .write()
-            .unwrap()
-            .insert(b3_hash, ciphertext);
+        self.blobs.write().unwrap().insert(b3_hash, ciphertext);
         if !outboard.is_empty() {
             self.outboards
                 .write()
@@ -114,10 +103,7 @@ impl BlobStorage for InMemoryStorage {
         Ok(())
     }
 
-    async fn get_with_outboard(
-        &self,
-        hash: &[u8; 32],
-    ) -> StorageResult<(Vec<u8>, Vec<u8>)> {
+    async fn get_with_outboard(&self, hash: &[u8; 32]) -> StorageResult<(Vec<u8>, Vec<u8>)> {
         let b3_hash = blake3::Hash::from(*hash);
         let key = raw_hash_to_base58(hash);
         let ciphertext = self
@@ -137,10 +123,7 @@ impl BlobStorage for InMemoryStorage {
         Ok((ciphertext, outboard))
     }
 
-    async fn delete_with_outboard(
-        &self,
-        hash: &[u8; 32],
-    ) -> StorageResult<()> {
+    async fn delete_with_outboard(&self, hash: &[u8; 32]) -> StorageResult<()> {
         let b3_hash = blake3::Hash::from(*hash);
         let key = raw_hash_to_base58(hash);
         self.blobs.write().unwrap().remove(&b3_hash);

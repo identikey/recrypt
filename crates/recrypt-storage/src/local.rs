@@ -129,10 +129,7 @@ impl BlobStorage for LocalFileStorage {
         Ok(())
     }
 
-    async fn get_with_outboard(
-        &self,
-        hash: &[u8; 32],
-    ) -> StorageResult<(Vec<u8>, Vec<u8>)> {
+    async fn get_with_outboard(&self, hash: &[u8; 32]) -> StorageResult<(Vec<u8>, Vec<u8>)> {
         let b3_hash = blake3::Hash::from(*hash);
         let ct_path = self.chunk_path(&b3_hash);
         let ciphertext = match fs::read(&ct_path).await {
@@ -151,10 +148,7 @@ impl BlobStorage for LocalFileStorage {
         Ok((ciphertext, outboard))
     }
 
-    async fn delete_with_outboard(
-        &self,
-        hash: &[u8; 32],
-    ) -> StorageResult<()> {
+    async fn delete_with_outboard(&self, hash: &[u8; 32]) -> StorageResult<()> {
         let b3_hash = blake3::Hash::from(*hash);
         let ct_path = self.chunk_path(&b3_hash);
         match fs::remove_file(&ct_path).await {

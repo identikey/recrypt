@@ -48,8 +48,12 @@ impl TestIdentity {
         let ed_sig = self.ed_key.sign(message.as_bytes());
         let ed_sig_b64 = b64.encode(ed_sig.to_bytes());
 
-        let ml_sig = pq_sign(&self.ml_dsa_secret, PqAlgorithm::MlDsa87, message.as_bytes())
-            .expect("ml-dsa sign failed");
+        let ml_sig = pq_sign(
+            &self.ml_dsa_secret,
+            PqAlgorithm::MlDsa87,
+            message.as_bytes(),
+        )
+        .expect("ml-dsa sign failed");
         let ml_sig_b64 = b64.encode(&ml_sig);
 
         (ed_sig_b64, ml_sig_b64)
@@ -114,11 +118,7 @@ impl ApiTestClient {
     // ── File operations ─────────────────────────────────────────────────
 
     /// Upload a file (raw bytes). Returns the HTTP response.
-    pub async fn upload_file(
-        &self,
-        id: &TestIdentity,
-        file_bytes: &[u8],
-    ) -> reqwest::Response {
+    pub async fn upload_file(&self, id: &TestIdentity, file_bytes: &[u8]) -> reqwest::Response {
         let file_hash = bs58::encode(blake3::hash(file_bytes).as_bytes()).into_string();
         let nonce = fresh_nonce();
         let message = format!("UPLOAD:{}:{}:{}", id.fingerprint, file_hash, nonce);
@@ -147,11 +147,7 @@ impl ApiTestClient {
     }
 
     /// Delete a file by hash.
-    pub async fn delete_file(
-        &self,
-        id: &TestIdentity,
-        file_hash: &str,
-    ) -> reqwest::Response {
+    pub async fn delete_file(&self, id: &TestIdentity, file_hash: &str) -> reqwest::Response {
         let nonce = fresh_nonce();
         let message = format!("DELETE:{}:{}:{}", id.fingerprint, file_hash, nonce);
         let (ed_sig, ml_sig) = id.sign(&message);
@@ -204,11 +200,7 @@ impl ApiTestClient {
     }
 
     /// Get a recrypted share by ID (Bob fetches).
-    pub async fn get_share(
-        &self,
-        id: &TestIdentity,
-        share_id: &str,
-    ) -> reqwest::Response {
+    pub async fn get_share(&self, id: &TestIdentity, share_id: &str) -> reqwest::Response {
         let nonce = fresh_nonce();
         let message = format!("DOWNLOAD:{}:{}:{}", id.fingerprint, share_id, nonce);
         let (ed_sig, ml_sig) = id.sign(&message);
@@ -225,11 +217,7 @@ impl ApiTestClient {
     }
 
     /// Revoke a share.
-    pub async fn revoke_share(
-        &self,
-        id: &TestIdentity,
-        share_id: &str,
-    ) -> reqwest::Response {
+    pub async fn revoke_share(&self, id: &TestIdentity, share_id: &str) -> reqwest::Response {
         let nonce = fresh_nonce();
         let message = format!("REVOKE:{}:{}:{}", id.fingerprint, share_id, nonce);
         let (ed_sig, ml_sig) = id.sign(&message);
@@ -246,10 +234,7 @@ impl ApiTestClient {
     }
 
     /// List shares for a fingerprint.
-    pub async fn list_shares(
-        &self,
-        id: &TestIdentity,
-    ) -> reqwest::Response {
+    pub async fn list_shares(&self, id: &TestIdentity) -> reqwest::Response {
         let nonce = fresh_nonce();
         let message = format!("LIST_SHARES:{}:{}", id.fingerprint, nonce);
         let (ed_sig, ml_sig) = id.sign(&message);
@@ -291,10 +276,7 @@ impl ApiTestClient {
     /// List files owned by a fingerprint (public endpoint).
     pub async fn list_files(&self, fingerprint: &str) -> reqwest::Response {
         self.client
-            .get(format!(
-                "{}/accounts/{}/files",
-                self.base_url, fingerprint
-            ))
+            .get(format!("{}/accounts/{}/files", self.base_url, fingerprint))
             .send()
             .await
             .expect("list_files request failed")

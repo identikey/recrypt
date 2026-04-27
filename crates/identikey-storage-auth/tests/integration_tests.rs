@@ -4,8 +4,8 @@ use std::collections::BTreeSet;
 
 use identikey_storage_auth::{
     AccessGrant, Capability, DecryptionPolicy, GrantStore, InMemoryGrantStore,
-    InMemoryKeyspaceStore, InMemoryOwnershipStore, KeyspaceDoc, KeyspaceId, KeyspaceStore,
-    Member, MemberCapability, OwnershipStore, PublicKeyFingerprint, RotationMode,
+    InMemoryKeyspaceStore, InMemoryOwnershipStore, KeyspaceDoc, KeyspaceId, KeyspaceStore, Member,
+    MemberCapability, OwnershipStore, PublicKeyFingerprint, RotationMode,
 };
 use recrypt_core::sign::{SigningKeys, VerifyPolicy, VerifyingKeys};
 use recrypt_ffi::ed25519::ed25519_keygen;
@@ -101,8 +101,12 @@ async fn test_share_flow() {
     .unwrap();
 
     // Bob can verify the capability
-    cap.verify(&alice_verifying, VerifyPolicy::PqRequired, MemberCapability::Read)
-        .unwrap();
+    cap.verify(
+        &alice_verifying,
+        VerifyPolicy::PqRequired,
+        MemberCapability::Read,
+    )
+    .unwrap();
 }
 
 #[tokio::test]
@@ -204,8 +208,12 @@ async fn test_keyspace_grant_capability_end_to_end() {
         &alice_signing,
     )
     .unwrap();
-    cap.verify(&alice_verifying, VerifyPolicy::PqRequired, MemberCapability::Read)
-        .unwrap();
+    cap.verify(
+        &alice_verifying,
+        VerifyPolicy::PqRequired,
+        MemberCapability::Read,
+    )
+    .unwrap();
     assert_eq!(cap.keyspace_id, retrieved.keyspace_id);
 }
 
@@ -235,7 +243,11 @@ async fn test_capability_expiry() {
     );
     assert!(cap.is_expired());
     assert!(
-        cap.verify(&verifying_keys, VerifyPolicy::PqRequired, MemberCapability::Read)
-            .is_err()
+        cap.verify(
+            &verifying_keys,
+            VerifyPolicy::PqRequired,
+            MemberCapability::Read
+        )
+        .is_err()
     );
 }

@@ -179,8 +179,7 @@ mod tests {
     fn classical_only_rejected_under_pq_required() {
         let (signing, verifying) = classical_keys();
         let sig = sign_message(b"msg", &signing).unwrap();
-        let err =
-            verify_message(b"msg", &sig, &verifying, VerifyPolicy::PqRequired).unwrap_err();
+        let err = verify_message(b"msg", &sig, &verifying, VerifyPolicy::PqRequired).unwrap_err();
         assert!(format!("{err}").contains("ML-DSA-87 signature required"));
     }
 

@@ -92,7 +92,11 @@ fn nfr2_size_report() {
         };
         println!(
             "{:<25} {:>10} {:>10} {:>10} {:>7.1}%",
-            label, payload, env.len(), overhead, pct
+            label,
+            payload,
+            env.len(),
+            overhead,
+            pct
         );
     }
 }

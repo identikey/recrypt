@@ -97,16 +97,10 @@ pub trait BlobStorage: Send + Sync {
     /// when no `.obao` sibling exists (small-file case).
     ///
     /// Returns `StorageError::NotFound` if the ciphertext object is absent.
-    async fn get_with_outboard(
-        &self,
-        hash: &[u8; 32],
-    ) -> StorageResult<(Vec<u8>, Vec<u8>)>;
+    async fn get_with_outboard(&self, hash: &[u8; 32]) -> StorageResult<(Vec<u8>, Vec<u8>)>;
 
     /// Delete both the ciphertext and (if present) the outboard sibling.
     ///
     /// Succeeds even if neither object exists (idempotent).
-    async fn delete_with_outboard(
-        &self,
-        hash: &[u8; 32],
-    ) -> StorageResult<()>;
+    async fn delete_with_outboard(&self, hash: &[u8; 32]) -> StorageResult<()>;
 }

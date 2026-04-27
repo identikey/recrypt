@@ -4,7 +4,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use serde::Serialize;
 use tokio::fs;
 
-use recrypt_core::{HybridEncryptor, hybrid::EncryptedFile};
+use recrypt_core::{hybrid::EncryptedFile, HybridEncryptor};
 use recrypt_wire::MultiFormat;
 
 use super::Context;

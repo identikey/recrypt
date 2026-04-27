@@ -89,11 +89,9 @@ async fn main() -> Result<()> {
 
     // Initialize tracing
     let filter = if cli.debug {
-        EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| EnvFilter::new("recrypt_cli=debug"))
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("recrypt_cli=debug"))
     } else {
-        EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| EnvFilter::new("recrypt_cli=warn"))
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("recrypt_cli=warn"))
     };
 
     fmt()

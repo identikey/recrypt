@@ -13,11 +13,7 @@
 
 use base64::Engine as _;
 use recrypt_core::{HybridEncryptor, pre::backends::MockBackend};
-use recrypt_e2e_tests::{
-    api::TestIdentity,
-    harness::TestHarness,
-    minio::MinioContext,
-};
+use recrypt_e2e_tests::{api::TestIdentity, harness::TestHarness, minio::MinioContext};
 use std::fs;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -58,9 +54,12 @@ async fn test_upload_download_via_s3() {
         "alice",
         "--output",
         enc_path.to_str().unwrap(),
-    ]).await;
+    ])
+    .await;
 
-    let upload_result = cli.run_ok(&["file", "upload", enc_path.to_str().unwrap()]).await;
+    let upload_result = cli
+        .run_ok(&["file", "upload", enc_path.to_str().unwrap()])
+        .await;
     let hash = upload_result.json()["hash"]
         .as_str()
         .expect("upload should return hash")
@@ -73,7 +72,8 @@ async fn test_upload_download_via_s3() {
         &hash,
         "--output",
         download_path.to_str().unwrap(),
-    ]).await;
+    ])
+    .await;
 
     let enc_bytes = fs::read(&enc_path).unwrap();
     let downloaded_bytes = fs::read(&download_path).unwrap();
@@ -96,11 +96,10 @@ async fn test_file_delete_from_s3() {
     let file_path = harness.tmp().join("to_delete.enc");
     fs::write(&file_path, b"delete me from S3").unwrap();
 
-    let upload_result = cli.run_ok(&["file", "upload", file_path.to_str().unwrap()]).await;
-    let hash = upload_result.json()["hash"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    let upload_result = cli
+        .run_ok(&["file", "upload", file_path.to_str().unwrap()])
+        .await;
+    let hash = upload_result.json()["hash"].as_str().unwrap().to_string();
 
     let del_result = cli.run_ok(&["file", "delete", &hash]).await;
     assert_eq!(del_result.json()["deleted"], hash);
@@ -112,7 +111,8 @@ async fn test_file_delete_from_s3() {
         &hash,
         "--output",
         output_path.to_str().unwrap(),
-    ]).await;
+    ])
+    .await;
 }
 
 /// Full recryption flow via the API with an S3 storage backend.
@@ -139,13 +139,12 @@ async fn test_share_through_s3() {
     // Alice uploads a file (arbitrary encrypted bytes).
     let file_bytes = b"Shared secret data stored in S3";
     let upload_resp = api.upload_file(&alice, file_bytes).await;
-    assert_eq!(
-        upload_resp.status().as_u16(),
-        201,
-        "upload failed"
-    );
+    assert_eq!(upload_resp.status().as_u16(), 201, "upload failed");
     let upload_json: serde_json::Value = upload_resp.json().await.unwrap();
-    let file_hash = upload_json["hash"].as_str().expect("upload missing hash").to_string();
+    let file_hash = upload_json["hash"]
+        .as_str()
+        .expect("upload missing hash")
+        .to_string();
 
     // Alice generates a recryption key for Bob.
     let encryptor = HybridEncryptor::new(MockBackend);
@@ -161,15 +160,14 @@ async fn test_share_through_s3() {
         .await;
     assert_eq!(share_resp.status().as_u16(), 201, "create_share failed");
     let share_json: serde_json::Value = share_resp.json().await.unwrap();
-    let share_id = share_json["share_id"].as_str().expect("missing share_id").to_string();
+    let share_id = share_json["share_id"]
+        .as_str()
+        .expect("missing share_id")
+        .to_string();
 
     // Bob fetches the recrypted share.
     let get_resp = api.get_share(&bob, &share_id).await;
-    assert_eq!(
-        get_resp.status().as_u16(),
-        200,
-        "get_share failed"
-    );
+    assert_eq!(get_resp.status().as_u16(), 200, "get_share failed");
     let get_json: serde_json::Value = get_resp.json().await.unwrap();
 
     // The response must contain a ciphertext_url pointing into the server's blob endpoint.
@@ -228,9 +226,12 @@ async fn test_large_file_s3() {
         "alice",
         "--output",
         enc_path.to_str().unwrap(),
-    ]).await;
+    ])
+    .await;
 
-    let upload_result = cli.run_ok(&["file", "upload", enc_path.to_str().unwrap()]).await;
+    let upload_result = cli
+        .run_ok(&["file", "upload", enc_path.to_str().unwrap()])
+        .await;
     let hash = upload_result.json()["hash"]
         .as_str()
         .expect("upload should return hash")
@@ -242,7 +243,8 @@ async fn test_large_file_s3() {
         &hash,
         "--output",
         download_path.to_str().unwrap(),
-    ]).await;
+    ])
+    .await;
 
     let enc_bytes = fs::read(&enc_path).unwrap();
     let downloaded_bytes = fs::read(&download_path).unwrap();

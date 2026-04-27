@@ -164,7 +164,10 @@ mod tests {
         });
         let Json(sign_resp) = sign_ml_dsa(sign_req).await.unwrap();
         assert_eq!(sign_resp.algorithm, "ml-dsa-87");
-        assert!(sign_resp.signature.starts_with("b64:"), "response must use b64: prefix");
+        assert!(
+            sign_resp.signature.starts_with("b64:"),
+            "response must use b64: prefix"
+        );
 
         let verify_req = Json(VerifyRequest {
             public_key: format!("b64:{}", B64.encode(&kp.public_key)),

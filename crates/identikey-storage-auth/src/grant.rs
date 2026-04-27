@@ -182,10 +182,8 @@ pub trait GrantStore: Send + Sync {
     async fn revoke(&self, id: &GrantId) -> AuthResult<()>;
 
     /// List grants where `subject` is the grantee.
-    async fn list_by_subject(
-        &self,
-        subject: &PublicKeyFingerprint,
-    ) -> AuthResult<Vec<AccessGrant>>;
+    async fn list_by_subject(&self, subject: &PublicKeyFingerprint)
+    -> AuthResult<Vec<AccessGrant>>;
 
     /// List grants for a given keyspace.
     async fn list_by_keyspace(&self, keyspace_id: &[u8; 32]) -> AuthResult<Vec<AccessGrant>>;

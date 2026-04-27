@@ -37,7 +37,6 @@ async fn show() -> Result<()> {
     );
     println!("    {}", "Example: http://localhost:7222".bright_black());
 
-
     println!(
         "  {}: {}",
         "output_format".dimmed(),

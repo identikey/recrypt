@@ -21,7 +21,10 @@ fn test_envelope_roundtrip() {
 
     let restored = EncryptedFile::from_envelope(&envelope_bytes).unwrap();
     assert_eq!(restored.bao_hash, encrypted.bao_hash);
-    assert_eq!(restored.wrapped_key.backend(), encrypted.wrapped_key.backend());
+    assert_eq!(
+        restored.wrapped_key.backend(),
+        encrypted.wrapped_key.backend()
+    );
 }
 
 #[test]
@@ -77,7 +80,10 @@ fn test_large_file_inline_roundtrip() {
 
     let envelope_bytes = encrypted.to_envelope().unwrap();
     // Envelope includes 1 MB inline ciphertext + 4 KB wrapped key
-    assert!(envelope_bytes.len() > 1_000_000, "envelope should include inline ciphertext");
+    assert!(
+        envelope_bytes.len() > 1_000_000,
+        "envelope should include inline ciphertext"
+    );
 
     let restored = EncryptedFile::from_envelope(&envelope_bytes).unwrap();
     assert_eq!(restored.bao_hash, encrypted.bao_hash);
@@ -125,8 +131,11 @@ fn test_wrapped_key_roundtrip_with_data() {
     // Verify wrapped key roundtrips correctly
     assert_eq!(restored.wrapped_key.backend(), BackendId::Mock);
     assert_eq!(restored.wrapped_key.level(), 0);
-    assert_eq!(restored.wrapped_key.as_bytes(), &wrapped_key_data[..],
-        "wrapped key inner bytes must match");
+    assert_eq!(
+        restored.wrapped_key.as_bytes(),
+        &wrapped_key_data[..],
+        "wrapped key inner bytes must match"
+    );
 
     // Verify ciphertext roundtrips
     assert_eq!(restored.ciphertext, vec![0xEE; 256]);
@@ -140,7 +149,11 @@ fn test_empty_wrapped_key_does_not_serialize() {
     // Verify this roundtrips.
     let ct = Ciphertext::new(BackendId::Mock, 0, Vec::new());
     let bytes = ct.to_bytes();
-    println!("empty ciphertext to_bytes: {:?} (len={})", bytes, bytes.len());
+    println!(
+        "empty ciphertext to_bytes: {:?} (len={})",
+        bytes,
+        bytes.len()
+    );
     assert_eq!(bytes.len(), 2); // backend byte + level byte
     let restored = Ciphertext::from_bytes(&bytes).unwrap();
     assert_eq!(restored.as_bytes().len(), 0);

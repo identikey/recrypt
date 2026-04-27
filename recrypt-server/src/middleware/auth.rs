@@ -37,14 +37,16 @@ pub fn extract_signature_headers(headers: &HeaderMap) -> ServerResult<SignatureH
         .map_err(|_| ServerError::BadRequest("Invalid base64 in ED25519 signature".into()))?;
 
     // ML-DSA header is optional; absence signals a classical-only signature.
-    let ml_dsa_sig = match headers.get("X-Signature-MlDsa").and_then(|v| v.to_str().ok()) {
-        Some(b64) => Some(
-            BASE64
-                .decode(b64)
-                .map_err(|_| ServerError::BadRequest("Invalid base64 in ML-DSA signature".into()))?,
-        ),
-        None => None,
-    };
+    let ml_dsa_sig =
+        match headers
+            .get("X-Signature-MlDsa")
+            .and_then(|v| v.to_str().ok())
+        {
+            Some(b64) => Some(BASE64.decode(b64).map_err(|_| {
+                ServerError::BadRequest("Invalid base64 in ML-DSA signature".into())
+            })?),
+            None => None,
+        };
 
     Ok(SignatureHeaders {
         nonce,

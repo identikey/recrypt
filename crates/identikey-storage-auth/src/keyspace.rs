@@ -57,9 +57,9 @@ impl FromStr for KeyspaceId {
     type Err = crate::error::AuthError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let bytes = bs58::decode(s)
-            .into_vec()
-            .map_err(|e| crate::error::AuthError::InvalidEncoding(format!("KeyspaceId base58: {e}")))?;
+        let bytes = bs58::decode(s).into_vec().map_err(|e| {
+            crate::error::AuthError::InvalidEncoding(format!("KeyspaceId base58: {e}"))
+        })?;
         let arr: [u8; 32] = bytes.try_into().map_err(|v: Vec<u8>| {
             crate::error::AuthError::InvalidEncoding(format!(
                 "KeyspaceId expected 32 bytes, got {}",
@@ -137,17 +137,11 @@ pub enum RotationMode {
     /// Routine key rotation (no membership change).
     Hygiene,
     /// Remove members and re-key.
-    Revoke {
-        removed: Vec<PublicKeyFingerprint>,
-    },
+    Revoke { removed: Vec<PublicKeyFingerprint> },
     /// Remove members and destroy old epoch keys.
-    Burn {
-        removed: Vec<PublicKeyFingerprint>,
-    },
+    Burn { removed: Vec<PublicKeyFingerprint> },
     /// Fork into a new keyspace (new id generated).
-    Fork {
-        new_id: KeyspaceId,
-    },
+    Fork { new_id: KeyspaceId },
     /// Permanently seal the keyspace.
     Tombstone,
 }
@@ -375,11 +369,7 @@ impl KeyspaceDoc {
 mod tests {
     use super::*;
 
-    fn make_member(
-        seed: u8,
-        caps: &[MemberCapability],
-        added_by_seed: u8,
-    ) -> Member {
+    fn make_member(seed: u8, caps: &[MemberCapability], added_by_seed: u8) -> Member {
         Member {
             fingerprint: PublicKeyFingerprint::from_bytes([seed; 32]),
             capabilities: caps.iter().cloned().collect(),
@@ -400,9 +390,17 @@ mod tests {
             epoch_pre_pk: [2u8; 32],
             epoch: 0,
             members: vec![
-                make_member(10, &[MemberCapability::Read, MemberCapability::SignRotation], 10),
+                make_member(
+                    10,
+                    &[MemberCapability::Read, MemberCapability::SignRotation],
+                    10,
+                ),
                 make_member(20, &[MemberCapability::Read, MemberCapability::Write], 10),
-                make_member(30, &[MemberCapability::Admin, MemberCapability::SignRotation], 10),
+                make_member(
+                    30,
+                    &[MemberCapability::Admin, MemberCapability::SignRotation],
+                    10,
+                ),
             ],
             quorum: 2,
             signatures: vec![],
@@ -436,8 +434,14 @@ mod tests {
 
         // Members with seed 10 and 30 have SignRotation
         assert_eq!(signers.len(), 2);
-        assert_eq!(signers[0].fingerprint, PublicKeyFingerprint::from_bytes([10; 32]));
-        assert_eq!(signers[1].fingerprint, PublicKeyFingerprint::from_bytes([30; 32]));
+        assert_eq!(
+            signers[0].fingerprint,
+            PublicKeyFingerprint::from_bytes([10; 32])
+        );
+        assert_eq!(
+            signers[1].fingerprint,
+            PublicKeyFingerprint::from_bytes([30; 32])
+        );
     }
 
     #[test]

@@ -76,7 +76,11 @@ pub async fn run(action: IdentityCommand, ctx: &Context) -> Result<()> {
         IdentityCommand::Show { name } => show_identity(name, ctx).await,
         IdentityCommand::Use { name } => use_identity(name, ctx).await,
         IdentityCommand::Delete { name } => delete_identity(name, ctx).await,
-        IdentityCommand::Export { name, output, format } => export_identity(name, output, format, ctx).await,
+        IdentityCommand::Export {
+            name,
+            output,
+            format,
+        } => export_identity(name, output, format, ctx).await,
         IdentityCommand::Import { file, name } => import_identity(file, name, ctx).await,
     }
 }
@@ -84,10 +88,10 @@ pub async fn run(action: IdentityCommand, ctx: &Context) -> Result<()> {
 #[instrument(skip(ctx))]
 async fn new_identity(name: Option<String>, ctx: &Context) -> Result<()> {
     debug!("Starting identity creation");
-    
+
     let mut wallet = Wallet::load(ctx.wallet_override.as_deref())?;
     debug!("Wallet loaded");
-    
+
     let is_new_wallet = wallet.is_new();
 
     // Determine identity name
@@ -289,7 +293,11 @@ async fn show_identity(name: Option<String>, ctx: &Context) -> Result<()> {
         let pre_enc = encode_key_display(&identity.pre.public);
 
         println!("{}", format!("Identity: {identity_name}").bold());
-        println!("  {}: {}", "Fingerprint".dimmed(), bs58::encode(identity.fingerprint).into_string());
+        println!(
+            "  {}: {}",
+            "Fingerprint".dimmed(),
+            bs58::encode(identity.fingerprint).into_string()
+        );
         println!(
             "  {}: {}",
             "Created".dimmed(),
@@ -297,21 +305,13 @@ async fn show_identity(name: Option<String>, ctx: &Context) -> Result<()> {
         );
         println!("  {}: {}", "PRE Backend".dimmed(), identity.pre_backend);
         println!("  {}:", "Public Keys".dimmed());
-        println!(
-            "    {}: {}",
-            "ED25519".dimmed(),
-            truncate(&ed25519_enc, 32)
-        );
+        println!("    {}: {}", "ED25519".dimmed(), truncate(&ed25519_enc, 32));
         println!(
             "    {}: {}",
             "ML-DSA-87".dimmed(),
             truncate(&ml_dsa_enc, 32)
         );
-        println!(
-            "    {}: {}",
-            "PRE".dimmed(),
-            truncate(&pre_enc, 32)
-        );
+        println!("    {}: {}", "PRE".dimmed(), truncate(&pre_enc, 32));
     }
 
     Ok(())
@@ -370,7 +370,12 @@ async fn delete_identity(name: String, ctx: &Context) -> Result<()> {
     Ok(())
 }
 
-async fn export_identity(name: String, output: String, format: ExportFormat, ctx: &Context) -> Result<()> {
+async fn export_identity(
+    name: String,
+    output: String,
+    format: ExportFormat,
+    ctx: &Context,
+) -> Result<()> {
     let wallet = Wallet::load(ctx.wallet_override.as_deref())?;
 
     let identity = wallet
@@ -540,7 +545,9 @@ fn wallet_identity_from_wire(wi: &recrypt_wire::Identity) -> Result<Identity> {
         )
     })?;
 
-    let backend_id: recrypt_core::pre::BackendId = pre.backend.parse()
+    let backend_id: recrypt_core::pre::BackendId = pre
+        .backend
+        .parse()
         .map_err(|_| anyhow::anyhow!("Unknown PRE backend: '{}'", pre.backend))?;
 
     let created_at = wi.created.unwrap_or_else(|| {
