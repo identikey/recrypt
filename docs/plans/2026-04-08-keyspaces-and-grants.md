@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-08
 **Status:** Design proposal — awaiting review
-**Depends on:** [2026-04-07 production readiness sprint](2026-04-07-production-readiness.md) (landed)
+**Depends on:** [2026-04-07 production readiness sprint](archive/2026-04-07-production-readiness.md) (landed)
 **Related:** [security-tiers.md](../security-tiers.md), [2026-04-08 gordian envelope migration](2026-04-08-gordian-envelope-migration.md) (parallel track)
 
 > **TL;DR** Introduce `Keyspace` as a first-class, versioned, signed
@@ -699,7 +699,7 @@ removed (base tier cannot enforce deletion).
 
 - [security-tiers.md](../security-tiers.md) — tier hierarchy and
   accepted-weaknesses doc
-- [2026-04-07 production readiness](2026-04-07-production-readiness.md) —
+- [2026-04-07 production readiness](archive/2026-04-07-production-readiness.md) —
   persistence foundation
 - [2026-04-07 next-steps backlog](2026-04-07-next-steps-backlog.md) —
   follow-up work including personal-list expansion

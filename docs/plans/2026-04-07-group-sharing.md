@@ -3,7 +3,7 @@
 **Date:** 2026-04-07
 **Status:** 📋 Proposed — awaiting implementation
 **Phase:** 8+ (the "Signal meets Dropbox" value-prop sprint)
-**Depends on:** [2026-04-07-production-readiness.md](2026-04-07-production-readiness.md)
+**Depends on:** [2026-04-07-production-readiness.md](archive/2026-04-07-production-readiness.md)
 (trait-backed persistence)
 
 > **TL;DR** Add a `Group` abstraction to `recrypt-server` so one
@@ -472,7 +472,7 @@ generation. Deferred.
 ## 6. References
 
 - Sibling plans:
-  - [2026-04-07-production-readiness.md](2026-04-07-production-readiness.md) —
+  - [2026-04-07-production-readiness.md](archive/2026-04-07-production-readiness.md) —
     must land first (trait-backed persistence)
   - [2026-04-06-bao-streaming-and-storage-simplification.md](2026-04-06-bao-streaming-and-storage-simplification.md) —
     orthogonal, compounds with group sharing for large-file use cases

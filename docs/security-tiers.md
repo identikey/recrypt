@@ -358,5 +358,5 @@ Max tier is further out and probably commercial.
   — the base-tier implementation of keyspaces, with forward-compat
   hooks for sentinel and max.
 - [Architecture overview](architecture.md) — where the components live.
-- [Production readiness sprint](plans/2026-04-07-production-readiness.md)
+- [Production readiness sprint](plans/archive/2026-04-07-production-readiness.md)
   — the trait-backed persistence layer keyspaces will build on.

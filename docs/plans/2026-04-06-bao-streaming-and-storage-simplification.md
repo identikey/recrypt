@@ -1,7 +1,10 @@
 # Bao Streaming Verification + Storage Simplification
 
 **Date:** 2026-04-06
-**Status:** 📋 Proposed — awaiting implementation
+**Status:** ✅ Substantially complete (2026-04-19). Retained as the
+design reference, including the explicitly-deferred §8.6
+(XChaCha20-Poly1305 belt-and-suspenders) and §11.5 (non-transferable
+PRE). Implementation history lives in `git log`.
 **Phase:** 8 (Documentation & Deployment)
 **Authors:** Duke Jones, Claude
 

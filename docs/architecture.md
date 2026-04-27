@@ -475,7 +475,7 @@ multi-signatures on anything it receives.
 Outstanding work is tracked in dedicated plan
 docs under [plans/](plans/). Two sprints are queued, in order:
 
-2. **[2026-04-07 — Production readiness](plans/2026-04-07-production-readiness.md)**
+2. **[2026-04-07 — Production readiness](plans/archive/2026-04-07-production-readiness.md)**
    Trait-backed state stores with SQLite-default / in-memory-for-tests
    implementations via `tokio-rusqlite` + WAL. Boundary refactor:
    `AccountStore` moves to `identikey-storage-auth`, `ProviderIndex`

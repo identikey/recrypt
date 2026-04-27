@@ -11,7 +11,7 @@ already lives, so picking it up later is cheap.
 
 Critical-path sprints that this backlog explicitly excludes:
 - [2026-04-06-bao-streaming-and-storage-simplification.md](2026-04-06-bao-streaming-and-storage-simplification.md)
-- [2026-04-07-production-readiness.md](2026-04-07-production-readiness.md)
+- [2026-04-07-production-readiness.md](archive/2026-04-07-production-readiness.md)
 - [2026-04-07-group-sharing.md](2026-04-07-group-sharing.md)
 
 Anything below is "after those three land".
@@ -370,7 +370,7 @@ Needs refresh after those sprints land.
 ### Phase 5 recryption proxy gaps
 
 - Tower rate limiting will be resolved by
-  [2026-04-07-production-readiness.md](2026-04-07-production-readiness.md)
+  [2026-04-07-production-readiness.md](archive/2026-04-07-production-readiness.md)
 - TLS termination expected to live at reverse proxy, documented in
   the deployment guide when it exists
 
