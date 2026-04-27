@@ -164,7 +164,9 @@ fn name_absent_not_empty_string() {
 }
 
 #[test]
-fn fingerprint_validation() {
+fn fingerprint_validation_on_encode() {
+    // Encoder validates fingerprint == Blake3(ed25519-public) — catches
+    // construction errors before they hit the wire.
     let ed25519_public = test_ed25519_public();
     let wrong_fingerprint = [0xFF; 32]; // deliberate mismatch
 
@@ -179,13 +181,30 @@ fn fingerprint_validation() {
         unknown_assertions: vec![],
     };
 
-    let bytes = identity.to_envelope_bytes().unwrap();
-    let result = Identity::from_envelope_bytes(&bytes);
-    assert!(result.is_err(), "tampered fingerprint must be rejected");
-    let err = result.unwrap_err().to_string();
+    let err = identity.to_envelope_bytes().unwrap_err().to_string();
     assert!(
         err.contains("fingerprint"),
-        "error must mention fingerprint: {err}"
+        "encode error must mention fingerprint: {err}"
+    );
+}
+
+#[test]
+fn fingerprint_validation_on_decode() {
+    // Decoder also enforces fingerprint == Blake3(ed25519-public) — catches
+    // tampered bytes that bypassed the encoder (e.g. from another impl).
+    use bc_envelope::prelude::*;
+    let mut subject = Map::new();
+    subject.insert("type", "recrypt.identity");
+    subject.insert("format-version", 1_u32);
+    subject.insert("fingerprint", ByteString::from(vec![0xFFu8; 32])); // bogus
+
+    let env = Envelope::new(CBOR::from(subject))
+        .add_assertion("ed25519-public", ByteString::from(test_ed25519_public().to_vec()));
+    let bytes = env.to_cbor_data();
+    let err = Identity::from_envelope_bytes(&bytes).unwrap_err().to_string();
+    assert!(
+        err.contains("fingerprint"),
+        "decode error must mention fingerprint: {err}"
     );
 }
 

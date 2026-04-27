@@ -30,6 +30,7 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
 };
+use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
 use identikey_storage_auth::{
     AccessGrant, GrantId, KeyspaceDoc, KeyspaceDocHash, KeyspaceId, MemberCapability,
     PublicKeyFingerprint,
@@ -37,6 +38,33 @@ use identikey_storage_auth::{
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::str::FromStr;
+
+// ---------------------------------------------------------------------------
+// Bytes encoding helpers (multi-KB blobs)
+// ---------------------------------------------------------------------------
+//
+// `root_pk` and `signatures` can be multi-KB (root_pk is unbounded; each
+// signature is a MultiSig with an ED25519 64 B + ML-DSA-87 ~4.6 KB component
+// once Phase C lands). Base58 of multi-KB is O(n²) bignum arithmetic — the
+// same regression `recrypt-jtw` / `recrypt-fil` / `recrypt-n1e` fixed
+// elsewhere. Output uses `b64:<base64>`. Input accepts `b64:`, `b58:`, or a
+// bare string (treated as base58 for backward compat with pre-2026 clients).
+
+fn encode_bytes_b64(bytes: &[u8]) -> String {
+    format!("b64:{}", B64.encode(bytes))
+}
+
+fn decode_bytes_tagged(s: &str, label: &str) -> ServerResult<Vec<u8>> {
+    if let Some(b64) = s.strip_prefix("b64:") {
+        return B64
+            .decode(b64)
+            .map_err(|e| ServerError::BadRequest(format!("Invalid base64 {label}: {e}")));
+    }
+    let b58 = s.strip_prefix("b58:").unwrap_or(s);
+    bs58::decode(b58)
+        .into_vec()
+        .map_err(|e| ServerError::BadRequest(format!("Invalid base58 {label}: {e}")))
+}
 
 // ---------------------------------------------------------------------------
 // JSON request/response types
@@ -55,6 +83,12 @@ pub struct MemberJson {
 }
 
 /// JSON representation of a keyspace document.
+///
+/// Encoding: short identifiers (id, fingerprints, doc hashes, epoch_pre_pk)
+/// stay base58 — they're 32 bytes and shown to humans. Multi-KB blobs
+/// (`root_pk`, each signature in `signatures`) emit `b64:<base64>` and
+/// accept any of `b64:`/`b58:`/bare-base58 on input. See module-level
+/// "Bytes encoding helpers" comment.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct KeyspaceDocJson {
     pub id: String,
@@ -188,7 +222,7 @@ fn doc_to_json(doc: &KeyspaceDoc) -> KeyspaceDocJson {
         parent: doc.parent.map(|h| h.to_string()),
         mode: mode_to_string(&doc.mode),
         name: doc.name.clone(),
-        root_pk: bs58::encode(&doc.root_pk).into_string(),
+        root_pk: encode_bytes_b64(&doc.root_pk),
         epoch_pre_pk: bs58::encode(&doc.epoch_pre_pk).into_string(),
         epoch: doc.epoch,
         members: doc
@@ -208,7 +242,7 @@ fn doc_to_json(doc: &KeyspaceDoc) -> KeyspaceDocJson {
             })
             .collect(),
         quorum: doc.quorum,
-        signatures: doc.signatures.iter().map(|s| bs58::encode(s).into_string()).collect(),
+        signatures: doc.signatures.iter().map(|s| encode_bytes_b64(s)).collect(),
         created_at: doc.created_at,
     }
 }
@@ -221,9 +255,7 @@ fn json_to_doc(json: &KeyspaceDocJson) -> ServerResult<KeyspaceDoc> {
         .map(parse_doc_hash)
         .transpose()?;
     let mode = string_to_mode(&json.mode)?;
-    let root_pk = bs58::decode(&json.root_pk)
-        .into_vec()
-        .map_err(|e| ServerError::BadRequest(format!("Invalid base58 root_pk: {e}")))?;
+    let root_pk = decode_bytes_tagged(&json.root_pk, "root_pk")?;
     let epoch_pre_pk_bytes = bs58::decode(&json.epoch_pre_pk)
         .into_vec()
         .map_err(|e| ServerError::BadRequest(format!("Invalid base58 epoch_pre_pk: {e}")))?;
@@ -259,11 +291,7 @@ fn json_to_doc(json: &KeyspaceDocJson) -> ServerResult<KeyspaceDoc> {
     let signatures = json
         .signatures
         .iter()
-        .map(|s| {
-            bs58::decode(s)
-                .into_vec()
-                .map_err(|e| ServerError::BadRequest(format!("Invalid base58 signature: {e}")))
-        })
+        .map(|s| decode_bytes_tagged(s, "signature"))
         .collect::<ServerResult<Vec<_>>>()?;
 
     Ok(KeyspaceDoc {

@@ -28,7 +28,9 @@ pub enum BackendId {
 impl std::fmt::Display for BackendId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            BackendId::Lattice => write!(f, "lattice"),
+            // Canonical strings match docs/standards/wallet-envelope-format.md
+            // and the recrypt-wire identity envelope (convert.rs::backend_to_string).
+            BackendId::Lattice => write!(f, "lattice-bfv"),
             BackendId::EcPairing => write!(f, "ec-pairing"),
             BackendId::EcSecp256k1 => write!(f, "ec-secp256k1"),
             BackendId::Mock => write!(f, "mock"),
@@ -41,7 +43,7 @@ impl std::str::FromStr for BackendId {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "lattice" | "pq" | "post-quantum" | "openfhe" => Ok(BackendId::Lattice),
+            "lattice-bfv" | "lattice" | "pq" | "post-quantum" | "openfhe" => Ok(BackendId::Lattice),
             "ec-pairing" | "ecpairing" | "pairing" => Ok(BackendId::EcPairing),
             "ec-secp256k1" | "secp256k1" | "umbral" => Ok(BackendId::EcSecp256k1),
             "mock" | "test" => Ok(BackendId::Mock),

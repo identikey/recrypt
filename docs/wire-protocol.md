@@ -181,6 +181,19 @@ The following envelope types are defined. Each is shown in CBOR
 diagnostic notation with elidable salted assertions marked
 `[salted]`.
 
+### 3.0 Implementation status
+
+| Type                          | Status        | Where implemented                                        |
+|-------------------------------|---------------|----------------------------------------------------------|
+| `recrypt.encrypted-file`      | ✅ Implemented | `crates/recrypt-wire/src/convert.rs::encrypted_file_to_envelope` |
+| `recrypt.identity`            | ✅ Implemented | `crates/recrypt-wire/src/identity.rs`                    |
+| `recrypt.pre-wrapped-key`     | 📝 Spec-only  | Carried as a `wrapped-key` assertion on `recrypt.encrypted-file` today; standalone envelope not yet implemented |
+| `recrypt.public-key-bundle`   | 📝 Spec-only  | `POST /accounts` body uses ad-hoc JSON; envelope variant not yet implemented |
+| `recrypt.capability`          | 📝 Spec-only  | `crates/identikey-storage-auth/src/capability.rs` still uses domain-tagged TLV; envelope migration tracked under recrypt-6aj follow-ups |
+| `recrypt.recrypt-key`         | 🚧 Speculative | Held only on the proxy; never crosses an envelope boundary today. Drop from spec unless a concrete export use case appears. |
+| `recrypt.secret-key-bundle`   | 🚧 Redundant  | Subsumed by `recrypt.identity` (which already carries secrets when present). Drop from spec. |
+| `recrypt.key-material`        | 📝 Documentary| Not an envelope — a 96-byte fixed plaintext layout (see §3.3) |
+
 ### 3.1 `recrypt.encrypted-file`
 
 The primary wire payload — represents an encrypted file's metadata,
@@ -228,9 +241,9 @@ sharding).
 | Predicate        | Salted? | Meaning                                                    |
 |---               |---      |---                                                          |
 | `"backend"`      | YES     | PRE backend: `"lattice-bfv"`, `"ec-pairing"`, `"ec-secp256k1"`, `"mock"` |
-| `"created"`      | YES     | Epoch time of encryption, CBOR tag 1                        |
+| `"created"`      | YES, optional | Epoch time of encryption, CBOR tag 1. Pure UX — the auth service and HTTP layer also know "when did this arrive". Encoders MAY emit; decoders MUST tolerate absence. |
 | `"owner"`        | no      | Blake3(owner's Ed25519 pubkey) — the file originator fingerprint |
-| `"plaintext-size"` | YES   | Original plaintext byte count, for display only             |
+| `"plaintext-size"` | YES, optional | Original plaintext byte count, for display only. The load-bearing copy lives inside the AEAD-protected `KeyMaterial` (§3.3). Encoders MAY emit; decoders MUST tolerate absence. |
 | `'signed'`       | no      | Ed25519 signature over the subject + non-elided assertions  |
 | `'signed'`       | no      | ML-DSA-87 signature, same coverage                          |
 

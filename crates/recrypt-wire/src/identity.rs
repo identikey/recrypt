@@ -155,6 +155,16 @@ impl Identity {
     }
 
     fn to_envelope_inner(&self) -> WireResult<Envelope> {
+        // Encoder-side fingerprint check: catches construction errors before
+        // they hit the wire. Decoder enforces the same invariant on parse
+        // (see `from_envelope_inner`).
+        let expected_fp = blake3::hash(&self.ed25519_public);
+        if self.fingerprint != *expected_fp.as_bytes() {
+            return Err(WireError::InvalidFormat(
+                "fingerprint does not match Blake3(ed25519-public)".into(),
+            ));
+        }
+
         let mut subject = Map::new();
         subject.insert("type", "recrypt.identity");
         subject.insert("format-version", 1_u32);

@@ -61,14 +61,61 @@ This table is normative — when implementing a new boundary, check here first.
 
 ## 5. Known violations
 
-None as of 2026-04-27. All multi-KB blobs (ml_dsa_pk, recrypt_key, wrapped_key, lattice PRE keys) use base64; short stable IDs (ed25519, fingerprints, file hashes, mock PRE) use base58.
+None as of 2026-04-27 (post recrypt-6aj sweep). All multi-KB blobs in code paths use base64; short stable IDs use base58.
 
-Historical fixes:
+### 5.1 Tagged-input convention
+
+Endpoints that accept multi-KB blobs over JSON accept input strings tagged with their encoding:
+
+- `b64:<base64>` — preferred
+- `b58:<base58>` — accepted for backward compatibility
+- bare string with no prefix — treated as base58 (legacy pre-2026 clients)
+
+Outputs always emit `b64:<base64>`. Clients that previously stripped a `b58:` prefix must be updated to also handle `b64:`. This applies today to `/sign/ml-dsa`, `/verify/ml-dsa`, and the `root_pk` / `signatures` fields of `KeyspaceDocJson`.
+
+### 5.2 Historical fixes
+
 - `recrypt-jtw` (closed 2026-04-27) — migrated `CreateShareRequest.recrypt_key` and `wrapped_key` from base58 to base64.
 - `recrypt-fil` (closed 2026-04-27) — migrated `ml_dsa_pk` (REST body + `CREATE` canonical signature message) from base58 to base64.
 - `recrypt-n1e` (closed 2026-04-27) — fixed `identity show` hanging on bs58::encode of multi-MB lattice PRE pubkey; display path now picks base58 vs base64 by size.
+- `recrypt-6aj` (closed 2026-04-27) — migrated `/sign/ml-dsa`, `/verify/ml-dsa`, and `KeyspaceDocJson.{root_pk, signatures}` from base58 to tagged base64; introduced the `b64:` / `b58:` input-tag convention.
 
-## 6. References
+## 6. ASCII armor block headers
+
+ASCII-armored exports (e.g. `recrypt identity export --format=armor`)
+wrap envelope bytes in a PEM-style block:
+
+```
+-----BEGIN RECRYPT IDENTITY-----
+Version: 1
+Format: envelope+cbor
+
+<base64 of envelope bytes>
+-----END RECRYPT IDENTITY-----
+```
+
+**Canonical headers:**
+
+| Key         | Required? | Value                                                          |
+|-------------|-----------|----------------------------------------------------------------|
+| `Version`   | yes       | Integer string. Currently `1` for `recrypt.identity` exports. Bumped on breaking changes to the encapsulated envelope. |
+| `Format`    | yes       | Always `envelope+cbor` for envelope payloads.                   |
+| `Algorithm` | optional  | Free-form algorithm summary (e.g. `ED25519+ML-DSA-87+PRE`). Advisory only — the payload bytes are the source of truth. |
+| `Created`   | optional  | Epoch seconds the armor was produced.                          |
+| `Fingerprint` | optional | base58 fingerprint of the embedded identity for visual ID.    |
+
+**Header parsing rules:**
+
+- Each header line is `Key: Value\n` (key, ASCII colon, ASCII space, value).
+- Decoders MUST tolerate unknown header keys (forward compat).
+- Decoders MUST NOT use header values for security decisions — the payload is signed and authoritative.
+- Encoders MUST NOT include any whitespace inside the key. Values may contain spaces.
+
+**BEGIN/END marker rule:** the `END` line MUST match the `BEGIN` armor type byte-for-byte. A `BEGIN RECRYPT IDENTITY` block ending with `END RECRYPT PUBLIC KEY` is rejected.
+
+**Implementation:** [`crates/recrypt-wire/src/armor.rs`](../../crates/recrypt-wire/src/armor.rs).
+
+## 7. References
 
 - [wire-protocol.md](../wire-protocol.md) — wire format (envelope + dCBOR)
 - [wallet-envelope-format.md](wallet-envelope-format.md) — wallet body encoding

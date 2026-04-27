@@ -1,17 +1,10 @@
 //! ASCII armor format for human-readable export
 //!
-//! Format:
-//! ```text
-//! ----- BEGIN RECRYPT PUBLIC KEY -----
-//! Version: 1
-//! Algorithm: ED25519+ML-DSA-87+PRE
-//! Fingerprint: a3k7x5a_Ab3DeF_Xy9ZmP7q_R2sK1M4V
-//! Created: 2024-01-15T10:30:00Z
-//!
-//! eyJlZDI1NTE5IjoiTUZrd0V3WUhLb1pJemowQ0FRWUlLb1pJemowREFRY0RRZ0FF...
-//! (base64 continues)
-//! ----- END RECRYPT PUBLIC KEY -----
-//! ```
+//! See [`docs/standards/encoding-conventions.md` §6](../../../docs/standards/encoding-conventions.md#6-ascii-armor-block-headers)
+//! for the canonical header set, parsing rules, and BEGIN/END marker
+//! conventions. Each armor block's `Version:` header matches the
+//! `format-version` of the embedded envelope subject — currently `1`
+//! for `recrypt.identity` and `3` for `recrypt.encrypted-file`.
 
 use crate::error::{WireError, WireResult};
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};

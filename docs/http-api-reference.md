@@ -38,13 +38,18 @@ All protected endpoints require the following headers:
 
 | Header               | Value                                      | Encoding        |
 | -------------------- | ------------------------------------------ | --------------- |
-| `X-Public-Key`       | Requester's fingerprint                    | base58          |
+| `X-Public-Key`       | Requester's **fingerprint** (see below)    | base58          |
 | `X-Nonce`            | Fresh nonce string from `GET /nonce`       | plain UTF-8     |
 | `X-Signature-Ed25519`| 64-byte ED25519 signature over the message | base64 standard |
 | `X-Signature-MlDsa`  | ML-DSA-87 signature over the message       | base64 standard |
 
 The fingerprint is computed as
 `bs58::encode(blake3::hash(ed25519_public_key_bytes))`.
+
+> **Naming note.** The header is called `X-Public-Key` for historical
+> reasons but its value is the *fingerprint*, not the raw public key.
+> Future major versions are expected to rename it to `X-Fingerprint`.
+> Clients MUST send the fingerprint regardless of header name.
 
 ### 1.3 Canonical signature message format
 
@@ -56,7 +61,7 @@ trailing field is always the nonce string exactly as it appears in the
 
 | Endpoint                              | Verb  | Canonical message template                                                |
 | ------------------------------------- | :---: | -------------------------------------------------------------------------- |
-| `POST   /accounts`                    | `CREATE`      | `CREATE:{ed25519_pk}:{ml_dsa_pk}:{pre_pk}:{nonce}`               |
+| `POST   /accounts`                    | `CREATE`      | `CREATE:{ed25519_pk}:{ml_dsa_pk}:{nonce}`                        |
 | `POST   /files`                       | `UPLOAD`      | `UPLOAD:{fingerprint}:{file_hash}:{nonce}`                       |
 | `DELETE /files/{hash}`                | `DELETE`      | `DELETE:{fingerprint}:{file_hash}:{nonce}`                       |
 | `POST   /recryption/share`            | `SHARE`       | `SHARE:{from_fingerprint}:{to_fingerprint}:{file_hash}:{nonce}`  |
@@ -70,7 +75,6 @@ for the project-wide rules:
 
 - `ed25519_pk` — base58 (32 B)
 - `ml_dsa_pk` — base64 (~2.5 KB; base58 is O(n²) on multi-KB blobs)
-- `pre_pk` — base58 for mock backend (32 B); base64 for lattice (multi-KB)
 - `fingerprint`, `from_fingerprint`, `to_fingerprint`, `requester_fingerprint`
   — base58 of `blake3(ed25519_pk_bytes)`
 - `file_hash` — base58 of `blake3(ciphertext_bytes)`
@@ -167,22 +171,23 @@ These limits are configurable via `recrypt-server.toml` or environment variables
 #### `POST /accounts` — Create account
 
 - **Auth:** required. Canonical message:
-  `CREATE:{ed25519_pk}:{ml_dsa_pk}:{pre_pk}:{nonce}`
+  `CREATE:{ed25519_pk}:{ml_dsa_pk}:{nonce}`
 - **Request body (JSON):**
   ```json
   {
     "ed25519_pk": "<base58 32-byte key>",
-    "ml_dsa_pk":  "<base58 ML-DSA-87 public key>",
-    "pre_pk":     "<base58 PRE public key, optional>"
+    "ml_dsa_pk":  "<base64 ML-DSA-87 public key>"
   }
   ```
+  PRE public keys are not registered server-side — recipients hand
+  them to senders directly inside `recrypt.public-key-bundle` envelopes
+  (see [wire-protocol.md §3.4](wire-protocol.md#34-recryptpublic-key-bundle)).
 - **Response: 201 Created**
   ```json
   {
     "fingerprint": "<base58>",
     "ed25519_pk":  "<base58>",
-    "ml_dsa_pk":   "<base58>",
-    "pre_pk":      "<base58 | null>",
+    "ml_dsa_pk":   "<base64>",
     "created_at":  1680000000
   }
   ```
@@ -313,15 +318,15 @@ These limits are configurable via `recrypt-server.toml` or environment variables
     "wrapped_key_for_recipient": "<base64 recrypted wrapped-key envelope>",
     "bao_hash": "<base58 32-byte BLAKE3 root>",
     "signature": {
-      "ed25519_signature": "<base64>",
-      "pq_signatures": [
-        { "algorithm": "ML-DSA-87", "signature": "<base64>" }
-      ]
+      "ed25519_sig": "<base64 64-byte ED25519 signature>",
+      "ml_dsa_sig":  "<base64 ML-DSA-87 signature, omitted if file was ED25519-only>"
     },
     "ciphertext_url": "https://storage.example.com/blob/b3/...",
     "outboard_url": "https://storage.example.com/blob/b3/....obao"
   }
   ```
+  The `signature` object commits to the *original* `wrapped_key || bao_hash`,
+  not the recrypted form — see the note below.
 
 **Client-side steps after receiving this response:**
 
@@ -345,6 +350,42 @@ of `plaintext_hash` inside the decrypted key material.
   the server's in-memory store. See [threat-model.md](threat-model.md) §6
   for notes on eventual-consistency concerns between revoke and concurrent
   downloads.
+
+---
+
+### 2.5 Internal / Phase-C endpoints
+
+These endpoints are mounted on the same router but are intended for
+trusted intra-cluster use. They are **not** stable public API.
+
+#### `POST /sign/ml-dsa`, `POST /verify/ml-dsa` — ML-DSA-87 delegation
+
+Sign or verify arbitrary byte payloads with ML-DSA-87 on behalf of
+callers without a local liboqs (browser, WASM-only). The caller
+submits the secret key over the wire — these are *delegation
+primitives*, not a vault. Run alongside the calling process on
+localhost; do not expose publicly.
+
+- **Auth:** none. The secret key in the body IS the authority.
+- **Encoding:** request fields accept `b64:<base64>`, `b58:<base58>`,
+  or a bare base58 string (legacy). Responses always emit
+  `b64:<base64>`. See
+  [encoding-conventions.md §5.1](standards/encoding-conventions.md#51-tagged-input-convention).
+- **Source:** [`recrypt-server/src/routes/signing.rs`](../recrypt-server/src/routes/signing.rs).
+
+#### `POST /keyspaces`, `GET /keyspaces/{id}`, `POST /grants`, etc. — Keyspace management
+
+The Phase-C keyspace and grant endpoints. Mutating endpoints require
+the same nonce + multisig headers as §1.2; the canonical message
+includes a content hash of the submitted body. Body fields like
+`root_pk` and `signatures` use the same tagged-encoding convention as
+the signing endpoints.
+
+- **Source:** [`recrypt-server/src/routes/keyspaces.rs`](../recrypt-server/src/routes/keyspaces.rs).
+- **Status:** evolving. The Phase-C MultiSig-over-doc-body design is
+  the eventual target; the current handlers gate on a caller-binding
+  check and body-level identity equality. Do not depend on the wire
+  shape until the keyspace spec lands in `docs/standards/`.
 
 ---
 
@@ -396,7 +437,7 @@ POST /recryption/share
      body: {
        "to_fingerprint": "bob_fp",
        "file_hash":      hash,
-       "recrypt_key":    bs58(rk.to_bytes()),
+       "recrypt_key":    b64(rk.to_bytes()),
        "backend_id":     "lattice"
      }
                                         → 201 { "share_id": "sid", ... }

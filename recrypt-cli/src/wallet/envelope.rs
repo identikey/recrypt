@@ -2,30 +2,24 @@
 //!
 //! Spec: docs/standards/wallet-envelope-format.md (§3.1, §3.2).
 //!
-//! Wallet envelope shape:
-//!   subject: leaf map {type: "recrypt.wallet", format-version: 2}
-//!   assertions:
-//!     "active-identity" -> string (when Some)
-//!     "identity" -> nested identity envelope, repeated per identity
-//!
-//! Identity envelope shape:
-//!   subject: leaf map {type: "recrypt.identity", format-version: 1, fingerprint: 32B}
-//!   assertions: name, created (tag 1 epoch), ed25519-{public,secret},
-//!               ml-dsa-{public,secret}, pre-backend, pre-{public,secret}
+//! Each identity inside the wallet is encoded by `recrypt_wire::Identity` —
+//! the same encoder used for on-the-wire identity envelopes. This guarantees
+//! the bytes for a given identity are byte-identical whether the identity is
+//! sitting in a wallet on disk or being shipped over HTTP. See
+//! `recrypt-cli/src/wallet/envelope.rs::tests::wallet_identity_bytes_match_wire`.
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context as _, Result};
 use bc_envelope::prelude::*;
 use std::collections::HashMap;
 use std::str::FromStr;
 
 use recrypt_core::pre::BackendId;
+use recrypt_wire::{Identity as WireIdentity, MlDsaKeyPair, MultiFormat, PreKeyMaterial};
 
 use super::format::{Identity, KeyPair, WalletData};
 
 const WALLET_TYPE: &str = "recrypt.wallet";
 const WALLET_FORMAT_VERSION: u32 = 2;
-const IDENTITY_TYPE: &str = "recrypt.identity";
-const IDENTITY_FORMAT_VERSION: u32 = 1;
 
 /// Encode a wallet to dCBOR envelope bytes.
 pub fn to_envelope(wallet: &WalletData) -> Result<Vec<u8>> {
@@ -127,162 +121,111 @@ fn wallet_from_envelope(envelope: &Envelope) -> Result<WalletData> {
     })
 }
 
+/// Build an identity envelope by delegating to `recrypt_wire::Identity`.
+///
+/// This guarantees byte-identical encoding between wallet-stored identities
+/// and on-the-wire identity envelopes for the same content.
 fn identity_to_envelope(name: &str, id: &Identity) -> Result<Envelope> {
-    // Verify fingerprint == Blake3(ed25519-public) before emitting.
-    let expected = blake3::hash(&id.ed25519.public);
-    if id.fingerprint != *expected.as_bytes() {
-        return Err(anyhow!(
-            "Identity '{name}': fingerprint does not match Blake3(ed25519-public)"
-        ));
-    }
-
-    let mut subject = Map::new();
-    subject.insert("type", IDENTITY_TYPE);
-    subject.insert("format-version", IDENTITY_FORMAT_VERSION);
-    subject.insert("fingerprint", ByteString::from(id.fingerprint.to_vec()));
-
-    let mut envelope = Envelope::new(CBOR::from(subject));
-
-    envelope = envelope.add_assertion("name", name);
-
-    let created_tagged = CBOR::to_tagged_value(Tag::with_value(1), id.created_at);
-    envelope = envelope.add_assertion("created", created_tagged);
-
-    envelope = envelope.add_assertion(
-        "ed25519-public",
-        ByteString::from(id.ed25519.public.clone()),
-    );
-    envelope = envelope.add_assertion(
-        "ed25519-secret",
-        ByteString::from(id.ed25519.secret.clone()),
-    );
-    envelope = envelope.add_assertion(
-        "ml-dsa-public",
-        ByteString::from(id.ml_dsa.public.clone()),
-    );
-    envelope = envelope.add_assertion(
-        "ml-dsa-secret",
-        ByteString::from(id.ml_dsa.secret.clone()),
-    );
-    envelope = envelope.add_assertion("pre-backend", id.pre_backend.to_string());
-    envelope = envelope.add_assertion("pre-public", ByteString::from(id.pre.public.clone()));
-    envelope = envelope.add_assertion("pre-secret", ByteString::from(id.pre.secret.clone()));
-
-    Ok(envelope)
+    let wire_id = wallet_to_wire_identity(name, id)?;
+    let bytes = wire_id
+        .to_envelope()
+        .map_err(|e| anyhow!("identity envelope encoding failed: {e}"))?;
+    Envelope::try_from_cbor_data(bytes)
+        .map_err(|e| anyhow!("identity envelope re-parse failed: {e}"))
 }
 
 fn identity_from_envelope(envelope: &Envelope) -> Result<(String, Identity)> {
-    let subject_cbor = envelope
-        .subject()
-        .try_leaf()
-        .map_err(|e| anyhow!("Identity envelope subject not a leaf: {e}"))?;
+    // Round-trip through wire crate: serialize the inner envelope to bytes,
+    // parse via `recrypt_wire::Identity::from_envelope_bytes`, then map back.
+    // This shares all subject/assertion/fingerprint validation with the wire
+    // path — one source of truth.
+    let bytes = envelope.to_cbor_data();
+    let wire_id = WireIdentity::from_envelope_bytes(&bytes)
+        .map_err(|e| anyhow!("identity envelope decode failed: {e}"))?;
+    wire_to_wallet_identity(wire_id)
+}
 
-    let subject = match subject_cbor.into_case() {
-        CBORCase::Map(m) => m,
-        _ => return Err(anyhow!("Identity envelope subject is not a map")),
-    };
-
-    let ty: String = subject
-        .get("type")
-        .ok_or_else(|| anyhow!("Identity envelope subject missing 'type'"))?;
-    if ty != IDENTITY_TYPE {
-        return Err(anyhow!(
-            "Expected identity type '{IDENTITY_TYPE}', got '{ty}'"
-        ));
-    }
-
-    let version: u32 = subject
-        .get("format-version")
-        .ok_or_else(|| anyhow!("Identity envelope subject missing 'format-version'"))?;
-    if version != IDENTITY_FORMAT_VERSION {
-        return Err(anyhow!(
-            "Unsupported identity envelope format-version: {version}"
-        ));
-    }
-
-    let fp_bs: ByteString = subject
-        .get("fingerprint")
-        .ok_or_else(|| anyhow!("Identity envelope subject missing 'fingerprint'"))?;
-    let fingerprint: [u8; 32] = fp_bs
-        .to_vec()
+fn wallet_to_wire_identity(name: &str, id: &Identity) -> Result<WireIdentity> {
+    let ed25519_public: [u8; 32] = id
+        .ed25519
+        .public
+        .as_slice()
         .try_into()
-        .map_err(|_| anyhow!("Identity fingerprint must be 32 bytes"))?;
+        .with_context(|| format!("identity '{name}': ed25519 public must be 32 bytes"))?;
+    let ed25519_secret: [u8; 32] = id
+        .ed25519
+        .secret
+        .as_slice()
+        .try_into()
+        .with_context(|| format!("identity '{name}': ed25519 secret must be 32 bytes"))?;
 
-    let name: String = envelope
-        .extract_object_for_predicate("name")
-        .map_err(|_| anyhow!("Identity envelope missing 'name' assertion"))?;
+    Ok(WireIdentity {
+        fingerprint: id.fingerprint,
+        ed25519_public,
+        ed25519_secret: Some(ed25519_secret),
+        name: Some(name.to_string()),
+        created: Some(id.created_at),
+        ml_dsa: Some(MlDsaKeyPair {
+            public: id.ml_dsa.public.clone(),
+            secret: Some(id.ml_dsa.secret.clone()),
+        }),
+        pre: Some(PreKeyMaterial {
+            backend: id.pre_backend.to_string(),
+            public: id.pre.public.clone(),
+            secret: Some(id.pre.secret.clone()),
+        }),
+        unknown_assertions: Vec::new(),
+    })
+}
 
-    let created_at = extract_created(envelope)?;
-
-    let ed25519_public = extract_bytes(envelope, "ed25519-public")?;
-    let ed25519_secret = extract_bytes(envelope, "ed25519-secret")?;
-    let ml_dsa_public = extract_bytes(envelope, "ml-dsa-public")?;
-    let ml_dsa_secret = extract_bytes(envelope, "ml-dsa-secret")?;
-
-    let pre_backend_str: String = envelope
-        .extract_object_for_predicate("pre-backend")
-        .map_err(|_| anyhow!("Identity envelope missing 'pre-backend' assertion"))?;
-    let pre_backend = BackendId::from_str(&pre_backend_str)
-        .map_err(|e| anyhow!("Unknown pre-backend '{pre_backend_str}': {e}"))?;
-    let pre_public = extract_bytes(envelope, "pre-public")?;
-    let pre_secret = extract_bytes(envelope, "pre-secret")?;
-
-    // Verify fingerprint == Blake3(ed25519-public).
-    let expected = blake3::hash(&ed25519_public);
-    if fingerprint != *expected.as_bytes() {
-        return Err(anyhow!(
-            "Identity fingerprint does not match Blake3(ed25519-public)"
-        ));
-    }
+fn wire_to_wallet_identity(wire: WireIdentity) -> Result<(String, Identity)> {
+    let name = wire
+        .name
+        .clone()
+        .ok_or_else(|| anyhow!("wallet identity envelope is missing 'name' assertion"))?;
+    let created_at = wire
+        .created
+        .ok_or_else(|| anyhow!("wallet identity '{name}' missing 'created' assertion"))?;
+    let ed25519_secret = wire
+        .ed25519_secret
+        .ok_or_else(|| anyhow!("wallet identity '{name}' missing 'ed25519-secret'"))?;
+    let ml_dsa = wire
+        .ml_dsa
+        .clone()
+        .ok_or_else(|| anyhow!("wallet identity '{name}' missing ml-dsa key material"))?;
+    let ml_dsa_secret = ml_dsa
+        .secret
+        .clone()
+        .ok_or_else(|| anyhow!("wallet identity '{name}' missing 'ml-dsa-secret'"))?;
+    let pre = wire
+        .pre
+        .clone()
+        .ok_or_else(|| anyhow!("wallet identity '{name}' missing pre key material"))?;
+    let pre_secret = pre
+        .secret
+        .clone()
+        .ok_or_else(|| anyhow!("wallet identity '{name}' missing 'pre-secret'"))?;
+    let pre_backend = BackendId::from_str(&pre.backend)
+        .map_err(|e| anyhow!("identity '{name}': unknown pre-backend '{}': {e}", pre.backend))?;
 
     let identity = Identity {
         created_at,
-        fingerprint,
+        fingerprint: wire.fingerprint,
         ed25519: KeyPair {
-            public: ed25519_public,
-            secret: ed25519_secret,
+            public: wire.ed25519_public.to_vec(),
+            secret: ed25519_secret.to_vec(),
         },
         ml_dsa: KeyPair {
-            public: ml_dsa_public,
+            public: ml_dsa.public.clone(),
             secret: ml_dsa_secret,
         },
         pre: KeyPair {
-            public: pre_public,
+            public: pre.public.clone(),
             secret: pre_secret,
         },
         pre_backend,
     };
-
     Ok((name, identity))
-}
-
-fn extract_bytes(envelope: &Envelope, predicate: &str) -> Result<Vec<u8>> {
-    let bs: ByteString = envelope
-        .extract_object_for_predicate(predicate)
-        .map_err(|_| anyhow!("Identity envelope missing '{predicate}' assertion"))?;
-    Ok(bs.to_vec())
-}
-
-fn extract_created(envelope: &Envelope) -> Result<u64> {
-    let obj = envelope
-        .object_for_predicate("created")
-        .map_err(|_| anyhow!("Identity envelope missing 'created' assertion"))?;
-    let cbor = obj
-        .try_leaf()
-        .map_err(|e| anyhow!("'created' object not a leaf: {e}"))?;
-    match cbor.into_case() {
-        CBORCase::Tagged(tag, inner) if tag.value() == 1 => match inner.into_case() {
-            CBORCase::Unsigned(v) => Ok(v),
-            other => Err(anyhow!(
-                "'created' tag-1 inner must be unsigned, got {:?}",
-                CBOR::from(other)
-            )),
-        },
-        other => Err(anyhow!(
-            "'created' must be CBOR tag 1 epoch time, got {:?}",
-            CBOR::from(other)
-        )),
-    }
 }
 
 #[cfg(test)]
@@ -326,14 +269,8 @@ mod tests {
                 .unwrap_or_else(|| panic!("missing identity {name} after roundtrip"));
             assert_eq!(id_a.created_at, id_b.created_at, "{name}: created_at");
             assert_eq!(id_a.fingerprint, id_b.fingerprint, "{name}: fingerprint");
-            assert_eq!(
-                id_a.ed25519.public, id_b.ed25519.public,
-                "{name}: ed25519 public"
-            );
-            assert_eq!(
-                id_a.ed25519.secret, id_b.ed25519.secret,
-                "{name}: ed25519 secret"
-            );
+            assert_eq!(id_a.ed25519.public, id_b.ed25519.public, "{name}: ed25519 pub");
+            assert_eq!(id_a.ed25519.secret, id_b.ed25519.secret, "{name}: ed25519 sec");
             assert_eq!(id_a.ml_dsa.public, id_b.ml_dsa.public, "{name}: ml_dsa pub");
             assert_eq!(id_a.ml_dsa.secret, id_b.ml_dsa.secret, "{name}: ml_dsa sec");
             assert_eq!(id_a.pre.public, id_b.pre.public, "{name}: pre pub");
@@ -416,42 +353,7 @@ mod tests {
         let err = to_envelope(&wallet).unwrap_err();
         let msg = format!("{err:#}");
         assert!(
-            msg.contains("fingerprint does not match"),
-            "unexpected error: {msg}"
-        );
-    }
-
-    #[test]
-    fn decode_rejects_tampered_fingerprint() {
-        // Build an identity envelope by hand with a wrong fingerprint.
-        let bogus_fp = [0xFFu8; 32];
-        let ed_public = vec![1u8; 32];
-
-        let mut id_subject = Map::new();
-        id_subject.insert("type", IDENTITY_TYPE);
-        id_subject.insert("format-version", IDENTITY_FORMAT_VERSION);
-        id_subject.insert("fingerprint", ByteString::from(bogus_fp.to_vec()));
-        let id_env = Envelope::new(CBOR::from(id_subject))
-            .add_assertion("name", "alice")
-            .add_assertion("created", CBOR::to_tagged_value(Tag::with_value(1), 1u64))
-            .add_assertion("ed25519-public", ByteString::from(ed_public.clone()))
-            .add_assertion("ed25519-secret", ByteString::from(vec![0xAA; 32]))
-            .add_assertion("ml-dsa-public", ByteString::from(vec![0xBB; 16]))
-            .add_assertion("ml-dsa-secret", ByteString::from(vec![0xCC; 32]))
-            .add_assertion("pre-backend", "mock")
-            .add_assertion("pre-public", ByteString::from(vec![0xDD; 8]))
-            .add_assertion("pre-secret", ByteString::from(vec![0xEE; 16]));
-
-        let mut w_subject = Map::new();
-        w_subject.insert("type", WALLET_TYPE);
-        w_subject.insert("format-version", WALLET_FORMAT_VERSION);
-        let envelope = Envelope::new(CBOR::from(w_subject)).add_assertion("identity", id_env);
-
-        let bytes = envelope.to_cbor_data();
-        let err = from_envelope(&bytes).unwrap_err();
-        let msg = format!("{err:#}");
-        assert!(
-            msg.contains("fingerprint does not match"),
+            msg.to_lowercase().contains("fingerprint"),
             "unexpected error: {msg}"
         );
     }
@@ -485,7 +387,7 @@ mod tests {
 
     #[test]
     fn pre_backend_string_roundtrip() {
-        // Cover both Mock and Lattice variants — exercises both branches of
+        // Cover both Mock and Lattice — exercises both branches of
         // BackendId::from_str on decode.
         for backend in [BackendId::Mock, BackendId::Lattice] {
             let (name, mut identity) = mock_identity("alice", 1);
@@ -503,5 +405,24 @@ mod tests {
                 "backend {backend} did not roundtrip"
             );
         }
+    }
+
+    /// The wallet's per-identity bytes MUST match what the wire crate would
+    /// produce for the same identity content. This is the contract that
+    /// makes `recrypt_wire::Identity` the single source of truth for
+    /// `recrypt.identity` envelope encoding.
+    #[test]
+    fn wallet_identity_bytes_match_wire() {
+        let (name, identity) = mock_identity("alice", 42);
+        let wire_id = wallet_to_wire_identity(&name, &identity).unwrap();
+        let wire_bytes = wire_id.to_envelope().unwrap();
+
+        let wallet_id_envelope = identity_to_envelope(&name, &identity).unwrap();
+        let wallet_bytes = wallet_id_envelope.to_cbor_data();
+
+        assert_eq!(
+            wallet_bytes, wire_bytes,
+            "wallet identity envelope bytes must equal recrypt-wire identity envelope bytes"
+        );
     }
 }
