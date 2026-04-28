@@ -13,7 +13,7 @@ export type AccountResponse = {
    */
   created_at: number;
   /**
-   * Base58-encoded 32-byte Ed25519 public key (echoed from the request).
+   * Base64-encoded 32-byte Ed25519 public key (echoed from the request).
    */
   ed25519_pk: string;
   /**
@@ -32,10 +32,9 @@ export type AccountResponse = {
  */
 export type CreateAccountRequest = {
   /**
-   * Base58-encoded 32-byte Ed25519 public key. Base58 is retained
-   * here for parity with `fingerprint`, which is derived from this
-   * key and used in URL path segments. Tracked under recrypt-nj1
-   * follow-up: unify body-byte encoding to base64.
+   * Base64-encoded 32-byte Ed25519 public key. All body-bytes
+   * fields are base64; base58 is reserved for URL path segments
+   * (e.g. the derived `fingerprint`).
    */
   ed25519_pk: string;
   /**

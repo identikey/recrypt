@@ -73,7 +73,7 @@ trailing field is always the nonce string exactly as it appears in the
 message string). See [Encoding Conventions](standards/encoding-conventions.md)
 for the project-wide rules:
 
-- `ed25519_pk` — base58 (32 B)
+- `ed25519_pk` — base64 (32 B)
 - `ml_dsa_pk` — base64 (~2.5 KB; base58 is O(n²) on multi-KB blobs)
 - `fingerprint`, `from_fingerprint`, `to_fingerprint`, `requester_fingerprint`
   — base58 of `blake3(ed25519_pk_bytes)`
@@ -188,7 +188,7 @@ Schema: `CreateAccountRequest`
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `ed25519_pk` | string | yes | Base58-encoded 32-byte Ed25519 public key. Base58 is retained here for parity with `fingerprint`, which is derived from this key and used in URL path segments. Tracked under recrypt-nj1 follow-up: unify body-byte encoding to base64. |
+| `ed25519_pk` | string | yes | Base64-encoded 32-byte Ed25519 public key. All body-bytes fields are base64; base58 is reserved for URL path segments (e.g. the derived `fingerprint`). |
 | `ml_dsa_pk` | string | yes | Base64-encoded ML-DSA-87 public key (~2.6 KB). |
 
 **Responses:**

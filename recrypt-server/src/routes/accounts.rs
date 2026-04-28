@@ -15,11 +15,10 @@ use utoipa::ToSchema;
 /// Request body for `POST /accounts`.
 #[derive(Deserialize, ToSchema)]
 pub struct CreateAccountRequest {
-    /// Base58-encoded 32-byte Ed25519 public key. Base58 is retained
-    /// here for parity with `fingerprint`, which is derived from this
-    /// key and used in URL path segments. Tracked under recrypt-nj1
-    /// follow-up: unify body-byte encoding to base64.
-    #[schema(example = "C8X8K9...32B base58...")]
+    /// Base64-encoded 32-byte Ed25519 public key. All body-bytes
+    /// fields are base64; base58 is reserved for URL path segments
+    /// (e.g. the derived `fingerprint`).
+    #[schema(example = "MCowBQYDK2VwAyEA...base64...")]
     pub ed25519_pk: String,
     /// Base64-encoded ML-DSA-87 public key (~2.6 KB).
     #[schema(example = "MIIChw...base64...")]
@@ -32,7 +31,7 @@ pub struct AccountResponse {
     /// Base58-encoded BLAKE3 fingerprint of the Ed25519 public key. Used
     /// as the account's stable identifier in URL path segments.
     pub fingerprint: String,
-    /// Base58-encoded 32-byte Ed25519 public key (echoed from the request).
+    /// Base64-encoded 32-byte Ed25519 public key (echoed from the request).
     pub ed25519_pk: String,
     /// Base64-encoded ML-DSA-87 public key (echoed from the request).
     pub ml_dsa_pk: String,
@@ -70,10 +69,10 @@ pub async fn create_account(
 ) -> ServerResult<(StatusCode, Json<AccountResponse>)> {
     let sig_headers = extract_signature_headers(&headers)?;
 
-    // Decode keys
-    let ed25519_pk = bs58::decode(&body.ed25519_pk)
-        .into_vec()
-        .map_err(|_| ServerError::BadRequest("Invalid base58 in ed25519_pk".into()))?;
+    // Decode keys (all body bytes are base64 — see http-api-reference.md §1.3)
+    let ed25519_pk = BASE64
+        .decode(&body.ed25519_pk)
+        .map_err(|_| ServerError::BadRequest("Invalid base64 in ed25519_pk".into()))?;
     let ml_dsa_pk = BASE64
         .decode(&body.ml_dsa_pk)
         .map_err(|_| ServerError::BadRequest("Invalid base64 in ml_dsa_pk".into()))?;
@@ -160,7 +159,7 @@ pub async fn get_account(
 
     Ok(Json(AccountResponse {
         fingerprint: account.fingerprint.clone(),
-        ed25519_pk: bs58::encode(&account.ed25519_pk).into_string(),
+        ed25519_pk: BASE64.encode(&account.ed25519_pk),
         ml_dsa_pk: BASE64.encode(&account.ml_dsa_pk),
         created_at: account.created_at,
     }))

@@ -40,10 +40,10 @@ impl ApiClient {
 
     /// Register an account on the server
     pub async fn register_account(&self, identity: &Identity) -> Result<RegisterResponse> {
-        // ed25519 (32B) → base58; ml-dsa-87 (~2.5KB) → base64
-        // (encoding-conventions.md §4: base58 is O(n²); use base64 for >256B)
+        // All body bytes are base64 (http-api-reference.md §1.3); base58
+        // is reserved for URL path segments (e.g. the derived fingerprint).
         let request_body = RegisterRequest {
-            ed25519_pk: bs58::encode(&identity.ed25519.public).into_string(),
+            ed25519_pk: BASE64.encode(&identity.ed25519.public),
             ml_dsa_pk: BASE64.encode(&identity.ml_dsa.public),
         };
 

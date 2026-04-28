@@ -51,7 +51,7 @@ fn sign_headers(
 struct TestIdentity {
     fingerprint: String,
     ed_key: ed25519_dalek::SigningKey,
-    ed_pk_b58: String,
+    ed_pk_b64: String,
     ml_dsa_secret: Vec<u8>,
     ml_dsa_pk_b64: String,
     pre_kp: recrypt_core::pre::KeyPair,
@@ -72,7 +72,7 @@ impl TestIdentity {
         Self {
             fingerprint,
             ed_key: ed_kp.signing_key,
-            ed_pk_b58: bs58::encode(ed_pk_bytes).into_string(),
+            ed_pk_b64: base64::engine::general_purpose::STANDARD.encode(ed_pk_bytes),
             ml_dsa_secret: pq_kp.secret_key,
             ml_dsa_pk_b64: base64::engine::general_purpose::STANDARD.encode(&pq_kp.public_key),
             pre_kp,
@@ -102,7 +102,7 @@ async fn test_recryption_share_returns_control_plane_response() {
         let nonce = now_nonce();
         let message = format!(
             "CREATE:{}:{}:{}",
-            alice.ed_pk_b58, alice.ml_dsa_pk_b64, nonce
+            alice.ed_pk_b64, alice.ml_dsa_pk_b64, nonce
         );
         let (ed_sig, ml_sig) = sign_headers(&message, &alice.ed_key, &alice.ml_dsa_secret);
 
@@ -113,7 +113,7 @@ async fn test_recryption_share_returns_control_plane_response() {
             .header("X-Signature-Ed25519", &ed_sig)
             .header("X-Signature-MlDsa", &ml_sig)
             .json(&serde_json::json!({
-                "ed25519_pk": alice.ed_pk_b58,
+                "ed25519_pk": alice.ed_pk_b64,
                 "ml_dsa_pk": alice.ml_dsa_pk_b64,
             }))
             .send()
@@ -130,7 +130,7 @@ async fn test_recryption_share_returns_control_plane_response() {
     // ── Register Bob ────────────────────────────────────────────────────────
     {
         let nonce = now_nonce();
-        let message = format!("CREATE:{}:{}:{}", bob.ed_pk_b58, bob.ml_dsa_pk_b64, nonce);
+        let message = format!("CREATE:{}:{}:{}", bob.ed_pk_b64, bob.ml_dsa_pk_b64, nonce);
         let (ed_sig, ml_sig) = sign_headers(&message, &bob.ed_key, &bob.ml_dsa_secret);
 
         let resp = client
@@ -140,7 +140,7 @@ async fn test_recryption_share_returns_control_plane_response() {
             .header("X-Signature-Ed25519", &ed_sig)
             .header("X-Signature-MlDsa", &ml_sig)
             .json(&serde_json::json!({
-                "ed25519_pk": bob.ed_pk_b58,
+                "ed25519_pk": bob.ed_pk_b64,
                 "ml_dsa_pk": bob.ml_dsa_pk_b64,
             }))
             .send()

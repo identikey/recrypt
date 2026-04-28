@@ -690,7 +690,7 @@ async fn test_invalid_signature_rejected() {
     let nonce = fresh_nonce();
     let message = format!(
         "CREATE:{}:{}:{}",
-        alice.ed_pk_b58, alice.ml_dsa_pk_b64, nonce
+        alice.ed_pk_b64, alice.ml_dsa_pk_b64, nonce
     );
     let (ed_sig, ml_sig) = alice.sign(&message);
 
@@ -712,7 +712,7 @@ async fn test_invalid_signature_rejected() {
         .header("X-Signature-Ed25519", &corrupted_ed_sig)
         .header("X-Signature-MlDsa", &ml_sig)
         .json(&serde_json::json!({
-            "ed25519_pk": alice.ed_pk_b58,
+            "ed25519_pk": alice.ed_pk_b64,
             "ml_dsa_pk": alice.ml_dsa_pk_b64,
         }))
         .send()
@@ -763,7 +763,7 @@ async fn test_nonce_replay_rejected() {
     let nonce = fresh_nonce();
     let message1 = format!(
         "CREATE:{}:{}:{}",
-        alice.ed_pk_b58, alice.ml_dsa_pk_b64, nonce
+        alice.ed_pk_b64, alice.ml_dsa_pk_b64, nonce
     );
     let (ed_sig1, ml_sig1) = alice.sign(&message1);
 
@@ -775,7 +775,7 @@ async fn test_nonce_replay_rejected() {
         .header("X-Signature-Ed25519", &ed_sig1)
         .header("X-Signature-MlDsa", &ml_sig1)
         .json(&serde_json::json!({
-            "ed25519_pk": alice.ed_pk_b58,
+            "ed25519_pk": alice.ed_pk_b64,
             "ml_dsa_pk": alice.ml_dsa_pk_b64,
         }))
         .send()
@@ -791,7 +791,7 @@ async fn test_nonce_replay_rejected() {
     // Second request reusing the same nonce — should be rejected
     let message2 = format!(
         "CREATE:{}:{}:{}",
-        alice2.ed_pk_b58, alice2.ml_dsa_pk_b64, nonce
+        alice2.ed_pk_b64, alice2.ml_dsa_pk_b64, nonce
     );
     let (ed_sig2, ml_sig2) = alice2.sign(&message2);
 
@@ -803,7 +803,7 @@ async fn test_nonce_replay_rejected() {
         .header("X-Signature-Ed25519", &ed_sig2)
         .header("X-Signature-MlDsa", &ml_sig2)
         .json(&serde_json::json!({
-            "ed25519_pk": alice2.ed_pk_b58,
+            "ed25519_pk": alice2.ed_pk_b64,
             "ml_dsa_pk": alice2.ml_dsa_pk_b64,
         }))
         .send()
@@ -881,6 +881,6 @@ async fn test_get_account_public() {
     // Should include Alice's public keys
     let ed_pk = body["ed25519_pk"].as_str().unwrap_or("");
     let ml_pk = body["ml_dsa_pk"].as_str().unwrap_or("");
-    assert_eq!(ed_pk, alice.ed_pk_b58, "ed25519_pk mismatch");
+    assert_eq!(ed_pk, alice.ed_pk_b64, "ed25519_pk mismatch");
     assert_eq!(ml_pk, alice.ml_dsa_pk_b64, "ml_dsa_pk mismatch");
 }

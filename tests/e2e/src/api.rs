@@ -13,7 +13,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub struct TestIdentity {
     pub fingerprint: String,
     pub ed_key: ed25519_dalek::SigningKey,
-    pub ed_pk_b58: String,
+    pub ed_pk_b64: String,
     pub ml_dsa_secret: Vec<u8>,
     pub ml_dsa_pk_b64: String,
     pub pre_kp: pre::KeyPair,
@@ -30,13 +30,14 @@ impl TestIdentity {
 
         let ed_pk_bytes = ed_kp.verifying_key.to_bytes();
         let fingerprint = bs58::encode(blake3::hash(&ed_pk_bytes).as_bytes()).into_string();
+        let b64 = base64::engine::general_purpose::STANDARD;
 
         Self {
             fingerprint,
             ed_key: ed_kp.signing_key,
-            ed_pk_b58: bs58::encode(ed_pk_bytes).into_string(),
+            ed_pk_b64: b64.encode(ed_pk_bytes),
             ml_dsa_secret: pq_kp.secret_key,
-            ml_dsa_pk_b64: base64::engine::general_purpose::STANDARD.encode(&pq_kp.public_key),
+            ml_dsa_pk_b64: b64.encode(&pq_kp.public_key),
             pre_kp,
         }
     }
@@ -96,7 +97,7 @@ impl ApiTestClient {
     /// Register an identity on the server. Returns the HTTP response.
     pub async fn register(&self, id: &TestIdentity) -> reqwest::Response {
         let nonce = fresh_nonce();
-        let message = format!("CREATE:{}:{}:{}", id.ed_pk_b58, id.ml_dsa_pk_b64, nonce);
+        let message = format!("CREATE:{}:{}:{}", id.ed_pk_b64, id.ml_dsa_pk_b64, nonce);
         let (ed_sig, ml_sig) = id.sign(&message);
 
         self.client
@@ -106,7 +107,7 @@ impl ApiTestClient {
             .header("X-Signature-Ed25519", &ed_sig)
             .header("X-Signature-MlDsa", &ml_sig)
             .json(&serde_json::json!({
-                "ed25519_pk": id.ed_pk_b58,
+                "ed25519_pk": id.ed_pk_b64,
                 "ml_dsa_pk": id.ml_dsa_pk_b64,
             }))
             .send()

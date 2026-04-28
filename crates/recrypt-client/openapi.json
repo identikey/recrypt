@@ -11,7 +11,7 @@
             "type": "integer"
           },
           "ed25519_pk": {
-            "description": "Base58-encoded 32-byte Ed25519 public key (echoed from the request).",
+            "description": "Base64-encoded 32-byte Ed25519 public key (echoed from the request).",
             "type": "string"
           },
           "fingerprint": {
@@ -35,8 +35,8 @@
         "description": "Request body for `POST /accounts`.",
         "properties": {
           "ed25519_pk": {
-            "description": "Base58-encoded 32-byte Ed25519 public key. Base58 is retained\nhere for parity with `fingerprint`, which is derived from this\nkey and used in URL path segments. Tracked under recrypt-nj1\nfollow-up: unify body-byte encoding to base64.",
-            "example": "C8X8K9...32B base58...",
+            "description": "Base64-encoded 32-byte Ed25519 public key. All body-bytes\nfields are base64; base58 is reserved for URL path segments\n(e.g. the derived `fingerprint`).",
+            "example": "MCowBQYDK2VwAyEA...base64...",
             "type": "string"
           },
           "ml_dsa_pk": {
