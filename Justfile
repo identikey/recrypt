@@ -64,6 +64,7 @@ openapi-regen:
         --path /capabilities/verify \
         --method POST
     cargo build -q -p recrypt-client
+    cd recrypt-client-ts && bun install --silent && bun run --silent generate
 
 # Clean Rust build artifacts
 clean-rust:
