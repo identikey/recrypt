@@ -300,13 +300,11 @@ mod tests {
     }
 
     /// Round-trip at the full max_plaintext_size (96 bytes) — the size of
-    /// HybridEncryptor's KeyMaterial. Smaller plaintexts pass; the hybrid
-    /// path needs every byte to round-trip exactly.
-    ///
-    /// Currently fails: BFV parameters drop bits at the 96-byte boundary.
-    /// Tracked in recrypt-fwg.
+    /// HybridEncryptor's KeyMaterial. The hybrid path needs every byte to
+    /// round-trip exactly, including coefficients whose value exceeds
+    /// (p-1)/2 = 32768 (which used to wrap to V - 65537 and surface as an
+    /// off-by-one in the low byte). Locks in the fix from recrypt-fwg.
     #[test]
-    #[ignore = "blocked on recrypt-fwg: lattice 96-byte round-trip drops bits"]
     fn test_lattice_encrypt_decrypt_roundtrip_96_bytes() {
         let backend = LatticeBackend::new().unwrap();
         let kp = backend.generate_keypair().unwrap();
@@ -325,6 +323,57 @@ mod tests {
             &plaintext[..],
             "96-byte (KeyMaterial-sized) plaintext must round-trip exactly"
         );
+    }
+
+    /// 95-byte boundary (odd-length, one byte short of the maximum). Forces
+    /// the trailing single-byte encoding path while still exercising
+    /// coefficients across the full signed slot range.
+    #[test]
+    fn test_lattice_encrypt_decrypt_roundtrip_95_bytes() {
+        let backend = LatticeBackend::new().unwrap();
+        let kp = backend.generate_keypair().unwrap();
+
+        let mut plaintext = vec![0u8; 95];
+        for (i, b) in plaintext.iter_mut().enumerate() {
+            // Cover values across the full byte range — including pairs that
+            // produce coefficients above (p-1)/2.
+            *b = (i as u8).wrapping_mul(13).wrapping_add(0x80);
+        }
+
+        let ct = backend.encrypt(&kp.public, &plaintext).unwrap();
+        let pt = backend.decrypt(&kp.secret, &ct).unwrap();
+
+        assert_eq!(&pt[..], &plaintext[..]);
+    }
+
+    /// Randomised round-trip at sizes that span the encoding boundary,
+    /// including pseudo-random byte patterns that fall on coefficients
+    /// throughout the signed slot range. Uses a deterministic LCG so
+    /// failures are reproducible without pulling in proptest's harness
+    /// (these tests are slow and serialised on `--test-threads=1`).
+    #[test]
+    fn test_lattice_encrypt_decrypt_roundtrip_random_boundary() {
+        let backend = LatticeBackend::new().unwrap();
+        let kp = backend.generate_keypair().unwrap();
+
+        let mut state: u64 = 0xC0FFEE_DEAD_BEEF_42;
+        let mut next_byte = || {
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (state >> 33) as u8
+        };
+
+        for &len in &[1usize, 2, 31, 32, 63, 64, 95, 96] {
+            let plaintext: Vec<u8> = (0..len).map(|_| next_byte()).collect();
+            let ct = backend.encrypt(&kp.public, &plaintext).unwrap();
+            let pt = backend.decrypt(&kp.secret, &ct).unwrap();
+            assert_eq!(
+                &pt[..],
+                &plaintext[..],
+                "random {len}-byte plaintext must round-trip exactly"
+            );
+        }
     }
 
     #[test]

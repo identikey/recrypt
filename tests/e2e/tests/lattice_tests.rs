@@ -30,7 +30,6 @@ use std::fs;
 /// using his real lattice secret key. Mirrors `test_full_recryption_roundtrip`
 /// from api_share_tests.rs but with the real PRE backend.
 #[tokio::test]
-#[ignore = "blocked on recrypt-fwg: lattice 96-byte round-trip drops bits"]
 async fn test_full_recryption_roundtrip_lattice() {
     let harness = TestHarness::with_backend(BackendId::Lattice).await;
     let api = harness.api();
@@ -101,7 +100,6 @@ async fn test_full_recryption_roundtrip_lattice() {
 // ── CLI: encrypt/decrypt round-trips with real lattice keys ───────────────────
 
 #[tokio::test]
-#[ignore = "blocked on recrypt-fwg: lattice 96-byte round-trip drops bits"]
 async fn test_encrypt_decrypt_roundtrip_lattice() {
     let harness = TestHarness::with_backend(BackendId::Lattice).await;
     let cli = harness.cli();
@@ -137,7 +135,6 @@ async fn test_encrypt_decrypt_roundtrip_lattice() {
 }
 
 #[tokio::test]
-#[ignore = "blocked on recrypt-fwg: lattice 96-byte round-trip drops bits"]
 async fn test_encrypt_empty_file_lattice() {
     let harness = TestHarness::with_backend(BackendId::Lattice).await;
     let cli = harness.cli();
@@ -173,7 +170,6 @@ async fn test_encrypt_empty_file_lattice() {
 }
 
 #[tokio::test]
-#[ignore = "blocked on recrypt-fwg: lattice 96-byte round-trip drops bits"]
 async fn test_encrypt_large_file_lattice() {
     let harness = TestHarness::with_backend(BackendId::Lattice).await;
     let cli = harness.cli();
