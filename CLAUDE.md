@@ -173,6 +173,19 @@ recrypt/
 - **Security First:** Never expose secret keys or plaintext in logs/commits
 - **Git Submodules:** OpenFHE and other deps are in `vendor/` as submodules
 
+## Decisions
+
+Architectural and process decisions live in [`docs/decisions/`](docs/decisions/).
+Read that directory before relitigating questions like:
+
+- Wallet identity envelope vs. unified codegen schema (D-1)
+- TS client distribution model (D-2)
+
+Each doc states the decision, rationale, alternatives considered, and
+the reversal triggers that should reopen the question. If you're about
+to make an architectural choice that has long-tail implications, leave
+a doc behind in the same shape.
+
 ## Phase Status (Current: Phase 8)
 
 ✅ **Completed Phases:**
