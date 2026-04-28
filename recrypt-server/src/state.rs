@@ -71,7 +71,7 @@ impl AppState {
         // ----- PRE backend -----
         let pre_backend_kind = config.pre_backend.to_lowercase();
         let pre_backend: Arc<dyn PreBackend + Send + Sync> = match pre_backend_kind.as_str() {
-            "lattice" | "pq" | "post-quantum" => {
+            "lattice" | "lattice-bfv" | "pq" | "post-quantum" => {
                 if !LatticeBackend::is_available() {
                     anyhow::bail!(
                         "FATAL: Lattice backend requested but OpenFHE not available. \

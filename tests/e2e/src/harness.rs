@@ -5,6 +5,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use tokio::net::TcpListener;
 
+use recrypt_core::pre::BackendId;
 use recrypt_server::config::{
     Config, NonceConfig, PersistenceConfig, RateLimitConfig, StorageConfig,
 };
@@ -65,17 +66,27 @@ pub struct TestHarness {
     pub server_addr: SocketAddr,
     pub temp_dir: tempfile::TempDir,
     pub wallet_path: PathBuf,
+    pub backend: BackendId,
     pub _env: TestEnv,
 }
 
 impl TestHarness {
     /// Start a test harness with mock backend, memory storage, and SQLite persistence.
     pub async fn new() -> Self {
-        Self::with_config(StorageConfig::default()).await
+        Self::build(BackendId::Mock, StorageConfig::default()).await
     }
 
     /// Start with custom storage config (e.g. for S3 tests).
     pub async fn with_config(storage: StorageConfig) -> Self {
+        Self::build(BackendId::Mock, storage).await
+    }
+
+    /// Start with a specific PRE backend (e.g. lattice for crypto-correctness tests).
+    pub async fn with_backend(backend: BackendId) -> Self {
+        Self::build(backend, StorageConfig::default()).await
+    }
+
+    async fn build(backend: BackendId, storage: StorageConfig) -> Self {
         let temp_dir = tempfile::tempdir().expect("create temp dir");
         let wallet_path = temp_dir.path().join("test-wallet.recrypt");
         let sqlite_path = temp_dir.path().join("test.db");
@@ -89,7 +100,7 @@ impl TestHarness {
                 sqlite_path,
             },
             nonce: NonceConfig { window_secs: 300 },
-            pre_backend: "mock".into(),
+            pre_backend: backend.to_string(),
             rate_limit: RateLimitConfig {
                 per_ip_rps: 10_000,
                 per_ip_burst: 10_000,
@@ -122,10 +133,11 @@ impl TestHarness {
 
         // Set up env isolation — CLI reads these via flags, but some code paths
         // fall back to env vars, so we set them defensively.
+        let backend_str = backend.to_string();
         let mut env = TestEnv::new();
         env.set("RECRYPT_WALLET", wallet_path.to_str().unwrap());
         env.set("RECRYPT_SERVER", &server_url);
-        env.set("RECRYPT_BACKEND", "mock");
+        env.set("RECRYPT_BACKEND", &backend_str);
         env.set("RECRYPT_WALLET_PASSWORD", "testpass123");
         // Clear any stale env that could leak between tests
         env.remove("RECRYPT_IDENTITY");
@@ -137,6 +149,7 @@ impl TestHarness {
             server_addr: addr,
             temp_dir,
             wallet_path,
+            backend,
             _env: env,
         }
     }
@@ -146,14 +159,14 @@ impl TestHarness {
         CliRunner::new(
             &self.server_url,
             &self.wallet_path,
-            "mock",
+            &self.backend.to_string(),
             self.temp_dir.path(),
         )
     }
 
     /// Get an API test client for direct HTTP calls with signing.
     pub fn api(&self) -> crate::api::ApiTestClient {
-        crate::api::ApiTestClient::new(&self.server_url)
+        crate::api::ApiTestClient::new(&self.server_url).with_backend_id(&self.backend.to_string())
     }
 
     /// Path to the temp directory for test files.

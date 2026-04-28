@@ -302,8 +302,12 @@ test-e2e: build-release
 test-e2e-s3: build-release minio-up
     cargo test -p recrypt-e2e-tests --features s3-tests -- --test-threads=1
 
+# Run e2e crypto-correctness tests against real OpenFHE BFV backend (slow)
+test-e2e-lattice-rust: build-release
+    cargo test -p recrypt-e2e-tests --features lattice-tests --test lattice_tests -- --test-threads=1
+
 # Run comprehensive e2e (all backends + S3)
-test-e2e-full: test-e2e test-e2e-s3
+test-e2e-full: test-e2e test-e2e-s3 test-e2e-lattice-rust
 
 # Run legacy bash e2e test with mock backend
 test-e2e-legacy: build-release

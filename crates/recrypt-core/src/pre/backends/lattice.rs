@@ -299,6 +299,34 @@ mod tests {
         assert_eq!(&pt[..], plaintext);
     }
 
+    /// Round-trip at the full max_plaintext_size (96 bytes) — the size of
+    /// HybridEncryptor's KeyMaterial. Smaller plaintexts pass; the hybrid
+    /// path needs every byte to round-trip exactly.
+    ///
+    /// Currently fails: BFV parameters drop bits at the 96-byte boundary.
+    /// Tracked in recrypt-fwg.
+    #[test]
+    #[ignore = "blocked on recrypt-fwg: lattice 96-byte round-trip drops bits"]
+    fn test_lattice_encrypt_decrypt_roundtrip_96_bytes() {
+        let backend = LatticeBackend::new().unwrap();
+        let kp = backend.generate_keypair().unwrap();
+
+        // 96 bytes of varied content (KeyMaterial leads with version=1).
+        let mut plaintext = vec![0u8; 96];
+        for (i, b) in plaintext.iter_mut().enumerate() {
+            *b = (i as u8).wrapping_mul(7).wrapping_add(1);
+        }
+
+        let ct = backend.encrypt(&kp.public, &plaintext).unwrap();
+        let pt = backend.decrypt(&kp.secret, &ct).unwrap();
+
+        assert_eq!(
+            &pt[..],
+            &plaintext[..],
+            "96-byte (KeyMaterial-sized) plaintext must round-trip exactly"
+        );
+    }
+
     #[test]
     fn test_lattice_recryption_flow() {
         let backend = LatticeBackend::new().unwrap();

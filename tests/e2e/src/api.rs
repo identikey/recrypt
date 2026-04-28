@@ -73,6 +73,7 @@ pub fn fresh_nonce() -> String {
 pub struct ApiTestClient {
     pub client: Client,
     pub base_url: String,
+    pub backend_id: String,
 }
 
 impl ApiTestClient {
@@ -80,7 +81,14 @@ impl ApiTestClient {
         Self {
             client: Client::new(),
             base_url: base_url.to_string(),
+            backend_id: "mock".to_string(),
         }
+    }
+
+    /// Override the backend_id sent in share-creation requests.
+    pub fn with_backend_id(mut self, backend_id: &str) -> Self {
+        self.backend_id = backend_id.to_string();
+        self
     }
 
     // ── Account operations ──────────────────────────────────────────────
@@ -192,7 +200,7 @@ impl ApiTestClient {
                 "file_hash": file_hash,
                 "recrypt_key": recrypt_key_b64,
                 "wrapped_key": wrapped_key_b64,
-                "backend_id": "mock",
+                "backend_id": self.backend_id,
             }))
             .send()
             .await

@@ -6,6 +6,9 @@ publish = false
 
 [features]
 s3-tests = ["aws-sdk-s3"]
+# Run the crypto-correctness tests against the real OpenFHE BFV backend.
+# Slow (~30–60s per test) and requires --test-threads=1.
+lattice-tests = []
 
 [dependencies]
 # Test infrastructure
