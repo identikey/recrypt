@@ -1,0 +1,23 @@
+[package]
+name = "recrypt-client"
+version.workspace = true
+edition.workspace = true
+description = "Generated Rust HTTP client for the recrypt proxy API (epic recrypt-nj1)."
+
+[dependencies]
+# Runtime support for progenitor-generated code.
+progenitor-client = "0.10"
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+bytes = "1"
+futures = "0.3"
+
+[build-dependencies]
+progenitor = "0.10"
+prettyplease = "0.2"
+serde_json = "1"
+syn = "2"
+openapiv3 = "2"

@@ -47,6 +47,14 @@ format-check:
 docs:
     cargo doc --no-deps
 
+# Regenerate the OpenAPI snapshot consumed by recrypt-client.
+# Run after touching any utoipa-annotated handler or schema in
+# recrypt-server. CI should `just openapi-regen` and fail if the
+# working tree is dirty afterwards.
+openapi-regen:
+    cargo run -q -p recrypt-server --bin dump_openapi
+    cargo build -q -p recrypt-client
+
 # Clean Rust build artifacts
 clean-rust:
     cargo clean

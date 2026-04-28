@@ -6,6 +6,7 @@ mod config;
 mod error;
 mod middleware;
 mod nonces;
+mod openapi;
 mod routes;
 mod shares;
 mod state;

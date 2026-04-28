@@ -1,0 +1,13 @@
+{
+  "components": {},
+  "info": {
+    "description": "Recrypt proxy HTTP API. Endpoints are migrated to schema-as-source-of-truth incrementally (epic recrypt-nj1).",
+    "license": {
+      "name": "MIT OR Apache-2.0"
+    },
+    "title": "recrypt",
+    "version": "0.1.0"
+  },
+  "openapi": "3.0.3",
+  "paths": {}
+}

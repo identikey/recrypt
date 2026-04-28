@@ -1,10 +1,13 @@
 use crate::middleware::validate_nonce;
+use crate::openapi::ApiDoc;
 use crate::state::AppState;
 use axum::{
-    Router, middleware as axum_middleware,
+    Json, Router, middleware as axum_middleware,
     routing::{delete, get, post},
 };
 use std::sync::Arc;
+#[allow(unused_imports)] // OpenApi trait brings the openapi() method into scope
+use utoipa::OpenApi;
 use tower_governor::{
     GovernorError, GovernorLayer,
     governor::GovernorConfigBuilder,
@@ -125,11 +128,19 @@ pub fn router(state: AppState) -> Router {
     // Health endpoint is exempt from all rate limiting.
     let health = Router::new().route("/health", get(health::health_check));
 
+    // OpenAPI document — exempt from rate limiting and auth. Reflects the
+    // current set of utoipa-annotated endpoints; see crate::openapi.
+    let openapi = Router::new().route(
+        "/openapi.json",
+        get(|| async { Json(ApiDoc::openapi()) }),
+    );
+
     Router::new()
         .merge(protected)
         .merge(public)
         .layer(per_ip_layer)
         .merge(health)
+        .merge(openapi)
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
