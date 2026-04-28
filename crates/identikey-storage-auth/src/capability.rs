@@ -1,4 +1,44 @@
-//! Capability: signed, time-limited access token bound to a keyspace
+//! Capability: signed bearer token for authorizing access to recrypt resources.
+//!
+//! # Intent (target shape)
+//!
+//! `Capability` is the project's UCAN/JWT-style bearer token: an
+//! issuer-signed, optionally time-limited credential that a holder can
+//! present across any recrypt surface (proxy, storage, peer-to-peer)
+//! to prove they were granted some set of permissions on some
+//! resource. It is intentionally *generic*: the subject can identify
+//! a file, a keyspace, an account fingerprint, or any future resource
+//! type — Capability is the container, not the policy.
+//!
+//! Container: Gordian Envelope (dCBOR). Subject fields (which
+//! resource, who issued, who is granted) are non-elidable; assertions
+//! (permissions, expiry, notes) are salted and elidable. Spec lives
+//! in [`docs/wire-protocol.md`](../../../docs/wire-protocol.md) §3.7.
+//!
+//! Optional delegation chain: a `parent` field will let a holder mint
+//! sub-capabilities that downstream verifiers can walk back to the
+//! root issuer. Chain verification logic is future work — gestured at
+//! in the type but not implemented in this pass.
+//!
+//! # Status (current implementation is interim)
+//!
+//! Today's `Capability` is bound to a keyspace, signed via a hand-rolled
+//! domain-tagged TLV (`signature_payload`), and has no HTTP surface. It
+//! is **not on the critical path**: proxy authorization currently flows
+//! through per-request multisig + `AccessGrant` lookups, not bearer
+//! tokens. This struct exists so the type and the spec slot stay
+//! reserved while the rebuild lands.
+//!
+//! Rebuild tracked under recrypt-91h (child of epic recrypt-nj1):
+//! - Replace TLV with envelope canonical encoding.
+//! - Generalize subject beyond keyspace.
+//! - Add issue/verify HTTP endpoints via the codegen pipeline.
+//! - Add (but do not yet enforce) the delegation `parent` field.
+//!
+//! Naming note: `MemberCapability` (in `keyspace.rs`) is a permission
+//! tag — read/write/admin/etc. — *not* a bearer token. It is being
+//! renamed to `Permission` under recrypt-r1l so that "Capability"
+//! unambiguously refers to the token type described above.
 
 use std::collections::BTreeSet;
 

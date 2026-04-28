@@ -565,9 +565,27 @@ the delegator authorized it.
 
 ### 3.7 `recrypt.capability`
 
-A signed, time-limited access token granting operations on a file.
-Issued by a file's owner, presented by a grantee to the storage
-layer to perform authorized operations.
+> **Status & intent (2026-04, epic recrypt-nj1).** `Capability` is the
+> project's UCAN/JWT-style bearer token — issuer-signed, optionally
+> time-limited, presentable across any recrypt surface to prove a
+> holder was granted permissions on some resource. The subject is
+> intentionally generic (file hash, keyspace id, account fingerprint,
+> or future resource refs); the container is Gordian Envelope so
+> dCBOR canonical encoding handles ordering for free. Optional
+> delegation via a `parent` signature chain is gestured at but
+> deferred to a follow-up.
+>
+> Capability is **not on the critical path** today. Current proxy
+> authorization is per-request multisig + server-side `AccessGrant`
+> lookups; clients do not yet present bearer tokens. The shape below
+> is the *target*; the in-tree code at
+> [`capability.rs`](../crates/identikey-storage-auth/src/capability.rs)
+> is interim (keyspace-bound, hand-rolled TLV signature payload) and
+> will be reconciled to this spec under recrypt-91h.
+
+A signed, time-limited access token granting operations on a resource.
+Issued by a resource's owner (or by a delegating holder), presented by a
+grantee to whichever component enforces access.
 
 ```
 200(
