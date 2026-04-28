@@ -25,13 +25,17 @@ use utoipa::OpenApi;
     ),
     paths(
         crate::routes::accounts::create_account,
+        crate::routes::capabilities::verify_capability,
     ),
     components(schemas(
         crate::routes::accounts::CreateAccountRequest,
         crate::routes::accounts::AccountResponse,
+        crate::routes::capabilities::VerifyCapabilityRequest,
+        crate::routes::capabilities::VerifyCapabilityResponse,
     )),
     tags(
         (name = "accounts", description = "Account registration and lookup."),
+        (name = "capabilities", description = "Bearer-token (Capability) verification."),
     ),
 )]
 pub struct ApiDoc;

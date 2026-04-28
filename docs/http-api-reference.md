@@ -402,6 +402,44 @@ the signing endpoints.
 
 ---
 
+### 2.6 Capabilities
+
+`Capability` is the project's UCAN/JWT-style bearer token — issued
+client-side, signed with the issuer's keys, presented to a relying
+party who verifies the signature against the issuer's public keys.
+See [wire-protocol.md §3.7](wire-protocol.md#37-recryptcapability)
+for the envelope wire format and `crates/identikey-storage-auth/src/capability.rs`
+for the construction API.
+
+This endpoint is a thin verification helper for relying parties that
+don't already link the auth crate.
+
+<!-- BEGIN GENERATED: POST /capabilities/verify -->
+#### `POST /capabilities/verify` — Verify a presented capability token.
+
+**Request body** (`application/json`):
+
+Schema: `VerifyCapabilityRequest`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `envelope_b64` | string | yes | Base64-encoded Gordian Envelope (dCBOR) of a signed capability. The wire form produced by `Capability::sign`. |
+| `issuer_ed25519_pk` | string | yes | Base64-encoded 32-byte Ed25519 public key the capability was signed with. Lookup hint: derive from the issuer fingerprint via `GET /accounts/{fingerprint}`. |
+| `issuer_ml_dsa_pk` | string | no | Base64-encoded ML-DSA-87 public key (~2.6 KB), if the caller wants to require post-quantum signature verification. Omitted = classical-only check. |
+
+**Responses:**
+
+| Status | Description | Body |
+|---|---|---|
+| 200 | Capability parsed and signature verified (check `expired`) | `VerifyCapabilityResponse` |
+| 400 | Malformed envelope or key encodings | — |
+| 401 | Signature verification failed | — |
+
+> Generated from `openapi.json` — do not edit by hand. Run `just openapi-regen`.
+<!-- END GENERATED: POST /capabilities/verify -->
+
+---
+
 ## 3. Client implementation checklist
 
 1. **Fetch nonce** — `GET /nonce`, keep the `nonce` field.

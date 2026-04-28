@@ -565,27 +565,19 @@ the delegator authorized it.
 
 ### 3.7 `recrypt.capability`
 
-> **Status & intent (2026-04, epic recrypt-nj1).** `Capability` is the
-> project's UCAN/JWT-style bearer token — issuer-signed, optionally
-> time-limited, presentable across any recrypt surface to prove a
-> holder was granted permissions on some resource. The subject is
-> intentionally generic (file hash, keyspace id, account fingerprint,
-> or future resource refs); the container is Gordian Envelope so
-> dCBOR canonical encoding handles ordering for free. Optional
-> delegation via a `parent` signature chain is gestured at but
-> deferred to a follow-up.
->
-> Capability is **not on the critical path** today. Current proxy
-> authorization is per-request multisig + server-side `AccessGrant`
-> lookups; clients do not yet present bearer tokens. The shape below
-> is the *target*; the in-tree code at
-> [`capability.rs`](../crates/identikey-storage-auth/src/capability.rs)
-> is interim (keyspace-bound, hand-rolled TLV signature payload) and
-> will be reconciled to this spec under recrypt-91h.
+> **Status (2026-04, epic recrypt-nj1).** Envelope-native rebuild
+> landed under recrypt-91h. The legacy domain-tagged TLV signature
+> payload is gone; signatures cover the wrapped envelope's subject
+> digest. Delegation chain (`parent`) is present in the wire format
+> but **chain verification is not yet implemented** — verifying a
+> capability with `parent` set checks only the immediate signature.
+> Tracked as a follow-up.
 
-A signed, time-limited access token granting operations on a resource.
+A signed, time-limited bearer token granting permissions on a resource.
 Issued by a resource's owner (or by a delegating holder), presented by a
-grantee to whichever component enforces access.
+grantee to any verifier holding the issuer's public keys. The subject is
+intentionally generic — the same envelope shape covers files, keyspaces,
+accounts, and any future resource type.
 
 ```
 200(
@@ -593,39 +585,51 @@ grantee to whichever component enforces access.
     {
       "type":           "recrypt.capability",
       "format-version": 1,
-      "file-hash":      h'...32 bytes...',
-      "granted-to":     h'...32 bytes...',       ; Blake3(grantee Ed25519 pubkey)
-      "issuer":         h'...32 bytes...'        ; Blake3(issuer Ed25519 pubkey)
+      "subject":        h'...32 bytes...',     ; resource address
+      "subject-kind":   "file"|"keyspace"|"account",
+      "granted-to":     h'...32 bytes...',     ; Blake3(grantee Ed25519 pubkey)
+      "issuer":         h'...32 bytes...'      ; Blake3(issuer Ed25519 pubkey)
     }
   )
 ) [
-  [salted] "operations": ["read", "share"],      ; subset of {read, write, delete, share}
-  [salted] "expires-at": 1(1714521600),          ; 0 or absent = no expiry
-  [salted] 'note':       "research access",
-           'signed':     Signature(ed25519, ...),
-           'signed':     Signature(ml-dsa-87, ...)
+  [salted] "permissions":      ["read", "write"],   ; subset of {read, write, delegate, admin, sign_rotation}
+  [salted] "expires-at":       1(1714521600),       ; CBOR tag 1 epoch seconds; absent = no expiry
+  [salted] "note":             "research access",
+           "parent":           h'...32 bytes...',   ; optional; digest of parent capability's wrap subject
+           "ed25519-signature": h'<64 bytes>',
+           "mldsa-signature":   h'<~4.6 KB>'        ; optional (PqOptional clients may omit)
 ]
 ```
 
-**Subject fields** form the identity triple: which file, to whom,
-from whom. These cannot be elided — a capability without them is
-meaningless.
+**Subject fields** form the identity triple: which resource, to whom,
+from whom (plus the resource kind). These cannot be elided — a
+capability without them is meaningless.
 
-**Assertions** are all elidable:
+**Salted/elidable assertions:**
 
-- `"operations"` is salted because the 4-value enum is trivially
-  brute-forceable unsalted.
-- `"expires-at"` is salted because timestamps are often guessable
-  from context.
-- `'note'` is salted because human-readable comments are often
-  short and templated.
+- `"permissions"` — closed enum is trivially brute-forceable unsalted.
+- `"expires-at"` — timestamps are often guessable from context.
+- `"note"` — human-readable comments are often short and templated.
 
-The current `Capability::signature_payload()` code in
-[`capability.rs:96`](../crates/identikey-storage-auth/src/capability.rs#L96)
-hand-sorts operations alphabetically before signing for
-determinism. dCBOR gives us this for free — the canonical encoding
-of `["read", "share"]` is byte-identical regardless of input order.
-The hand-sort code can be deleted as part of the migration.
+**Non-salted assertions:**
+
+- `"parent"` — verifiers walking the delegation chain need the link
+  visible; eliding it would defeat chain verification.
+- `"ed25519-signature"` / `"mldsa-signature"` — raw-bytes assertions
+  rather than bc-envelope's native `'signed'` form, mirroring the
+  hybrid pattern used by `Identity::sign_self_hybrid` (bc-envelope's
+  `Signature` cannot model ML-DSA). A future migration to native
+  `'signed'` for the ed25519 half is straightforward.
+
+Both signature assertions cover the same payload: the wrap envelope's
+subject digest, which transitively commits to the inner subject and
+all non-elided assertions. dCBOR canonical encoding makes the
+payload byte-identical for any equivalent input ordering.
+
+Construction and verification API: see
+[`crates/identikey-storage-auth/src/capability.rs`](../crates/identikey-storage-auth/src/capability.rs).
+HTTP verification surface: `POST /capabilities/verify` (see
+[http-api-reference.md §2.6](http-api-reference.md#26-capabilities)).
 
 ### 3.8 HTTP request/response wrappers
 

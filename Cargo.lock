@@ -2639,8 +2639,11 @@ name = "identikey-storage-auth"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "bc-components",
+ "bc-envelope",
  "blake3",
  "bs58",
+ "ed25519-dalek",
  "rand 0.8.5",
  "recrypt-core",
  "recrypt-ffi",

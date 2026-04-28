@@ -21,6 +21,11 @@ tokio.workspace = true
 blake3 = "1"
 bs58.workspace = true
 
+# Envelope-native bearer-token wire format (recrypt-91h).
+bc-envelope = "=0.43.0"
+bc-components = "=0.31.1"
+ed25519-dalek.workspace = true
+
 # Random
 rand.workspace = true
 

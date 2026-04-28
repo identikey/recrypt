@@ -58,6 +58,11 @@ openapi-regen:
         --doc  docs/http-api-reference.md \
         --path /accounts \
         --method POST
+    cargo run -q -p recrypt-server --bin dump_endpoint_md -- \
+        --spec crates/recrypt-client/openapi.json \
+        --doc  docs/http-api-reference.md \
+        --path /capabilities/verify \
+        --method POST
     cargo build -q -p recrypt-client
 
 # Clean Rust build artifacts

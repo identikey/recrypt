@@ -14,21 +14,18 @@
 //!
 //! ```rust,ignore
 //! use std::collections::BTreeSet;
-//! use identikey_storage_auth::{
-//!     Capability, Permission, PublicKeyFingerprint,
-//! };
+//! use identikey_storage_auth::{Capability, Permission, SubjectKind};
 //!
-//! // Issue a keyspace-scoped capability
 //! let cap = Capability::new(
-//!     keyspace_id,
-//!     0, // keyspace_version
+//!     file_hash,
+//!     SubjectKind::File,
 //!     grantee_fingerprint,
+//!     issuer_fingerprint,
 //!     BTreeSet::from([Permission::Read]),
 //!     Some(expires_at),
-//!     issuer_fingerprint,
 //! );
-//! let mut signed_cap = cap;
-//! signed_cap.sign(&signing_keys)?;
+//! let signed_envelope = cap.sign(&signing_keys)?;
+//! let parsed = Capability::verify(&signed_envelope, &issuer_keys, policy)?;
 //! ```
 
 mod account;
@@ -47,7 +44,7 @@ pub mod sqlite;
 
 // Re-exports
 pub use account::{AccountRecord, AccountStore, InMemoryAccountStore};
-pub use capability::Capability;
+pub use capability::{Capability, SubjectKind};
 pub use error::{AuthError, AuthResult};
 pub use fingerprint::PublicKeyFingerprint;
 pub use grant::{AccessGrant, GrantId, GrantStore, InMemoryGrantStore};

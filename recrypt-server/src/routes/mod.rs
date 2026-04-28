@@ -18,6 +18,7 @@ use tower_http::trace::TraceLayer;
 // Submodules referenced by `crate::openapi::ApiDoc` are pub; others stay
 // private until they pick up `#[utoipa::path]` annotations.
 pub mod accounts;
+pub mod capabilities;
 mod files;
 mod health;
 mod keyspaces;
@@ -110,6 +111,12 @@ pub fn router(state: AppState) -> Router {
         .route("/sign/ml-dsa", post(signing::sign_ml_dsa))
         .route("/verify/ml-dsa", post(signing::verify_ml_dsa))
         .route("/nonce", get(nonce::get_nonce))
+        // Capability bearer-token verification (no auth; the signed
+        // envelope IS the credential).
+        .route(
+            "/capabilities/verify",
+            post(capabilities::verify_capability),
+        )
         .route("/accounts/{fingerprint}", get(accounts::get_account))
         .route("/accounts/{fingerprint}/files", get(accounts::list_files))
         .route("/files/{hash}", get(files::download_file))

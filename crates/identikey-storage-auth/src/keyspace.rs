@@ -150,10 +150,11 @@ pub enum RotationMode {
 // Permission / DecryptionPolicy
 // ---------------------------------------------------------------------------
 
-/// Capability granted to a keyspace member.
+/// Permission granted to a keyspace member.
 ///
-/// Named `Permission` to avoid collision with the existing per-file
-/// `Capability` type in `capability.rs`.
+/// Distinct from [`crate::Capability`], which is a signed bearer
+/// token; `Permission` is a permission tag carried inside `Member`
+/// records and `Capability` payloads.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Permission {
     Read,

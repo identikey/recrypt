@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 use identikey_storage_auth::{
     AccessGrant, Capability, DecryptionPolicy, GrantStore, InMemoryGrantStore,
     InMemoryKeyspaceStore, InMemoryOwnershipStore, KeyspaceDoc, KeyspaceId, KeyspaceStore, Member,
-    Permission, OwnershipStore, PublicKeyFingerprint, RotationMode,
+    OwnershipStore, Permission, PublicKeyFingerprint, RotationMode, SubjectKind,
 };
 use recrypt_core::sign::{SigningKeys, VerifyPolicy, VerifyingKeys};
 use recrypt_ffi::ed25519::ed25519_keygen;
@@ -88,25 +88,23 @@ async fn test_share_flow() {
     assert!(retrieved.permits(Permission::Read));
     assert!(!retrieved.permits(Permission::Write));
 
-    // Alice issues signed capability for Bob
-    let cap = Capability::new_signed(
+    // Alice issues signed capability for Bob (envelope-native; CBOR bytes)
+    let cap = Capability::new(
         keyspace_id,
-        0,
+        SubjectKind::Keyspace,
         bob_fp,
+        alice_fp,
         BTreeSet::from([Permission::Read]),
         None,
-        alice_fp,
-        &alice_signing,
-    )
-    .unwrap();
+    );
+    let bytes = cap.sign(&alice_signing).unwrap();
 
-    // Bob can verify the capability
-    cap.verify(
-        &alice_verifying,
-        VerifyPolicy::PqRequired,
-        Permission::Read,
-    )
-    .unwrap();
+    // Bob (or anyone) can verify the capability bytes
+    let parsed =
+        Capability::verify_full(&bytes, &alice_verifying, VerifyPolicy::PqRequired, Permission::Read)
+            .unwrap();
+    assert_eq!(parsed.subject, keyspace_id);
+    assert_eq!(parsed.subject_kind, SubjectKind::Keyspace);
 }
 
 #[tokio::test]
@@ -198,23 +196,19 @@ async fn test_keyspace_grant_capability_end_to_end() {
     assert_eq!(&retrieved.keyspace_id, id.as_bytes());
 
     // Cap referencing the same keyspace verifies cleanly.
-    let cap = Capability::new_signed(
+    let cap = Capability::new(
         *id.as_bytes(),
-        0,
+        SubjectKind::Keyspace,
         bob_fp,
+        alice_fp,
         BTreeSet::from([Permission::Read]),
         None,
-        alice_fp,
-        &alice_signing,
-    )
-    .unwrap();
-    cap.verify(
-        &alice_verifying,
-        VerifyPolicy::PqRequired,
-        Permission::Read,
-    )
-    .unwrap();
-    assert_eq!(cap.keyspace_id, retrieved.keyspace_id);
+    );
+    let bytes = cap.sign(&alice_signing).unwrap();
+    let parsed =
+        Capability::verify_full(&bytes, &alice_verifying, VerifyPolicy::PqRequired, Permission::Read)
+            .unwrap();
+    assert_eq!(&parsed.subject, &retrieved.keyspace_id);
 }
 
 #[tokio::test]
@@ -224,29 +218,29 @@ async fn test_capability_expiry() {
 
     let keyspace_id = [42u8; 32];
 
-    // Create expired capability
-    let cap = Capability::new_signed(
+    // Issue an already-expired capability.
+    let mut cap = Capability::new(
         keyspace_id,
-        0,
+        SubjectKind::Keyspace,
         grantee_fp,
-        BTreeSet::from([Permission::Read]),
-        Some(1), // Expired timestamp
         issuer_fp,
-        &signing_keys,
-    )
-    .unwrap();
-
-    // Signature is valid but capability is expired
-    assert!(
-        cap.verify_signature(&verifying_keys, VerifyPolicy::PqRequired)
-            .is_ok()
+        BTreeSet::from([Permission::Read]),
+        Some(1),
     );
-    assert!(cap.is_expired());
+    cap.expires_at = Some(1);
+    let bytes = cap.sign(&signing_keys).unwrap();
+
+    // Signature alone parses fine — the parsed cap is what reports expiry.
+    let parsed = Capability::verify(&bytes, &verifying_keys, VerifyPolicy::PqRequired).unwrap();
+    assert!(parsed.is_expired());
+
+    // verify_full bundles the expiry check into a hard error.
     assert!(
-        cap.verify(
+        Capability::verify_full(
+            &bytes,
             &verifying_keys,
             VerifyPolicy::PqRequired,
-            Permission::Read
+            Permission::Read,
         )
         .is_err()
     );

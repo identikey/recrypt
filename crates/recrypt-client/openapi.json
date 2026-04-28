@@ -50,6 +50,87 @@
           "ml_dsa_pk"
         ],
         "type": "object"
+      },
+      "VerifyCapabilityRequest": {
+        "description": "Request body for `POST /capabilities/verify`.",
+        "properties": {
+          "envelope_b64": {
+            "description": "Base64-encoded Gordian Envelope (dCBOR) of a signed capability.\nThe wire form produced by `Capability::sign`.",
+            "type": "string"
+          },
+          "issuer_ed25519_pk": {
+            "description": "Base64-encoded 32-byte Ed25519 public key the capability was\nsigned with. Lookup hint: derive from the issuer fingerprint\nvia `GET /accounts/{fingerprint}`.",
+            "type": "string"
+          },
+          "issuer_ml_dsa_pk": {
+            "description": "Base64-encoded ML-DSA-87 public key (~2.6 KB), if the\ncaller wants to require post-quantum signature verification.\nOmitted = classical-only check.",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "envelope_b64",
+          "issuer_ed25519_pk"
+        ],
+        "type": "object"
+      },
+      "VerifyCapabilityResponse": {
+        "description": "Response body for `POST /capabilities/verify`.\n\n`valid: true` means the signature checked out and the capability\nhas not expired. Permission set, expiry, and parent-chain link are\nreturned for the caller to enforce against their own policy.",
+        "properties": {
+          "expired": {
+            "type": "boolean"
+          },
+          "expires_at": {
+            "format": "int64",
+            "minimum": 0,
+            "nullable": true,
+            "type": "integer"
+          },
+          "granted_to": {
+            "description": "Base58 fingerprint of the recipient.",
+            "type": "string"
+          },
+          "issuer": {
+            "description": "Base58 fingerprint of the issuer.",
+            "type": "string"
+          },
+          "note": {
+            "nullable": true,
+            "type": "string"
+          },
+          "parent": {
+            "description": "Base58 of the parent capability's wrapped envelope digest, when\npresent. Chain verification is not performed by this endpoint\n(see recrypt-91h follow-up).",
+            "nullable": true,
+            "type": "string"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "subject": {
+            "description": "Base58 of the 32-byte resource address.",
+            "type": "string"
+          },
+          "subject_kind": {
+            "description": "`\"file\"`, `\"keyspace\"`, or `\"account\"`.",
+            "type": "string"
+          },
+          "valid": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "valid",
+          "expired",
+          "subject_kind",
+          "subject",
+          "granted_to",
+          "issuer",
+          "permissions"
+        ],
+        "type": "object"
       }
     }
   },
@@ -100,12 +181,53 @@
           "accounts"
         ]
       }
+    },
+    "/capabilities/verify": {
+      "post": {
+        "operationId": "verify_capability",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyCapabilityRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifyCapabilityResponse"
+                }
+              }
+            },
+            "description": "Capability parsed and signature verified (check `expired`)"
+          },
+          "400": {
+            "description": "Malformed envelope or key encodings"
+          },
+          "401": {
+            "description": "Signature verification failed"
+          }
+        },
+        "summary": "Verify a presented capability token.",
+        "tags": [
+          "capabilities"
+        ]
+      }
     }
   },
   "tags": [
     {
       "description": "Account registration and lookup.",
       "name": "accounts"
+    },
+    {
+      "description": "Bearer-token (Capability) verification.",
+      "name": "capabilities"
     }
   ]
 }
