@@ -10,22 +10,59 @@ use axum::{
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use identikey_storage_auth::{AccountRecord, PublicKeyFingerprint};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Deserialize)]
+/// Request body for `POST /accounts`.
+#[derive(Deserialize, ToSchema)]
 pub struct CreateAccountRequest {
-    pub ed25519_pk: String, // base58 (32B)
-    pub ml_dsa_pk: String,  // base64 (multi-KB; see encoding-conventions.md §4)
+    /// Base58-encoded 32-byte Ed25519 public key. Base58 is retained
+    /// here for parity with `fingerprint`, which is derived from this
+    /// key and used in URL path segments. Tracked under recrypt-nj1
+    /// follow-up: unify body-byte encoding to base64.
+    #[schema(example = "C8X8K9...32B base58...")]
+    pub ed25519_pk: String,
+    /// Base64-encoded ML-DSA-87 public key (~2.6 KB).
+    #[schema(example = "MIIChw...base64...")]
+    pub ml_dsa_pk: String,
 }
 
-#[derive(Serialize)]
+/// Response body for `POST /accounts` and `GET /accounts/{fingerprint}`.
+#[derive(Serialize, ToSchema)]
 pub struct AccountResponse {
+    /// Base58-encoded BLAKE3 fingerprint of the Ed25519 public key. Used
+    /// as the account's stable identifier in URL path segments.
     pub fingerprint: String,
+    /// Base58-encoded 32-byte Ed25519 public key (echoed from the request).
     pub ed25519_pk: String,
+    /// Base64-encoded ML-DSA-87 public key (echoed from the request).
     pub ml_dsa_pk: String,
+    /// Account creation time (Unix seconds).
     pub created_at: u64,
 }
 
-/// POST /accounts
+/// Create a new account.
+///
+/// Registers the caller's dual-stack public keys (Ed25519 + ML-DSA-87)
+/// under the BLAKE3 fingerprint of their Ed25519 key. Subsequent
+/// authenticated endpoints look up this account record to verify
+/// per-request multisigs.
+///
+/// **Authorization**: dual-stack multisig over the canonical message
+/// `CREATE:{ed25519_pk}:{ml_dsa_pk}:{nonce}` using the very keys being
+/// registered. The `X-Public-Key` header MUST equal the fingerprint
+/// derived from `ed25519_pk`; otherwise the request is rejected as
+/// malformed.
+#[utoipa::path(
+    post,
+    path = "/accounts",
+    tag = "accounts",
+    request_body = CreateAccountRequest,
+    responses(
+        (status = 201, description = "Account created", body = AccountResponse),
+        (status = 400, description = "Malformed request or fingerprint mismatch"),
+        (status = 409, description = "Account already exists"),
+    ),
+)]
 pub async fn create_account(
     State(state): State<AppState>,
     headers: HeaderMap,

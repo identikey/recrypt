@@ -15,7 +15,9 @@ use tower_governor::{
 };
 use tower_http::trace::TraceLayer;
 
-mod accounts;
+// Submodules referenced by `crate::openapi::ApiDoc` are pub; others stay
+// private until they pick up `#[utoipa::path]` annotations.
+pub mod accounts;
 mod files;
 mod health;
 mod keyspaces;

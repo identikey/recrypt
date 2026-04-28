@@ -23,7 +23,15 @@ use utoipa::OpenApi;
         version = "0.1.0",
         license(name = "MIT OR Apache-2.0"),
     ),
-    paths(),
-    components(schemas()),
+    paths(
+        crate::routes::accounts::create_account,
+    ),
+    components(schemas(
+        crate::routes::accounts::CreateAccountRequest,
+        crate::routes::accounts::AccountResponse,
+    )),
+    tags(
+        (name = "accounts", description = "Account registration and lookup."),
+    ),
 )]
 pub struct ApiDoc;

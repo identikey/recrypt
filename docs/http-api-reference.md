@@ -168,30 +168,43 @@ These limits are configurable via `recrypt-server.toml` or environment variables
 
 ### 2.2 Accounts
 
-#### `POST /accounts` — Create account
+<!-- BEGIN GENERATED: POST /accounts -->
+#### `POST /accounts` — Create a new account.
 
-- **Auth:** required. Canonical message:
-  `CREATE:{ed25519_pk}:{ml_dsa_pk}:{nonce}`
-- **Request body (JSON):**
-  ```json
-  {
-    "ed25519_pk": "<base58 32-byte key>",
-    "ml_dsa_pk":  "<base64 ML-DSA-87 public key>"
-  }
-  ```
-  PRE public keys are not registered server-side — recipients hand
-  them to senders directly inside `recrypt.public-key-bundle` envelopes
-  (see [wire-protocol.md §3.4](wire-protocol.md#34-recryptpublic-key-bundle)).
-- **Response: 201 Created**
-  ```json
-  {
-    "fingerprint": "<base58>",
-    "ed25519_pk":  "<base58>",
-    "ml_dsa_pk":   "<base64>",
-    "created_at":  1680000000
-  }
-  ```
-- **Errors:** `400` (malformed), `409` (already exists).
+Registers the caller's dual-stack public keys (Ed25519 + ML-DSA-87)
+under the BLAKE3 fingerprint of their Ed25519 key. Subsequent
+authenticated endpoints look up this account record to verify
+per-request multisigs.
+
+**Authorization**: dual-stack multisig over the canonical message
+`CREATE:{ed25519_pk}:{ml_dsa_pk}:{nonce}` using the very keys being
+registered. The `X-Public-Key` header MUST equal the fingerprint
+derived from `ed25519_pk`; otherwise the request is rejected as
+malformed.
+
+**Request body** (`application/json`):
+
+Schema: `CreateAccountRequest`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `ed25519_pk` | string | yes | Base58-encoded 32-byte Ed25519 public key. Base58 is retained here for parity with `fingerprint`, which is derived from this key and used in URL path segments. Tracked under recrypt-nj1 follow-up: unify body-byte encoding to base64. |
+| `ml_dsa_pk` | string | yes | Base64-encoded ML-DSA-87 public key (~2.6 KB). |
+
+**Responses:**
+
+| Status | Description | Body |
+|---|---|---|
+| 201 | Account created | `AccountResponse` |
+| 400 | Malformed request or fingerprint mismatch | — |
+| 409 | Account already exists | — |
+
+> Generated from `openapi.json` — do not edit by hand. Run `just openapi-regen`.
+<!-- END GENERATED: POST /accounts -->
+
+PRE public keys are not registered server-side — recipients hand
+them to senders directly inside `recrypt.public-key-bundle` envelopes
+(see [wire-protocol.md §3.4](wire-protocol.md#34-recryptpublic-key-bundle)).
 
 #### `GET /accounts/{fingerprint}` — Fetch account
 
