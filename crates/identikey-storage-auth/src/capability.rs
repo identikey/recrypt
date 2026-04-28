@@ -246,6 +246,38 @@ impl Capability {
         Ok(cap)
     }
 
+    /// Parse the issuer fingerprint from a signed capability envelope
+    /// **without** verifying the signature. Used by chain verification
+    /// to look up the issuer's public keys before calling [`Self::verify`].
+    ///
+    /// A signed envelope passed here that signature-verifies via
+    /// [`Self::verify`] also produces the correct issuer here, so the
+    /// "peek" is safe in practice: the issuer is part of the inner
+    /// envelope's subject map, which the wrap-then-sign covers.
+    pub fn peek_issuer(envelope_bytes: &[u8]) -> AuthResult<PublicKeyFingerprint> {
+        let outer = Envelope::try_from_cbor_data(envelope_bytes.to_vec())
+            .map_err(|_| AuthError::InvalidSignature)?;
+        let inner = outer.try_unwrap().map_err(|_| AuthError::InvalidSignature)?;
+        let cap = Self::from_envelope_inner(&inner)
+            .map_err(|e| AuthError::InvalidEncoding(format!("decode: {e}")))?;
+        Ok(cap.issuer)
+    }
+
+    /// Compute the digest of a signed capability envelope's wrapped
+    /// subject — the value a *child* capability would store in its
+    /// `parent` field when delegating from this one.
+    ///
+    /// Used by chain verification to confirm a resolved parent's
+    /// envelope bytes hash to the digest the child committed to.
+    pub fn wrapped_subject_digest(envelope_bytes: &[u8]) -> AuthResult<[u8; 32]> {
+        let outer = Envelope::try_from_cbor_data(envelope_bytes.to_vec())
+            .map_err(|_| AuthError::InvalidSignature)?;
+        let bytes = outer.subject().digest().data().to_vec();
+        bytes
+            .try_into()
+            .map_err(|_| AuthError::InvalidEncoding("envelope digest must be 32 bytes".into()))
+    }
+
     /// Verify signature, expiry, and that `required_perm` is granted.
     pub fn verify_full(
         envelope_bytes: &[u8],

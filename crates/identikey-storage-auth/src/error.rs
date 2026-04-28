@@ -33,6 +33,15 @@ pub enum AuthError {
     #[error("Invalid encoding: {0}")]
     InvalidEncoding(String),
 
+    #[error("Capability chain exceeds max depth ({max})")]
+    ChainTooDeep { max: usize },
+
+    #[error("Capability chain invalid: {0}")]
+    ChainInvalid(String),
+
+    #[error("Unknown issuer: {0}")]
+    UnknownIssuer(String),
+
     #[error("Signature error: {0}")]
     Signature(#[from] recrypt_core::error::CoreError),
 

@@ -37,6 +37,11 @@ pub struct SigningKeys {
 
 /// Verifying keys. ED25519 is required; `ml_dsa` is required only when the
 /// signature carries an ML-DSA component or the verifier's policy demands it.
+///
+/// `Clone` because verifying keys are public material and consumers
+/// (chain verification, multi-signature verifiers) often need to pass
+/// them by value into closures or back across thread boundaries.
+#[derive(Clone)]
 pub struct VerifyingKeys {
     pub ed25519: VerifyingKey,
     /// ML-DSA-87 public key bytes. `None` means this verifier cannot check PQ

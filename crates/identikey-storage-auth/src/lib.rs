@@ -30,6 +30,7 @@
 
 mod account;
 mod capability;
+mod capability_chain;
 mod error;
 mod fingerprint;
 mod grant;
@@ -45,6 +46,7 @@ pub mod sqlite;
 // Re-exports
 pub use account::{AccountRecord, AccountStore, InMemoryAccountStore};
 pub use capability::{Capability, SubjectKind};
+pub use capability_chain::{verify_chain, BundledResolver, ChainPolicy, ParentResolver};
 pub use error::{AuthError, AuthResult};
 pub use fingerprint::PublicKeyFingerprint;
 pub use grant::{AccessGrant, GrantId, GrantStore, InMemoryGrantStore};
