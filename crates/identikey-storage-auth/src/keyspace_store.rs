@@ -230,7 +230,7 @@ impl KeyspaceStore for InMemoryKeyspaceStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::keyspace::{DecryptionPolicy, Member, MemberCapability, RotationMode};
+    use crate::keyspace::{DecryptionPolicy, Member, Permission, RotationMode};
     use std::collections::BTreeSet;
 
     fn make_id(seed: u8) -> KeyspaceId {
@@ -244,7 +244,7 @@ mod tests {
     fn make_member(seed: u8) -> Member {
         Member {
             fingerprint: make_fp(seed),
-            capabilities: BTreeSet::from([MemberCapability::Read]),
+            permissions: BTreeSet::from([Permission::Read]),
             decryption_policy: DecryptionPolicy::Standalone,
             added_at: 0,
             added_by: make_fp(0),
@@ -349,14 +349,14 @@ mod tests {
 
         let member_shared = Member {
             fingerprint: fp_shared,
-            capabilities: BTreeSet::from([MemberCapability::Read]),
+            permissions: BTreeSet::from([Permission::Read]),
             decryption_policy: DecryptionPolicy::Standalone,
             added_at: 0,
             added_by: make_fp(0),
         };
         let member_exclusive = Member {
             fingerprint: fp_exclusive,
-            capabilities: BTreeSet::from([MemberCapability::Write]),
+            permissions: BTreeSet::from([Permission::Write]),
             decryption_policy: DecryptionPolicy::Standalone,
             added_at: 0,
             added_by: make_fp(0),
@@ -409,14 +409,14 @@ mod tests {
 
         let m_a = Member {
             fingerprint: fp_a,
-            capabilities: BTreeSet::from([MemberCapability::Read]),
+            permissions: BTreeSet::from([Permission::Read]),
             decryption_policy: DecryptionPolicy::Standalone,
             added_at: 0,
             added_by: make_fp(0),
         };
         let m_b = Member {
             fingerprint: fp_b,
-            capabilities: BTreeSet::from([MemberCapability::Read]),
+            permissions: BTreeSet::from([Permission::Read]),
             decryption_policy: DecryptionPolicy::Standalone,
             added_at: 0,
             added_by: make_fp(0),
@@ -450,7 +450,7 @@ mod tests {
             id,
             vec![Member {
                 fingerprint: fp_old,
-                capabilities: BTreeSet::from([MemberCapability::Read]),
+                permissions: BTreeSet::from([Permission::Read]),
                 decryption_policy: DecryptionPolicy::Standalone,
                 added_at: 0,
                 added_by: make_fp(0),
@@ -465,7 +465,7 @@ mod tests {
             &doc0,
             vec![Member {
                 fingerprint: fp_new,
-                capabilities: BTreeSet::from([MemberCapability::Write]),
+                permissions: BTreeSet::from([Permission::Write]),
                 decryption_policy: DecryptionPolicy::Standalone,
                 added_at: 0,
                 added_by: make_fp(0),

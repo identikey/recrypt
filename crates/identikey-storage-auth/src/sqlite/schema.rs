@@ -3,10 +3,16 @@
 use crate::error::AuthResult;
 use rusqlite::Connection;
 
-pub const SCHEMA_VERSION: u32 = 2;
+pub const SCHEMA_VERSION: u32 = 3;
 
-/// Initialize the database schema
+/// Initialize the database schema.
+///
+/// Idempotent CREATE-IF-NOT-EXISTS plus version-gated ALTER migrations.
+/// New columns or renames must come with a `migrate_*` step that brings
+/// pre-existing v(n-1) databases forward.
 pub fn init_schema(conn: &Connection) -> AuthResult<()> {
+    let prior_version = current_version(conn)?;
+
     conn.execute_batch(
         r#"
         -- Schema version tracking
@@ -21,7 +27,7 @@ pub fn init_schema(conn: &Connection) -> AuthResult<()> {
             created_at INTEGER NOT NULL            -- Unix timestamp
         );
 
-        CREATE INDEX IF NOT EXISTS idx_ownership_owner 
+        CREATE INDEX IF NOT EXISTS idx_ownership_owner
             ON ownership(owner_fingerprint);
 
         -- Access grants
@@ -36,7 +42,7 @@ pub fn init_schema(conn: &Connection) -> AuthResult<()> {
             UNIQUE(file_hash, grantee_fingerprint)
         );
 
-        CREATE INDEX IF NOT EXISTS idx_grants_file 
+        CREATE INDEX IF NOT EXISTS idx_grants_file
             ON access_grants(file_hash);
         CREATE INDEX IF NOT EXISTS idx_grants_grantee
             ON access_grants(grantee_fingerprint);
@@ -64,7 +70,7 @@ pub fn init_schema(conn: &Connection) -> AuthResult<()> {
             keyspace_id TEXT NOT NULL,
             version INTEGER NOT NULL,
             fingerprint TEXT NOT NULL,
-            capabilities TEXT NOT NULL,
+            permissions TEXT NOT NULL,
             decryption_policy TEXT NOT NULL,
             PRIMARY KEY (keyspace_id, version, fingerprint)
         );
@@ -81,7 +87,7 @@ pub fn init_schema(conn: &Connection) -> AuthResult<()> {
             keyspace_version INTEGER NOT NULL,
             subject TEXT NOT NULL,
             issuer TEXT NOT NULL,
-            capabilities TEXT NOT NULL,
+            permissions TEXT NOT NULL,
             expires_at INTEGER,
             delegation_depth INTEGER NOT NULL,
             parent_grant TEXT,
@@ -95,24 +101,50 @@ pub fn init_schema(conn: &Connection) -> AuthResult<()> {
     "#,
     )?;
 
-    // Set schema version
+    // v2 → v3: rename `capabilities` columns to `permissions` (recrypt-r1l).
+    // Skipped on a fresh DB because CREATE TABLE above already names the
+    // column `permissions`.
+    if prior_version >= 2 && prior_version < 3 {
+        migrate_v2_to_v3(conn)?;
+    }
+
+    // Set schema version. The PRIMARY KEY on `version` means INSERT OR
+    // REPLACE adds rows when the version changes (the legacy code had this
+    // bug); replace the table contents instead.
+    conn.execute("DELETE FROM schema_version", [])?;
     conn.execute(
-        "INSERT OR REPLACE INTO schema_version (version) VALUES (?)",
+        "INSERT INTO schema_version (version) VALUES (?)",
         [SCHEMA_VERSION],
     )?;
 
     Ok(())
 }
 
-/// Check schema version
-#[allow(dead_code)]
-pub fn check_version(conn: &Connection) -> AuthResult<u32> {
+fn current_version(conn: &Connection) -> AuthResult<u32> {
     let version: u32 = conn
         .query_row("SELECT version FROM schema_version LIMIT 1", [], |row| {
             row.get(0)
         })
         .unwrap_or(0);
     Ok(version)
+}
+
+fn migrate_v2_to_v3(conn: &Connection) -> AuthResult<()> {
+    // SQLite RENAME COLUMN requires 3.25+, which rusqlite bundles. The
+    // version gate above means this only runs once per DB.
+    conn.execute_batch(
+        r#"
+        ALTER TABLE keyspace_members RENAME COLUMN capabilities TO permissions;
+        ALTER TABLE grants RENAME COLUMN capabilities TO permissions;
+        "#,
+    )?;
+    Ok(())
+}
+
+/// Check schema version
+#[allow(dead_code)]
+pub fn check_version(conn: &Connection) -> AuthResult<u32> {
+    current_version(conn)
 }
 
 #[cfg(test)]
@@ -123,6 +155,43 @@ mod tests {
     fn test_init_schema() {
         let conn = Connection::open_in_memory().unwrap();
         init_schema(&conn).unwrap();
+
+        let version = check_version(&conn).unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn test_v2_to_v3_migration_renames_columns() {
+        // Simulate a v2 database with `capabilities` columns.
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            r#"
+            CREATE TABLE schema_version (version INTEGER PRIMARY KEY);
+            INSERT INTO schema_version VALUES (2);
+            CREATE TABLE keyspace_members (
+                keyspace_id TEXT, version INTEGER, fingerprint TEXT,
+                capabilities TEXT, decryption_policy TEXT,
+                PRIMARY KEY (keyspace_id, version, fingerprint)
+            );
+            CREATE TABLE grants (
+                grant_id TEXT PRIMARY KEY, keyspace_id TEXT,
+                keyspace_version INTEGER, subject TEXT, issuer TEXT,
+                capabilities TEXT, expires_at INTEGER,
+                delegation_depth INTEGER, parent_grant TEXT,
+                created_at INTEGER, revoked INTEGER, doc_bytes BLOB
+            );
+            "#,
+        )
+        .unwrap();
+
+        init_schema(&conn).unwrap();
+
+        // Renamed columns are queryable; old name is not.
+        conn.execute("INSERT INTO grants (grant_id, keyspace_id, keyspace_version, subject, issuer, permissions, delegation_depth, created_at, revoked, doc_bytes) VALUES ('g1', 'k1', 0, 's', 'i', 'read', 0, 0, 0, x'')", []).unwrap();
+        let n: i64 = conn
+            .query_row("SELECT COUNT(*) FROM grants WHERE permissions = 'read'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 1);
 
         let version = check_version(&conn).unwrap();
         assert_eq!(version, SCHEMA_VERSION);

@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use crate::error::{AuthError, AuthResult};
 use crate::fingerprint::PublicKeyFingerprint;
 use crate::grant::{AccessGrant, GrantId, GrantStore};
-use crate::keyspace::MemberCapability;
+use crate::keyspace::Permission;
 
 fn map_call_err(e: tokio_rusqlite::Error) -> AuthError {
     AuthError::Storage(format!("sqlite error: {e}"))
@@ -52,8 +52,8 @@ impl SqliteGrantStore {
     }
 }
 
-/// Serialize a `BTreeSet<MemberCapability>` to a comma-separated string.
-fn caps_to_string(caps: &BTreeSet<MemberCapability>) -> String {
+/// Serialize a `BTreeSet<Permission>` to a comma-separated string.
+fn caps_to_string(caps: &BTreeSet<Permission>) -> String {
     caps.iter()
         .map(|c| c.as_str())
         .collect::<Vec<_>>()
@@ -61,10 +61,10 @@ fn caps_to_string(caps: &BTreeSet<MemberCapability>) -> String {
 }
 
 /// Deserialize a comma-separated capability string.
-fn string_to_caps(s: &str) -> BTreeSet<MemberCapability> {
+fn string_to_caps(s: &str) -> BTreeSet<Permission> {
     s.split(',')
         .filter(|t| !t.is_empty())
-        .filter_map(MemberCapability::parse)
+        .filter_map(Permission::parse)
         .collect()
 }
 
@@ -95,7 +95,7 @@ fn decode_fp_32(field: &str, s: &str) -> rusqlite::Result<[u8; 32]> {
 ///
 /// Expected column order:
 /// 0: grant_id, 1: keyspace_id, 2: keyspace_version, 3: subject,
-/// 4: issuer, 5: capabilities, 6: expires_at, 7: delegation_depth,
+/// 4: issuer, 5: permissions, 6: expires_at, 7: delegation_depth,
 /// 8: parent_grant, 9: created_at, 10: doc_bytes
 fn row_to_grant(row: &rusqlite::Row<'_>) -> rusqlite::Result<AccessGrant> {
     let keyspace_id_str: String = row.get(1)?;
@@ -129,7 +129,7 @@ fn row_to_grant(row: &rusqlite::Row<'_>) -> rusqlite::Result<AccessGrant> {
         keyspace_version: keyspace_version as u64,
         subject,
         issuer,
-        capabilities: string_to_caps(&caps_str),
+        permissions: string_to_caps(&caps_str),
         expires_at: expires_at.map(|t| t as u64),
         delegation_depth: delegation_depth as u8,
         parent_grant,
@@ -147,7 +147,7 @@ impl GrantStore for SqliteGrantStore {
         let ks_version = grant.keyspace_version as i64;
         let subject_str = grant.subject.to_base58();
         let issuer_str = grant.issuer.to_base58();
-        let caps_str = caps_to_string(&grant.capabilities);
+        let caps_str = caps_to_string(&grant.permissions);
         let expires_at = grant.expires_at.map(|t| t as i64);
         let delegation_depth = grant.delegation_depth as i64;
         let parent_grant_str = grant.parent_grant.as_ref().map(|p| p.to_base58());
@@ -161,7 +161,7 @@ impl GrantStore for SqliteGrantStore {
                 tx.execute(
                     "INSERT INTO grants
                      (grant_id, keyspace_id, keyspace_version, subject, issuer,
-                      capabilities, expires_at, delegation_depth, parent_grant,
+                      permissions, expires_at, delegation_depth, parent_grant,
                       created_at, revoked, doc_bytes)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)",
                     rusqlite::params![
@@ -201,7 +201,7 @@ impl GrantStore for SqliteGrantStore {
             .call(move |c| {
                 let mut stmt = c.prepare(
                     "SELECT grant_id, keyspace_id, keyspace_version, subject, issuer,
-                            capabilities, expires_at, delegation_depth, parent_grant,
+                            permissions, expires_at, delegation_depth, parent_grant,
                             created_at, doc_bytes
                      FROM grants
                      WHERE grant_id = ? AND revoked = 0",
@@ -240,7 +240,7 @@ impl GrantStore for SqliteGrantStore {
             .call(move |c| {
                 let mut stmt = c.prepare(
                     "SELECT grant_id, keyspace_id, keyspace_version, subject, issuer,
-                            capabilities, expires_at, delegation_depth, parent_grant,
+                            permissions, expires_at, delegation_depth, parent_grant,
                             created_at, doc_bytes
                      FROM grants
                      WHERE subject = ? AND revoked = 0",
@@ -260,7 +260,7 @@ impl GrantStore for SqliteGrantStore {
             .call(move |c| {
                 let mut stmt = c.prepare(
                     "SELECT grant_id, keyspace_id, keyspace_version, subject, issuer,
-                            capabilities, expires_at, delegation_depth, parent_grant,
+                            permissions, expires_at, delegation_depth, parent_grant,
                             created_at, doc_bytes
                      FROM grants
                      WHERE keyspace_id = ? AND revoked = 0",
@@ -291,7 +291,7 @@ mod tests {
             keyspace_version: 0,
             subject: make_fp(seed.wrapping_add(1)),
             issuer: make_fp(seed),
-            capabilities: BTreeSet::from([MemberCapability::Read]),
+            permissions: BTreeSet::from([Permission::Read]),
             expires_at: None,
             delegation_depth: 0,
             parent_grant: None,

@@ -35,10 +35,11 @@
 //! - Add issue/verify HTTP endpoints via the codegen pipeline.
 //! - Add (but do not yet enforce) the delegation `parent` field.
 //!
-//! Naming note: `MemberCapability` (in `keyspace.rs`) is a permission
-//! tag — read/write/admin/etc. — *not* a bearer token. It is being
-//! renamed to `Permission` under recrypt-r1l so that "Capability"
-//! unambiguously refers to the token type described above.
+//! Naming note: `Permission` (in `keyspace.rs`) is a permission
+//! tag — read/write/admin/etc. — *not* a bearer token. It was
+//! renamed from `MemberCapability` under recrypt-r1l so that
+//! "Capability" unambiguously refers to the token type described
+//! above.
 
 use std::collections::BTreeSet;
 
@@ -46,7 +47,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{AuthError, AuthResult};
 use crate::fingerprint::PublicKeyFingerprint;
-use crate::keyspace::MemberCapability;
+use crate::keyspace::Permission;
 use recrypt_core::sign::{
     MultiSig, SigningKeys, VerifyPolicy, VerifyingKeys, sign_message, verify_message,
 };
@@ -65,8 +66,8 @@ pub struct Capability {
     pub keyspace_version: u64,
     /// Who this capability is granted to
     pub granted_to: PublicKeyFingerprint,
-    /// Permitted capabilities within the keyspace
-    pub capabilities: BTreeSet<MemberCapability>,
+    /// Permissions granted within the keyspace
+    pub permissions: BTreeSet<Permission>,
     /// Expiration timestamp (Unix seconds, None = no expiry)
     pub expires_at: Option<u64>,
     /// Who issued this capability
@@ -84,7 +85,7 @@ impl Capability {
         keyspace_id: [u8; 32],
         keyspace_version: u64,
         granted_to: PublicKeyFingerprint,
-        capabilities: BTreeSet<MemberCapability>,
+        permissions: BTreeSet<Permission>,
         expires_at: Option<u64>,
         issuer: PublicKeyFingerprint,
     ) -> Self {
@@ -93,7 +94,7 @@ impl Capability {
             keyspace_id,
             keyspace_version,
             granted_to,
-            capabilities,
+            permissions,
             expires_at,
             issuer,
             signature: None,
@@ -116,7 +117,7 @@ impl Capability {
         payload.extend(&self.keyspace_id);
         payload.extend(self.keyspace_version.to_le_bytes());
         payload.extend(self.granted_to.as_bytes());
-        crate::grant::write_capabilities(&mut payload, &self.capabilities);
+        crate::grant::write_permissions(&mut payload, &self.permissions);
         payload.extend(self.expires_at.unwrap_or(0).to_le_bytes());
         payload.extend(self.issuer.as_bytes());
         payload
@@ -134,7 +135,7 @@ impl Capability {
         keyspace_id: [u8; 32],
         keyspace_version: u64,
         granted_to: PublicKeyFingerprint,
-        capabilities: BTreeSet<MemberCapability>,
+        permissions: BTreeSet<Permission>,
         expires_at: Option<u64>,
         issuer: PublicKeyFingerprint,
         keys: &SigningKeys,
@@ -143,7 +144,7 @@ impl Capability {
             keyspace_id,
             keyspace_version,
             granted_to,
-            capabilities,
+            permissions,
             expires_at,
             issuer,
         );
@@ -179,9 +180,9 @@ impl Capability {
         now > expires
     }
 
-    /// Check if a specific member capability is permitted
-    pub fn permits(&self, cap: MemberCapability) -> bool {
-        self.capabilities.contains(&cap)
+    /// Check if a specific permission is granted
+    pub fn permits(&self, cap: Permission) -> bool {
+        self.permissions.contains(&cap)
     }
 
     /// Full verification: signature + expiry + capability check
@@ -189,7 +190,7 @@ impl Capability {
         &self,
         issuer_keys: &VerifyingKeys,
         policy: VerifyPolicy,
-        required_cap: MemberCapability,
+        required_cap: Permission,
     ) -> AuthResult<()> {
         // Check signature
         self.verify_signature(issuer_keys, policy)?;
@@ -245,7 +246,7 @@ mod tests {
             keyspace_id,
             0,
             grantee,
-            BTreeSet::from([MemberCapability::Read]),
+            BTreeSet::from([Permission::Read]),
             None,
             issuer,
             &signing,
@@ -268,7 +269,7 @@ mod tests {
             keyspace_id,
             0,
             fp,
-            BTreeSet::from([MemberCapability::Read]),
+            BTreeSet::from([Permission::Read]),
             None,
             fp,
         );
@@ -279,7 +280,7 @@ mod tests {
             keyspace_id,
             0,
             fp,
-            BTreeSet::from([MemberCapability::Read]),
+            BTreeSet::from([Permission::Read]),
             Some(1),
             fp,
         );
@@ -295,7 +296,7 @@ mod tests {
             keyspace_id,
             0,
             fp,
-            BTreeSet::from([MemberCapability::Read]),
+            BTreeSet::from([Permission::Read]),
             Some(future),
             fp,
         );
@@ -311,15 +312,15 @@ mod tests {
             keyspace_id,
             0,
             fp,
-            BTreeSet::from([MemberCapability::Read, MemberCapability::Write]),
+            BTreeSet::from([Permission::Read, Permission::Write]),
             None,
             fp,
         );
 
-        assert!(cap.permits(MemberCapability::Read));
-        assert!(cap.permits(MemberCapability::Write));
-        assert!(!cap.permits(MemberCapability::Delegate));
-        assert!(!cap.permits(MemberCapability::Admin));
-        assert!(!cap.permits(MemberCapability::SignRotation));
+        assert!(cap.permits(Permission::Read));
+        assert!(cap.permits(Permission::Write));
+        assert!(!cap.permits(Permission::Delegate));
+        assert!(!cap.permits(Permission::Admin));
+        assert!(!cap.permits(Permission::SignRotation));
     }
 }

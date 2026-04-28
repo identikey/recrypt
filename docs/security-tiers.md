@@ -242,8 +242,8 @@ The `Member` type carries:
 ```
 Member {
     fingerprint: PublicKeyFingerprint,
-    capabilities: Vec<Capability>,       // Read, Write, Delegate, Admin, SignRotation
-    decryption_policy: DecryptionPolicy,  // Standalone | ThresholdShare { of: u8, n: u8, policy_ref: Hash }
+    permissions: Vec<Permission>,         // Read, Write, Delegate, Admin, SignRotation
+    decryption_policy: DecryptionPolicy,   // Standalone | ThresholdShare { of: u8, n: u8, policy_ref: Hash }
     added_at: u64,
     added_by: PublicKeyFingerprint,
 }

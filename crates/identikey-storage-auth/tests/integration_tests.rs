@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 use identikey_storage_auth::{
     AccessGrant, Capability, DecryptionPolicy, GrantStore, InMemoryGrantStore,
     InMemoryKeyspaceStore, InMemoryOwnershipStore, KeyspaceDoc, KeyspaceId, KeyspaceStore, Member,
-    MemberCapability, OwnershipStore, PublicKeyFingerprint, RotationMode,
+    Permission, OwnershipStore, PublicKeyFingerprint, RotationMode,
 };
 use recrypt_core::sign::{SigningKeys, VerifyPolicy, VerifyingKeys};
 use recrypt_ffi::ed25519::ed25519_keygen;
@@ -78,22 +78,22 @@ async fn test_share_flow() {
         0,
         bob_fp,
         alice_fp,
-        BTreeSet::from([MemberCapability::Read]),
+        BTreeSet::from([Permission::Read]),
         None,
     );
     let grant_id = grant_store.issue(grant).await.unwrap();
 
     // Verify grant was stored
     let retrieved = grant_store.get(&grant_id).await.unwrap().unwrap();
-    assert!(retrieved.permits(MemberCapability::Read));
-    assert!(!retrieved.permits(MemberCapability::Write));
+    assert!(retrieved.permits(Permission::Read));
+    assert!(!retrieved.permits(Permission::Write));
 
     // Alice issues signed capability for Bob
     let cap = Capability::new_signed(
         keyspace_id,
         0,
         bob_fp,
-        BTreeSet::from([MemberCapability::Read]),
+        BTreeSet::from([Permission::Read]),
         None,
         alice_fp,
         &alice_signing,
@@ -104,7 +104,7 @@ async fn test_share_flow() {
     cap.verify(
         &alice_verifying,
         VerifyPolicy::PqRequired,
-        MemberCapability::Read,
+        Permission::Read,
     )
     .unwrap();
 }
@@ -124,7 +124,7 @@ async fn test_revoke_flow() {
         0,
         bob_fp,
         alice_fp,
-        BTreeSet::from([MemberCapability::Read]),
+        BTreeSet::from([Permission::Read]),
         None,
     );
     let grant_id = grant_store.issue(grant).await.unwrap();
@@ -157,10 +157,10 @@ async fn test_keyspace_grant_capability_end_to_end() {
     let id = KeyspaceId::random();
     let alice_member = Member {
         fingerprint: alice_fp,
-        capabilities: BTreeSet::from([
-            MemberCapability::Read,
-            MemberCapability::Delegate,
-            MemberCapability::SignRotation,
+        permissions: BTreeSet::from([
+            Permission::Read,
+            Permission::Delegate,
+            Permission::SignRotation,
         ]),
         decryption_policy: DecryptionPolicy::Standalone,
         added_at: 0,
@@ -189,7 +189,7 @@ async fn test_keyspace_grant_capability_end_to_end() {
         0,
         bob_fp,
         alice_fp,
-        BTreeSet::from([MemberCapability::Read]),
+        BTreeSet::from([Permission::Read]),
         None,
     );
     let grant_id = grants.issue(grant).await.unwrap();
@@ -202,7 +202,7 @@ async fn test_keyspace_grant_capability_end_to_end() {
         *id.as_bytes(),
         0,
         bob_fp,
-        BTreeSet::from([MemberCapability::Read]),
+        BTreeSet::from([Permission::Read]),
         None,
         alice_fp,
         &alice_signing,
@@ -211,7 +211,7 @@ async fn test_keyspace_grant_capability_end_to_end() {
     cap.verify(
         &alice_verifying,
         VerifyPolicy::PqRequired,
-        MemberCapability::Read,
+        Permission::Read,
     )
     .unwrap();
     assert_eq!(cap.keyspace_id, retrieved.keyspace_id);
@@ -229,7 +229,7 @@ async fn test_capability_expiry() {
         keyspace_id,
         0,
         grantee_fp,
-        BTreeSet::from([MemberCapability::Read]),
+        BTreeSet::from([Permission::Read]),
         Some(1), // Expired timestamp
         issuer_fp,
         &signing_keys,
@@ -246,7 +246,7 @@ async fn test_capability_expiry() {
         cap.verify(
             &verifying_keys,
             VerifyPolicy::PqRequired,
-            MemberCapability::Read
+            Permission::Read
         )
         .is_err()
     );

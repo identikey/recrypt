@@ -15,7 +15,7 @@
 //! ```rust,ignore
 //! use std::collections::BTreeSet;
 //! use identikey_storage_auth::{
-//!     Capability, MemberCapability, PublicKeyFingerprint,
+//!     Capability, Permission, PublicKeyFingerprint,
 //! };
 //!
 //! // Issue a keyspace-scoped capability
@@ -23,7 +23,7 @@
 //!     keyspace_id,
 //!     0, // keyspace_version
 //!     grantee_fingerprint,
-//!     BTreeSet::from([MemberCapability::Read]),
+//!     BTreeSet::from([Permission::Read]),
 //!     Some(expires_at),
 //!     issuer_fingerprint,
 //! );
@@ -54,7 +54,7 @@ pub use grant::{AccessGrant, GrantId, GrantStore, InMemoryGrantStore};
 pub use ownership::OwnershipStore;
 
 pub use keyspace::{
-    DecryptionPolicy, KeyspaceDoc, KeyspaceDocHash, KeyspaceId, Member, MemberCapability,
+    DecryptionPolicy, KeyspaceDoc, KeyspaceDocHash, KeyspaceId, Member, Permission,
     RotationMode,
 };
 pub use keyspace_store::{InMemoryKeyspaceStore, KeyspaceStore};

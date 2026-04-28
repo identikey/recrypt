@@ -8,7 +8,7 @@ use tokio::sync::RwLock;
 
 use crate::error::{AuthError, AuthResult};
 use crate::fingerprint::PublicKeyFingerprint;
-use crate::keyspace::MemberCapability;
+use crate::keyspace::Permission;
 
 /// Content-addressed identifier for an [`AccessGrant`].
 ///
@@ -44,7 +44,7 @@ impl fmt::Debug for GrantId {
 /// A record of access granted within a keyspace.
 ///
 /// Replaces the old file-hash-based AccessGrant. Grants are now scoped to a
-/// keyspace and carry a set of `MemberCapability` values.
+/// keyspace and carry a set of `Permission` values.
 #[derive(Clone, Debug)]
 pub struct AccessGrant {
     /// Format version
@@ -57,8 +57,8 @@ pub struct AccessGrant {
     pub subject: PublicKeyFingerprint,
     /// Who issued the grant
     pub issuer: PublicKeyFingerprint,
-    /// What capabilities are permitted
-    pub capabilities: BTreeSet<MemberCapability>,
+    /// What permissions are permitted
+    pub permissions: BTreeSet<Permission>,
     /// When the grant expires (None = never)
     pub expires_at: Option<u64>,
     /// Delegation depth (0 = non-delegable)
@@ -76,7 +76,7 @@ pub struct AccessGrant {
 /// Format: `u32 count || [u16 len || bytes]*` — iterated in BTreeSet order,
 /// so encoding is deterministic and cannot alias across different sets
 /// (e.g. `{"read"}` vs `{"read\0write"}`).
-pub(crate) fn write_capabilities(out: &mut Vec<u8>, caps: &BTreeSet<MemberCapability>) {
+pub(crate) fn write_permissions(out: &mut Vec<u8>, caps: &BTreeSet<Permission>) {
     out.extend((caps.len() as u32).to_le_bytes());
     for cap in caps {
         let bytes = cap.as_str().as_bytes();
@@ -95,7 +95,7 @@ impl AccessGrant {
         keyspace_version: u64,
         subject: PublicKeyFingerprint,
         issuer: PublicKeyFingerprint,
-        capabilities: BTreeSet<MemberCapability>,
+        permissions: BTreeSet<Permission>,
         expires_at: Option<u64>,
     ) -> Self {
         let now = std::time::SystemTime::now()
@@ -109,7 +109,7 @@ impl AccessGrant {
             keyspace_version,
             subject,
             issuer,
-            capabilities,
+            permissions,
             expires_at,
             delegation_depth: 0,
             parent_grant: None,
@@ -134,8 +134,8 @@ impl AccessGrant {
     }
 
     /// Check if a specific capability is permitted
-    pub fn permits(&self, cap: MemberCapability) -> bool {
-        self.capabilities.contains(&cap)
+    pub fn permits(&self, cap: Permission) -> bool {
+        self.permissions.contains(&cap)
     }
 
     /// Domain-separation tag for `AccessGrant` canonical bytes.
@@ -155,7 +155,7 @@ impl AccessGrant {
         out.extend(self.keyspace_version.to_le_bytes());
         out.extend(self.subject.as_bytes());
         out.extend(self.issuer.as_bytes());
-        write_capabilities(&mut out, &self.capabilities);
+        write_permissions(&mut out, &self.permissions);
         out.extend(self.expires_at.unwrap_or(0).to_le_bytes());
         out.push(self.delegation_depth);
         if let Some(parent) = &self.parent_grant {
@@ -259,7 +259,7 @@ mod tests {
             0,
             PublicKeyFingerprint::from_bytes([seed.wrapping_add(1); 32]),
             PublicKeyFingerprint::from_bytes([seed; 32]),
-            BTreeSet::from([MemberCapability::Read]),
+            BTreeSet::from([Permission::Read]),
             None,
         )
     }

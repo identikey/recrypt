@@ -32,7 +32,7 @@ use axum::{
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
 use identikey_storage_auth::{
-    AccessGrant, GrantId, KeyspaceDoc, KeyspaceDocHash, KeyspaceId, MemberCapability,
+    AccessGrant, GrantId, KeyspaceDoc, KeyspaceDocHash, KeyspaceId, Permission,
     PublicKeyFingerprint,
 };
 use serde::{Deserialize, Serialize};
@@ -74,7 +74,7 @@ fn decode_bytes_tagged(s: &str, label: &str) -> ServerResult<Vec<u8>> {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MemberJson {
     pub fingerprint: String,
-    pub capabilities: Vec<String>,
+    pub permissions: Vec<String>,
     /// Currently only `"standalone"` is accepted. Threshold shares will
     /// land in Phase C; submitting any other value is rejected.
     pub decryption_policy: String,
@@ -124,7 +124,7 @@ pub struct AccessGrantJson {
     pub keyspace_version: u64,
     pub subject: String,
     pub issuer: String,
-    pub capabilities: Vec<String>,
+    pub permissions: Vec<String>,
     pub expires_at: Option<u64>,
     pub delegation_depth: u8,
     pub parent_grant: Option<String>,
@@ -229,8 +229,8 @@ fn doc_to_json(doc: &KeyspaceDoc) -> KeyspaceDocJson {
             .iter()
             .map(|m| MemberJson {
                 fingerprint: m.fingerprint.to_base58(),
-                capabilities: m
-                    .capabilities
+                permissions: m
+                    .permissions
                     .iter()
                     .map(|c| c.as_str().to_string())
                     .collect(),
@@ -272,10 +272,10 @@ fn json_to_doc(json: &KeyspaceDocJson) -> ServerResult<KeyspaceDoc> {
         .map(|m| {
             let fp = parse_fingerprint(&m.fingerprint)?;
             let caps: BTreeSet<_> = m
-                .capabilities
+                .permissions
                 .iter()
                 .map(|c| {
-                    MemberCapability::parse(c)
+                    Permission::parse(c)
                         .ok_or_else(|| ServerError::BadRequest(format!("Unknown capability: {c}")))
                 })
                 .collect::<ServerResult<_>>()?;
@@ -283,7 +283,7 @@ fn json_to_doc(json: &KeyspaceDocJson) -> ServerResult<KeyspaceDoc> {
             let decryption_policy = string_to_decryption_policy(&m.decryption_policy)?;
             Ok(identikey_storage_auth::Member {
                 fingerprint: fp,
-                capabilities: caps,
+                permissions: caps,
                 decryption_policy,
                 added_at: m.added_at,
                 added_by,
@@ -319,8 +319,8 @@ fn grant_to_json(grant: &AccessGrant, _id: &GrantId) -> AccessGrantJson {
         keyspace_version: grant.keyspace_version,
         subject: grant.subject.to_base58(),
         issuer: grant.issuer.to_base58(),
-        capabilities: grant
-            .capabilities
+        permissions: grant
+            .permissions
             .iter()
             .map(|c| c.as_str().to_string())
             .collect(),
@@ -345,11 +345,11 @@ fn json_to_grant(json: &AccessGrantJson, server_created_at: u64) -> ServerResult
     })?;
     let subject = parse_fingerprint(&json.subject)?;
     let issuer = parse_fingerprint(&json.issuer)?;
-    let capabilities: BTreeSet<_> = json
-        .capabilities
+    let permissions: BTreeSet<_> = json
+        .permissions
         .iter()
         .map(|c| {
-            MemberCapability::parse(c)
+            Permission::parse(c)
                 .ok_or_else(|| ServerError::BadRequest(format!("Unknown capability: {c}")))
         })
         .collect::<ServerResult<_>>()?;
@@ -365,7 +365,7 @@ fn json_to_grant(json: &AccessGrantJson, server_created_at: u64) -> ServerResult
         keyspace_version: json.keyspace_version,
         subject,
         issuer,
-        capabilities,
+        permissions,
         expires_at: json.expires_at,
         delegation_depth: json.delegation_depth,
         parent_grant,
@@ -527,7 +527,7 @@ pub async fn publish_version(
         .map_err(auth_err)?
         .ok_or_else(|| ServerError::NotFound("Keyspace not found".into()))?;
     let is_signer = prev.members.iter().any(|m| {
-        m.fingerprint == caller_fp && m.capabilities.contains(&MemberCapability::SignRotation)
+        m.fingerprint == caller_fp && m.permissions.contains(&Permission::SignRotation)
     });
     if !is_signer {
         return Err(ServerError::Unauthorized(
@@ -613,8 +613,8 @@ pub async fn issue_grant(
             ServerError::Unauthorized("issuer is not a member of this keyspace".into())
         })?;
     if !issuer_member
-        .capabilities
-        .contains(&MemberCapability::Delegate)
+        .permissions
+        .contains(&Permission::Delegate)
     {
         return Err(ServerError::Unauthorized(
             "issuer lacks Delegate capability on this keyspace".into(),

@@ -147,15 +147,15 @@ pub enum RotationMode {
 }
 
 // ---------------------------------------------------------------------------
-// MemberCapability / DecryptionPolicy
+// Permission / DecryptionPolicy
 // ---------------------------------------------------------------------------
 
 /// Capability granted to a keyspace member.
 ///
-/// Named `MemberCapability` to avoid collision with the existing per-file
+/// Named `Permission` to avoid collision with the existing per-file
 /// `Capability` type in `capability.rs`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub enum MemberCapability {
+pub enum Permission {
     Read,
     Write,
     Delegate,
@@ -163,26 +163,26 @@ pub enum MemberCapability {
     SignRotation,
 }
 
-impl MemberCapability {
+impl Permission {
     /// String tag used in canonical byte encodings and serialization.
     pub fn as_str(&self) -> &'static str {
         match self {
-            MemberCapability::Read => "read",
-            MemberCapability::Write => "write",
-            MemberCapability::Delegate => "delegate",
-            MemberCapability::Admin => "admin",
-            MemberCapability::SignRotation => "sign_rotation",
+            Permission::Read => "read",
+            Permission::Write => "write",
+            Permission::Delegate => "delegate",
+            Permission::Admin => "admin",
+            Permission::SignRotation => "sign_rotation",
         }
     }
 
     /// Parse from a case-insensitive string tag.
     pub fn parse(s: &str) -> Option<Self> {
         match s.to_ascii_lowercase().as_str() {
-            "read" => Some(MemberCapability::Read),
-            "write" => Some(MemberCapability::Write),
-            "delegate" => Some(MemberCapability::Delegate),
-            "admin" => Some(MemberCapability::Admin),
-            "sign_rotation" => Some(MemberCapability::SignRotation),
+            "read" => Some(Permission::Read),
+            "write" => Some(Permission::Write),
+            "delegate" => Some(Permission::Delegate),
+            "admin" => Some(Permission::Admin),
+            "sign_rotation" => Some(Permission::SignRotation),
             _ => None,
         }
     }
@@ -210,7 +210,7 @@ pub enum DecryptionPolicy {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Member {
     pub fingerprint: PublicKeyFingerprint,
-    pub capabilities: BTreeSet<MemberCapability>,
+    pub permissions: BTreeSet<Permission>,
     pub decryption_policy: DecryptionPolicy,
     pub added_at: u64,
     pub added_by: PublicKeyFingerprint,
@@ -327,7 +327,7 @@ impl KeyspaceDoc {
         out.extend((self.members.len() as u32).to_le_bytes());
         for m in &self.members {
             out.extend(m.fingerprint.as_bytes());
-            crate::grant::write_capabilities(&mut out, &m.capabilities);
+            crate::grant::write_permissions(&mut out, &m.permissions);
             encode_decryption_policy(&mut out, &m.decryption_policy);
             out.extend(m.added_at.to_le_bytes());
             out.extend(m.added_by.as_bytes());
@@ -351,7 +351,7 @@ impl KeyspaceDoc {
     pub fn signers(&self) -> Vec<&Member> {
         self.members
             .iter()
-            .filter(|m| m.capabilities.contains(&MemberCapability::SignRotation))
+            .filter(|m| m.permissions.contains(&Permission::SignRotation))
             .collect()
     }
 
@@ -369,10 +369,10 @@ impl KeyspaceDoc {
 mod tests {
     use super::*;
 
-    fn make_member(seed: u8, caps: &[MemberCapability], added_by_seed: u8) -> Member {
+    fn make_member(seed: u8, caps: &[Permission], added_by_seed: u8) -> Member {
         Member {
             fingerprint: PublicKeyFingerprint::from_bytes([seed; 32]),
-            capabilities: caps.iter().cloned().collect(),
+            permissions: caps.iter().cloned().collect(),
             decryption_policy: DecryptionPolicy::Standalone,
             added_at: 1000,
             added_by: PublicKeyFingerprint::from_bytes([added_by_seed; 32]),
@@ -392,13 +392,13 @@ mod tests {
             members: vec![
                 make_member(
                     10,
-                    &[MemberCapability::Read, MemberCapability::SignRotation],
+                    &[Permission::Read, Permission::SignRotation],
                     10,
                 ),
-                make_member(20, &[MemberCapability::Read, MemberCapability::Write], 10),
+                make_member(20, &[Permission::Read, Permission::Write], 10),
                 make_member(
                     30,
-                    &[MemberCapability::Admin, MemberCapability::SignRotation],
+                    &[Permission::Admin, Permission::SignRotation],
                     10,
                 ),
             ],

@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use crate::error::{AuthError, AuthResult};
 use crate::fingerprint::PublicKeyFingerprint;
 use crate::keyspace::{
-    DecryptionPolicy, KeyspaceDoc, KeyspaceDocHash, KeyspaceId, MemberCapability,
+    DecryptionPolicy, KeyspaceDoc, KeyspaceDocHash, KeyspaceId, Permission,
 };
 use crate::keyspace_store::{KeyspaceStore, validate_chain, warn_phase_c_placeholders};
 
@@ -53,8 +53,8 @@ impl SqliteKeyspaceStore {
     }
 }
 
-/// Serialize a `BTreeSet<MemberCapability>` to a comma-separated string.
-fn caps_to_string(caps: &std::collections::BTreeSet<MemberCapability>) -> String {
+/// Serialize a `BTreeSet<Permission>` to a comma-separated string.
+fn caps_to_string(caps: &std::collections::BTreeSet<Permission>) -> String {
     caps.iter()
         .map(|c| c.as_str())
         .collect::<Vec<_>>()
@@ -93,7 +93,7 @@ impl KeyspaceStore for SqliteKeyspaceStore {
                     id_str.clone(),
                     version,
                     m.fingerprint.to_base58(),
-                    caps_to_string(&m.capabilities),
+                    caps_to_string(&m.permissions),
                     policy_to_string(&m.decryption_policy),
                 )
             })
@@ -129,7 +129,7 @@ impl KeyspaceStore for SqliteKeyspaceStore {
                 for (ks_id, ver, fp, caps, policy) in &member_rows {
                     tx.execute(
                         "INSERT OR REPLACE INTO keyspace_members
-                         (keyspace_id, version, fingerprint, capabilities, decryption_policy)
+                         (keyspace_id, version, fingerprint, permissions, decryption_policy)
                          VALUES (?, ?, ?, ?, ?)",
                         rusqlite::params![ks_id, ver, fp, caps, policy],
                     )?;
@@ -261,7 +261,7 @@ impl KeyspaceStore for SqliteKeyspaceStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::keyspace::{DecryptionPolicy, Member, MemberCapability, RotationMode};
+    use crate::keyspace::{DecryptionPolicy, Member, Permission, RotationMode};
     use std::collections::BTreeSet;
     use tempfile::tempdir;
 
@@ -276,7 +276,7 @@ mod tests {
     fn make_member(seed: u8) -> Member {
         Member {
             fingerprint: make_fp(seed),
-            capabilities: BTreeSet::from([MemberCapability::Read]),
+            permissions: BTreeSet::from([Permission::Read]),
             decryption_policy: DecryptionPolicy::Standalone,
             added_at: 0,
             added_by: make_fp(0),
@@ -381,7 +381,7 @@ mod tests {
             id,
             vec![Member {
                 fingerprint: fp_old,
-                capabilities: BTreeSet::from([MemberCapability::Read]),
+                permissions: BTreeSet::from([Permission::Read]),
                 decryption_policy: DecryptionPolicy::Standalone,
                 added_at: 0,
                 added_by: make_fp(0),
@@ -396,7 +396,7 @@ mod tests {
             &doc0,
             vec![Member {
                 fingerprint: fp_new,
-                capabilities: BTreeSet::from([MemberCapability::Write]),
+                permissions: BTreeSet::from([Permission::Write]),
                 decryption_policy: DecryptionPolicy::Standalone,
                 added_at: 0,
                 added_by: make_fp(0),
