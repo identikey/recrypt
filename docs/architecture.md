@@ -337,7 +337,7 @@ that talks to `recrypt-server`.
 
 - **Identity & wallet** (`commands/identity.rs`, `wallet/`) —
   generate/list/show/delete/export/import identities. Multiple identities per
-  wallet. Wallet file at e.g. `~/.local/share/recrypt/wallet.recrypt`, encrypted
+  wallet. Wallet file at e.g. `~/.local/share/recrypt/wallet.ikeyw`, encrypted
   with **Argon2id (64 MiB, 3 iters, parallelism 4) + XChaCha20-Poly1305**.
   32-byte derived key cached in the **OS keyring** (macOS Keychain, Linux
   Secret Service, Windows Credential Manager) via the `CredentialProvider`
@@ -383,7 +383,7 @@ multi-signatures on anything it receives.
   1. identity new          │  genkeys: ED25519 + ML-DSA + PRE                        │
                            │  ─ wallet (Argon2id + XChaCha20-Poly1305) ─┐            │
                            │                                            ▼            │
-                           │                                    [wallet.recrypt]     │
+                           │                                    [wallet.ikeyw]       │
                            │                                                         │
   2. encrypt file.txt      │  HybridEncryptor::encrypt(alice_pre_pk, pt)             │
                            │   ├─ random sym_key + nonce                             │

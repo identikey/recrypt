@@ -13,7 +13,7 @@ fn recrypt_cmd(wallet_path: &str, config_dir: &str) -> Command {
 
 fn setup() -> (TempDir, String, String) {
     let tmp = tempfile::tempdir().unwrap();
-    let wallet = tmp.path().join("test-wallet.recrypt");
+    let wallet = tmp.path().join("test-wallet.ikeyw");
     let config_dir = tmp.path().to_str().unwrap().to_string();
     let wallet_path = wallet.to_str().unwrap().to_string();
     (tmp, wallet_path, config_dir)

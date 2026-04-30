@@ -173,14 +173,14 @@ impl Wallet {
         }
     }
 
-    fn default_path() -> Result<PathBuf> {
+    pub fn default_path() -> Result<PathBuf> {
         // Uses platform-specific data directories:
         //   macOS:   ~/Library/Application Support/io.identikey.recrypt/
         //   Linux:   ~/.local/share/recrypt/
         //   Windows: C:\Users\<user>\AppData\Roaming\identikey\recrypt\
         let dirs = ProjectDirs::from("io", "identikey", "recrypt")
             .ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
-        Ok(dirs.data_dir().join("wallet.recrypt"))
+        Ok(dirs.data_dir().join("wallet.ikeyw"))
     }
 
     pub fn path(&self) -> &PathBuf {

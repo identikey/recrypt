@@ -17,7 +17,7 @@ echo ""
 
 # Setup temp dir and env
 TEST_DIR=$(mktemp -d)
-export RECRYPT_WALLET="$TEST_DIR/test-wallet.recrypt"
+export RECRYPT_WALLET="$TEST_DIR/test-wallet.ikeyw"
 export RECRYPT_BACKEND="$BACKEND"
 export RECRYPT_WALLET_PASSWORD="testpass123"
 export RECRYPT_SERVER="http://localhost:7222"

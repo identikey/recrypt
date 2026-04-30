@@ -5,6 +5,7 @@ use colored::Colorize;
 use super::Context;
 use crate::config::Config;
 use crate::output::print_success;
+use crate::wallet::Wallet;
 
 #[derive(Subcommand)]
 pub enum ConfigCommand {
@@ -44,17 +45,17 @@ async fn show() -> Result<()> {
     );
     println!("    {}", "Valid: pretty, json".bright_black());
 
-    println!(
-        "  {}: {}",
-        "wallet_path".dimmed(),
-        config
-            .wallet_path
-            .as_deref()
-            .unwrap_or("~/.recrypt/wallet.dcyw")
-    );
+    let default_wallet = Wallet::default_path()
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|_| "(unavailable)".to_string());
+    let wallet_display = config
+        .wallet_path
+        .clone()
+        .unwrap_or_else(|| format!("{default_wallet} (default)"));
+    println!("  {}: {}", "wallet_path".dimmed(), wallet_display);
     println!(
         "    {}",
-        "Example: /path/to/custom/wallet.dcyw".bright_black()
+        "Example: /path/to/custom/wallet.ikeyw".bright_black()
     );
 
     println!();
@@ -86,7 +87,7 @@ async fn set(key: String, value: String) -> Result<()> {
                 Valid keys:\n  \
                   default_server      (e.g., http://localhost:7222)\n  \
                   output_format       (pretty or json)\n  \
-                  wallet_path         (e.g., /path/to/wallet.dcyw)\n\n\
+                  wallet_path         (e.g., /path/to/wallet.ikeyw)\n\n\
                 Note: active identity is managed with: recrypt identity use <name>"
             );
         }

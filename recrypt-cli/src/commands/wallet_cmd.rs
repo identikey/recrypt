@@ -36,7 +36,7 @@ fn resolve_wallet_path(ctx: &Context) -> Result<std::path::PathBuf> {
         None => {
             let dirs = ProjectDirs::from("io", "identikey", "recrypt")
                 .ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
-            Ok(dirs.data_dir().join("wallet.recrypt"))
+            Ok(dirs.data_dir().join("wallet.ikeyw"))
         }
     }
 }

@@ -88,7 +88,7 @@ impl TestHarness {
 
     async fn build(backend: BackendId, storage: StorageConfig) -> Self {
         let temp_dir = tempfile::tempdir().expect("create temp dir");
-        let wallet_path = temp_dir.path().join("test-wallet.recrypt");
+        let wallet_path = temp_dir.path().join("test-wallet.ikeyw");
         let sqlite_path = temp_dir.path().join("test.db");
 
         let config = Config {

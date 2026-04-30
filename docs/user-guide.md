@@ -85,9 +85,9 @@ Traditional encryption: Alice encrypts for Bob, Bob decrypts. If Alice later wan
 
 Your identities are stored in an encrypted **wallet** file:
 
-- **macOS**: `~/Library/Application Support/io.identikey.recrypt/wallet.recrypt`
-- **Linux**: `~/.local/share/recrypt/wallet.recrypt`
-- **Windows**: `C:\Users\<user>\AppData\Roaming\identikey\recrypt\wallet.recrypt`
+- **macOS**: `~/Library/Application Support/io.identikey.recrypt/wallet.ikeyw`
+- **Linux**: `~/.local/share/recrypt/wallet.ikeyw`
+- **Windows**: `C:\Users\<user>\AppData\Roaming\identikey\recrypt\wallet.ikeyw`
 
 The wallet is encrypted with a password-derived key (Argon2id). On subsequent runs, the key is cached in your OS keychain (macOS Keychain, Linux Secret Service, Windows Credential Manager) so you don't have to re-enter it.
 
@@ -353,7 +353,7 @@ recrypt config set <key> <value>
 | `default_server`  | Server URL for API operations            | `http://localhost:7222`   |
 | `active_identity` | Active identity — managed via `recrypt identity use <name>`, not set directly | `alice` |
 | `output_format`   | Default output format                    | `pretty` or `json`        |
-| `wallet_path`     | Custom wallet file location              | `/path/to/wallet.recrypt` |
+| `wallet_path`     | Custom wallet file location              | `/path/to/wallet.ikeyw`   |
 | `default_backend` | PRE backend for new identities           | `lattice` or `mock`       |
 
 ---
@@ -459,7 +459,7 @@ recrypt identity list
 ### Backup Your Wallet
 
 ```bash
-cp ~/Library/Application\ Support/io.identikey.recrypt/wallet.recrypt ./wallet-backup.recrypt
+cp ~/Library/Application\ Support/io.identikey.recrypt/wallet.ikeyw ./wallet-backup.ikeyw
 ```
 
 Or export individual identities:
@@ -487,7 +487,7 @@ recrypt --identity alice file list
 Ensure your home directory is accessible. On unusual systems, use explicit paths:
 
 ```bash
-RECRYPT_WALLET=/tmp/wallet.recrypt recrypt identity new
+RECRYPT_WALLET=/tmp/wallet.ikeyw recrypt identity new
 ```
 
 ### "Failed to decrypt wallet (wrong password?)"
