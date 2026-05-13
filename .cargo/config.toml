@@ -1,2 +1,9 @@
 [build]
 rustflags = ["-L", "/opt/homebrew/opt/openssl@3/lib"]
+
+# oqs-sys 0.11 pins bindgen 0.71, which mis-generates OQS_SIG as a 1-byte
+# opaque struct when fed libclang >= 22 (the size assertion then fails to
+# compile). Point bindgen at libclang 21 to dodge the incompatibility.
+# Remove once oqs-sys ships with bindgen >= 0.72.
+[env]
+LIBCLANG_PATH = { value = "/usr/lib/llvm21/lib", force = false }
