@@ -112,7 +112,16 @@ deserialize_ciphertext(const CryptoContext &ctx,
   std::string str(data.begin(), data.end());
   std::stringstream ss(str);
   lbcrypto::Ciphertext<lbcrypto::DCRTPoly> ct;
-  lbcrypto::Serial::Deserialize(ct, ss, lbcrypto::SerType::BINARY);
+  // Corrupt/malformed input makes OpenFHE/cereal throw a C++ exception. Without
+  // a guard it crosses the cxx FFI boundary and calls std::terminate() (SIGABRT)
+  // — uncatchable from Rust (catch_unwind cannot catch a C++ terminate). Return
+  // a null UniquePtr instead; the Rust caller already null-checks and surfaces a
+  // clean error rather than crashing the whole process.
+  try {
+    lbcrypto::Serial::Deserialize(ct, ss, lbcrypto::SerType::BINARY);
+  } catch (...) {
+    return nullptr;
+  }
   return std::make_unique<Ciphertext>(ct);
 }
 
@@ -134,7 +143,13 @@ deserialize_public_key(const CryptoContext &ctx,
   std::string str(data.begin(), data.end());
   std::stringstream ss(str);
   lbcrypto::PublicKey<lbcrypto::DCRTPoly> pk;
-  lbcrypto::Serial::Deserialize(pk, ss, lbcrypto::SerType::BINARY);
+  // Guard against C++ exceptions on corrupt input (see deserialize_ciphertext):
+  // crossing the cxx boundary would std::terminate. Null UniquePtr → clean Rust error.
+  try {
+    lbcrypto::Serial::Deserialize(pk, ss, lbcrypto::SerType::BINARY);
+  } catch (...) {
+    return nullptr;
+  }
   return std::make_unique<PublicKey>(pk);
 }
 
@@ -156,7 +171,13 @@ deserialize_private_key(const CryptoContext &ctx,
   std::string str(data.begin(), data.end());
   std::stringstream ss(str);
   lbcrypto::PrivateKey<lbcrypto::DCRTPoly> sk;
-  lbcrypto::Serial::Deserialize(sk, ss, lbcrypto::SerType::BINARY);
+  // Guard against C++ exceptions on corrupt input (see deserialize_ciphertext):
+  // crossing the cxx boundary would std::terminate. Null UniquePtr → clean Rust error.
+  try {
+    lbcrypto::Serial::Deserialize(sk, ss, lbcrypto::SerType::BINARY);
+  } catch (...) {
+    return nullptr;
+  }
   return std::make_unique<PrivateKey>(sk);
 }
 
@@ -178,7 +199,13 @@ deserialize_recrypt_key(const CryptoContext &ctx,
   std::string str(data.begin(), data.end());
   std::stringstream ss(str);
   lbcrypto::EvalKey<lbcrypto::DCRTPoly> rk;
-  lbcrypto::Serial::Deserialize(rk, ss, lbcrypto::SerType::BINARY);
+  // Guard against C++ exceptions on corrupt input (see deserialize_ciphertext):
+  // crossing the cxx boundary would std::terminate. Null UniquePtr → clean Rust error.
+  try {
+    lbcrypto::Serial::Deserialize(rk, ss, lbcrypto::SerType::BINARY);
+  } catch (...) {
+    return nullptr;
+  }
   return std::make_unique<RecryptKey>(rk);
 }
 
