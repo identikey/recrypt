@@ -1,7 +1,13 @@
 #include "recrypt-openfhe-sys/src/wrapper.h"
 
 #include <sstream>
+#include <stdexcept>
 #include <string>
+
+// Exception policy: every bridge fn is declared Result<T> on the Rust side,
+// so any C++ exception thrown here (or inside OpenFHE) is converted to a Rust
+// Err by the rust::behavior::trycatch hook in wrapper.h. Functions therefore
+// throw on failure rather than returning null sentinels.
 
 namespace recrypt_openfhe {
 
@@ -112,15 +118,11 @@ deserialize_ciphertext(const CryptoContext &ctx,
   std::string str(data.begin(), data.end());
   std::stringstream ss(str);
   lbcrypto::Ciphertext<lbcrypto::DCRTPoly> ct;
-  // Corrupt/malformed input makes OpenFHE/cereal throw a C++ exception. Without
-  // a guard it crosses the cxx FFI boundary and calls std::terminate() (SIGABRT)
-  // — uncatchable from Rust (catch_unwind cannot catch a C++ terminate). Return
-  // a null UniquePtr instead; the Rust caller already null-checks and surfaces a
-  // clean error rather than crashing the whole process.
-  try {
-    lbcrypto::Serial::Deserialize(ct, ss, lbcrypto::SerType::BINARY);
-  } catch (...) {
-    return nullptr;
+  lbcrypto::Serial::Deserialize(ct, ss, lbcrypto::SerType::BINARY);
+  // Cereal can deserialize a smart pointer to null without throwing; using
+  // such an object later aborts deep inside OpenFHE (e.g. ValidateKey).
+  if (!ct) {
+    throw std::runtime_error("deserialized ciphertext is null");
   }
   return std::make_unique<Ciphertext>(ct);
 }
@@ -143,12 +145,9 @@ deserialize_public_key(const CryptoContext &ctx,
   std::string str(data.begin(), data.end());
   std::stringstream ss(str);
   lbcrypto::PublicKey<lbcrypto::DCRTPoly> pk;
-  // Guard against C++ exceptions on corrupt input (see deserialize_ciphertext):
-  // crossing the cxx boundary would std::terminate. Null UniquePtr → clean Rust error.
-  try {
-    lbcrypto::Serial::Deserialize(pk, ss, lbcrypto::SerType::BINARY);
-  } catch (...) {
-    return nullptr;
+  lbcrypto::Serial::Deserialize(pk, ss, lbcrypto::SerType::BINARY);
+  if (!pk) {
+    throw std::runtime_error("deserialized public key is null");
   }
   return std::make_unique<PublicKey>(pk);
 }
@@ -171,12 +170,9 @@ deserialize_private_key(const CryptoContext &ctx,
   std::string str(data.begin(), data.end());
   std::stringstream ss(str);
   lbcrypto::PrivateKey<lbcrypto::DCRTPoly> sk;
-  // Guard against C++ exceptions on corrupt input (see deserialize_ciphertext):
-  // crossing the cxx boundary would std::terminate. Null UniquePtr → clean Rust error.
-  try {
-    lbcrypto::Serial::Deserialize(sk, ss, lbcrypto::SerType::BINARY);
-  } catch (...) {
-    return nullptr;
+  lbcrypto::Serial::Deserialize(sk, ss, lbcrypto::SerType::BINARY);
+  if (!sk) {
+    throw std::runtime_error("deserialized private key is null");
   }
   return std::make_unique<PrivateKey>(sk);
 }
@@ -199,12 +195,9 @@ deserialize_recrypt_key(const CryptoContext &ctx,
   std::string str(data.begin(), data.end());
   std::stringstream ss(str);
   lbcrypto::EvalKey<lbcrypto::DCRTPoly> rk;
-  // Guard against C++ exceptions on corrupt input (see deserialize_ciphertext):
-  // crossing the cxx boundary would std::terminate. Null UniquePtr → clean Rust error.
-  try {
-    lbcrypto::Serial::Deserialize(rk, ss, lbcrypto::SerType::BINARY);
-  } catch (...) {
-    return nullptr;
+  lbcrypto::Serial::Deserialize(rk, ss, lbcrypto::SerType::BINARY);
+  if (!rk) {
+    throw std::runtime_error("deserialized recrypt key is null");
   }
   return std::make_unique<RecryptKey>(rk);
 }

@@ -22,8 +22,8 @@ pub struct PublicKey {
 #[cfg(feature = "openfhe")]
 impl PublicKey {
     /// Serialize to bytes
-    pub fn to_bytes(&self) -> Vec<u8> {
-        openfhe::serialize_public_key(&self.inner)
+    pub fn to_bytes(&self) -> Result<Vec<u8>, FfiError> {
+        Ok(openfhe::serialize_public_key(&self.inner)?)
     }
 }
 
@@ -38,8 +38,8 @@ pub struct SecretKey {
 #[cfg(feature = "openfhe")]
 impl SecretKey {
     /// Serialize to bytes
-    pub fn to_bytes(&self) -> Vec<u8> {
-        openfhe::serialize_private_key(&self.inner)
+    pub fn to_bytes(&self) -> Result<Vec<u8>, FfiError> {
+        Ok(openfhe::serialize_private_key(&self.inner)?)
     }
 }
 
@@ -60,8 +60,8 @@ pub struct Ciphertext {
 #[cfg(feature = "openfhe")]
 impl Ciphertext {
     /// Serialize to bytes
-    pub fn to_bytes(&self) -> Vec<u8> {
-        openfhe::serialize_ciphertext(&self.inner)
+    pub fn to_bytes(&self) -> Result<Vec<u8>, FfiError> {
+        Ok(openfhe::serialize_ciphertext(&self.inner)?)
     }
 }
 
@@ -76,8 +76,8 @@ pub struct RecryptKey {
 #[cfg(feature = "openfhe")]
 impl RecryptKey {
     /// Serialize to bytes
-    pub fn to_bytes(&self) -> Vec<u8> {
-        openfhe::serialize_recrypt_key(&self.inner)
+    pub fn to_bytes(&self) -> Result<Vec<u8>, FfiError> {
+        Ok(openfhe::serialize_recrypt_key(&self.inner)?)
     }
 }
 
@@ -106,17 +106,17 @@ impl PreContext {
     ///
     /// Uses BFVrns with plaintext_modulus = 65537
     pub fn new() -> Result<Self, FfiError> {
-        let ctx = openfhe::create_bfv_context(65537, 60);
+        let ctx = openfhe::create_bfv_context(65537, 60)?;
         if ctx.is_null() {
             return Err(FfiError::OpenFhe("Failed to create BFV context".into()));
         }
 
-        openfhe::enable_pke(&ctx);
-        openfhe::enable_keyswitch(&ctx);
-        openfhe::enable_leveledshe(&ctx);
-        openfhe::enable_pre(&ctx);
+        openfhe::enable_pke(&ctx)?;
+        openfhe::enable_keyswitch(&ctx)?;
+        openfhe::enable_leveledshe(&ctx)?;
+        openfhe::enable_pre(&ctx)?;
 
-        let ring_dimension = openfhe::get_ring_dimension(&ctx);
+        let ring_dimension = openfhe::get_ring_dimension(&ctx)?;
 
         Ok(Self {
             inner: ctx,
@@ -131,13 +131,13 @@ impl PreContext {
 
     /// Generate a new keypair
     pub fn generate_keypair(&self) -> Result<KeyPair, FfiError> {
-        let kp = openfhe::keygen(&self.inner);
+        let kp = openfhe::keygen(&self.inner)?;
         if kp.is_null() {
             return Err(FfiError::OpenFhe("Failed to generate keypair".into()));
         }
 
-        let pk = openfhe::get_public_key(&kp);
-        let sk = openfhe::get_private_key(&kp);
+        let pk = openfhe::get_public_key(&kp)?;
+        let sk = openfhe::get_private_key(&kp)?;
 
         Ok(KeyPair {
             public: PublicKey { inner: pk },
@@ -159,8 +159,8 @@ impl PreContext {
             let mut padded = chunk.to_vec();
             padded.resize(slot_count, 0);
 
-            let pt = openfhe::make_packed_plaintext(&self.inner, &padded);
-            let ct = openfhe::encrypt(&self.inner, &pk.inner, &pt);
+            let pt = openfhe::make_packed_plaintext(&self.inner, &padded)?;
+            let ct = openfhe::encrypt(&self.inner, &pk.inner, &pt)?;
 
             if ct.is_null() {
                 return Err(FfiError::OpenFhe("Encryption failed".into()));
@@ -182,12 +182,12 @@ impl PreContext {
         let mut all_coeffs = Vec::new();
 
         for ct in ciphertexts {
-            let pt = openfhe::decrypt(&self.inner, &sk.inner, &ct.inner);
+            let pt = openfhe::decrypt(&self.inner, &sk.inner, &ct.inner)?;
             if pt.is_null() {
                 return Err(FfiError::OpenFhe("Decryption failed".into()));
             }
 
-            let coeffs = openfhe::get_packed_value(&pt);
+            let coeffs = openfhe::get_packed_value(&pt)?;
             all_coeffs.extend(coeffs);
         }
 
@@ -207,7 +207,7 @@ impl PreContext {
         from_sk: &SecretKey,
         to_pk: &PublicKey,
     ) -> Result<RecryptKey, FfiError> {
-        let rk = openfhe::generate_recrypt_key(&self.inner, &from_sk.inner, &to_pk.inner);
+        let rk = openfhe::generate_recrypt_key(&self.inner, &from_sk.inner, &to_pk.inner)?;
         if rk.is_null() {
             return Err(FfiError::OpenFhe(
                 "Failed to generate recryption key".into(),
@@ -226,7 +226,7 @@ impl PreContext {
         let mut result = Vec::with_capacity(ciphertexts.len());
 
         for ct in ciphertexts {
-            let new_ct = openfhe::recrypt(&self.inner, &rk.inner, &ct.inner);
+            let new_ct = openfhe::recrypt(&self.inner, &rk.inner, &ct.inner)?;
             if new_ct.is_null() {
                 return Err(FfiError::OpenFhe("Recryption failed".into()));
             }
@@ -240,7 +240,7 @@ impl PreContext {
 
     /// Deserialize a public key from bytes
     pub fn deserialize_public_key(&self, data: &[u8]) -> Result<PublicKey, FfiError> {
-        let pk = openfhe::deserialize_public_key(&self.inner, data);
+        let pk = openfhe::deserialize_public_key(&self.inner, data)?;
         if pk.is_null() {
             return Err(FfiError::OpenFhe("Failed to deserialize public key".into()));
         }
@@ -249,7 +249,7 @@ impl PreContext {
 
     /// Deserialize a secret key from bytes
     pub fn deserialize_secret_key(&self, data: &[u8]) -> Result<SecretKey, FfiError> {
-        let sk = openfhe::deserialize_private_key(&self.inner, data);
+        let sk = openfhe::deserialize_private_key(&self.inner, data)?;
         if sk.is_null() {
             return Err(FfiError::OpenFhe("Failed to deserialize secret key".into()));
         }
@@ -258,7 +258,7 @@ impl PreContext {
 
     /// Deserialize a ciphertext from bytes
     pub fn deserialize_ciphertext(&self, data: &[u8]) -> Result<Ciphertext, FfiError> {
-        let ct = openfhe::deserialize_ciphertext(&self.inner, data);
+        let ct = openfhe::deserialize_ciphertext(&self.inner, data)?;
         if ct.is_null() {
             return Err(FfiError::OpenFhe("Failed to deserialize ciphertext".into()));
         }
@@ -267,7 +267,7 @@ impl PreContext {
 
     /// Deserialize a recrypt key from bytes
     pub fn deserialize_recrypt_key(&self, data: &[u8]) -> Result<RecryptKey, FfiError> {
-        let rk = openfhe::deserialize_recrypt_key(&self.inner, data);
+        let rk = openfhe::deserialize_recrypt_key(&self.inner, data)?;
         if rk.is_null() {
             return Err(FfiError::OpenFhe(
                 "Failed to deserialize recrypt key".into(),
@@ -281,7 +281,7 @@ impl PreContext {
     /// Generate keypair and return serialized bytes
     pub fn generate_keypair_bytes(&self) -> Result<(Vec<u8>, Vec<u8>), FfiError> {
         let kp = self.generate_keypair()?;
-        Ok((kp.public.to_bytes(), kp.secret.to_bytes()))
+        Ok((kp.public.to_bytes()?, kp.secret.to_bytes()?))
     }
 
     /// Encrypt data using serialized public key, return serialized ciphertext
@@ -297,7 +297,7 @@ impl PreContext {
             )));
         }
 
-        Ok(ciphertexts[0].to_bytes())
+        ciphertexts[0].to_bytes()
     }
 
     /// Decrypt using serialized secret key
@@ -321,7 +321,7 @@ impl PreContext {
         let from_sk = self.deserialize_secret_key(from_sk_bytes)?;
         let to_pk = self.deserialize_public_key(to_pk_bytes)?;
         let rk = self.generate_recrypt_key(&from_sk, &to_pk)?;
-        Ok(rk.to_bytes())
+        rk.to_bytes()
     }
 
     /// Recrypt using serialized recrypt key, return serialized ciphertext
@@ -337,7 +337,7 @@ impl PreContext {
             )));
         }
 
-        Ok(result[0].to_bytes())
+        result[0].to_bytes()
     }
 }
 

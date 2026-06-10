@@ -22,3 +22,11 @@ pub enum FfiError {
     #[error("Decryption failed: {0}")]
     Decryption(String),
 }
+
+// OpenFHE signals failure via C++ exceptions; cxx surfaces them as
+// cxx::Exception carrying the exception message.
+impl From<cxx::Exception> for FfiError {
+    fn from(e: cxx::Exception) -> Self {
+        FfiError::OpenFhe(e.what().to_string())
+    }
+}

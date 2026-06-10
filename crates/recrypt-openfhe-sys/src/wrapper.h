@@ -16,6 +16,23 @@
 #include "key/key-ser.h"
 #include "scheme/bfvrns/bfvrns-ser.h"
 
+// cxx converts a C++ exception thrown by a bridge fn declared `Result<T>` into
+// a Rust Err via this hook. The cxx default only catches std::exception; the
+// catch-all clause ensures non-std throws also become Err instead of escaping
+// to std::terminate() (SIGABRT), which Rust cannot catch.
+namespace rust {
+namespace behavior {
+template <typename Try, typename Fail>
+static void trycatch(Try &&func, Fail &&fail) noexcept try {
+  func();
+} catch (const std::exception &e) {
+  fail(e.what());
+} catch (...) {
+  fail("non-std C++ exception in OpenFHE FFI");
+}
+} // namespace behavior
+} // namespace rust
+
 namespace recrypt_openfhe {
 
 // Wrapper classes that own OpenFHE objects
