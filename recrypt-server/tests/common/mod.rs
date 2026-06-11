@@ -17,6 +17,7 @@ impl TestServer {
             nonce: Default::default(),
             pre_backend: "mock".into(),
             rate_limit: Default::default(),
+            limits: Default::default(),
         };
 
         let state = recrypt_server::state::AppState::new(&config).await.unwrap();

@@ -31,6 +31,23 @@ fn corrupt_input_returns_err_instead_of_aborting() {
     assert!(!err.to_string().is_empty());
 }
 
+/// Regression for recrypt-hrq: a fuzzer-found public key blob drives
+/// OpenFHE/cereal to attempt a ~2 exabyte allocation from an attacker-
+/// controlled length field. Under ASan this aborts (allocation-too-big), but
+/// in a normal build `operator new` throws `std::bad_alloc`, which the FFI
+/// guard must catch and return as Err — never abort. The recrypt-server
+/// RLIMIT_AS cap makes the same hold for "merely huge" sizes in production.
+#[test]
+fn hrq_allocation_bomb_pubkey_returns_err() {
+    let ctx = PreContext::new().unwrap();
+    let data = include_bytes!("fixtures/hrq_pubkey_alloc_bomb.bin");
+    let err = match ctx.deserialize_public_key(data) {
+        Err(e) => e,
+        Ok(_) => panic!("expected Err for allocation-bomb input"),
+    };
+    assert!(err.to_string().contains("bad_alloc"), "got: {err}");
+}
+
 #[test]
 fn corrupted_valid_serializations_do_not_abort() {
     let ctx = PreContext::new().unwrap();

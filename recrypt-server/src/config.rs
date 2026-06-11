@@ -27,6 +27,9 @@ pub struct Config {
 
     #[serde(default)]
     pub rate_limit: RateLimitConfig,
+
+    #[serde(default)]
+    pub limits: MemoryLimitConfig,
 }
 
 fn default_pre_backend() -> String {
@@ -119,6 +122,34 @@ fn default_per_fingerprint_rps() -> u32 {
 }
 fn default_per_fingerprint_burst() -> u32 {
     40
+}
+
+/// Process memory limits. Malformed PRE material can drive OpenFHE/cereal
+/// deserialization to attempt an arbitrarily large allocation from an
+/// attacker-controlled length field (recrypt-hrq). A bounded address space
+/// turns that runaway allocation into a catchable `std::bad_alloc` (surfaced
+/// as an error by the FFI layer) instead of letting the allocator satisfy it
+/// and the host OOM-kill the proxy.
+#[derive(Debug, Deserialize, Clone)]
+pub struct MemoryLimitConfig {
+    /// Cap on virtual address space (RLIMIT_AS), in GiB. `0` disables the cap.
+    /// Enforced on Linux; macOS ignores RLIMIT_AS, so production deployments
+    /// should also set a container/cgroup memory limit. Tune upward for the
+    /// lattice backend if large crypto contexts exhaust the default.
+    #[serde(default = "default_address_space_gb")]
+    pub address_space_gb: u64,
+}
+
+impl Default for MemoryLimitConfig {
+    fn default() -> Self {
+        Self {
+            address_space_gb: default_address_space_gb(),
+        }
+    }
+}
+
+fn default_address_space_gb() -> u64 {
+    16
 }
 
 fn default_host() -> String {

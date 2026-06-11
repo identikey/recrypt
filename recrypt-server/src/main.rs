@@ -4,6 +4,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod config;
 mod error;
+mod limits;
 mod middleware;
 mod nonces;
 mod openapi;
@@ -24,6 +25,10 @@ async fn main() -> anyhow::Result<()> {
 
     // Load config
     let config = config::Config::load()?;
+
+    // Bound address space so malformed PRE input degrades to a catchable
+    // bad_alloc instead of OOM-killing the proxy (recrypt-hrq).
+    limits::apply_address_space_limit(config.limits.address_space_gb);
 
     // Build app state
     let state = state::AppState::from_config(&config).await?;
