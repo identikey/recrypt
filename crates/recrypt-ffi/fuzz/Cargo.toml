@@ -1,0 +1,44 @@
+# Standalone manifest: cargo-fuzz builds this outside the parent workspace
+# (nightly + sanitizer RUSTFLAGS). The empty table stops the upward search.
+[workspace]
+
+[package]
+name = "recrypt-ffi-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+recrypt-ffi = { path = ".." }
+
+[[bin]]
+name = "deserialize_public_key"
+path = "fuzz_targets/deserialize_public_key.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "deserialize_private_key"
+path = "fuzz_targets/deserialize_private_key.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "deserialize_ciphertext"
+path = "fuzz_targets/deserialize_ciphertext.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "deserialize_recrypt_key"
+path = "fuzz_targets/deserialize_recrypt_key.rs"
+test = false
+doc = false
+bench = false

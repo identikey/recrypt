@@ -13,6 +13,8 @@ members = [
   "tests/e2e",
   # "crates/recrypt-hdprint",  # parallel track
 ]
+# cargo-fuzz crate builds standalone with nightly + sanitizer flags
+exclude = ["crates/recrypt-ffi/fuzz"]
 
 [workspace.package]
 version = "0.1.0"

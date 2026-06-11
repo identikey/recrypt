@@ -46,3 +46,9 @@ gen/
 .dolt/
 *.db
 .beads-credential-key
+
+# cargo-fuzz generated state (seeds regenerate via `just fuzz-corpus`)
+crates/recrypt-ffi/fuzz/corpus/
+crates/recrypt-ffi/fuzz/artifacts/
+crates/recrypt-ffi/fuzz/coverage/
+crates/recrypt-ffi/fuzz/target/

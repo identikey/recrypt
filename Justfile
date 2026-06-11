@@ -47,6 +47,33 @@ format-check:
 docs:
     cargo doc --no-deps
 
+# --------------------
+# Fuzzing (requires: cargo install cargo-fuzz; uses nightly toolchain)
+# --------------------
+
+# Generate seed corpus from valid serializations (run once before fuzzing)
+fuzz-corpus:
+    cargo run -p recrypt-ffi --example gen_fuzz_corpus
+
+# Run one fuzz target in fork mode, e.g. `just fuzz deserialize_public_key 300`.
+#  -fork=1 -ignore_crashes=1: each crash is saved to fuzz/artifacts/ and the
+#  campaign keeps hunting for *new* bugs instead of stopping on a known one
+#  (e.g. the recrypt-hrq allocation bomb, which ASan aborts on by design).
+#  Triage saved artifacts with `cargo run -p recrypt-ffi --example replay_crash`.
+#  max_len covers full-size OpenFHE serializations (recrypt key ~525KB).
+fuzz target time="60":
+    cd crates/recrypt-ffi && cargo +nightly fuzz run {{target}} -- \
+        -fork=1 -ignore_crashes=1 -max_total_time={{time}} -max_len=1048576
+
+# Quick pass over every fuzz target. Fork mode keeps each target alive for the
+# whole budget; inspect fuzz/artifacts/ afterward for any NEW crash inputs
+# beyond the known recrypt-hrq case.
+fuzz-smoke time="30":
+    cd crates/recrypt-ffi && for t in $(cargo +nightly fuzz list); do \
+        cargo +nightly fuzz run $t -- \
+            -fork=1 -ignore_crashes=1 -max_total_time={{time}} -max_len=1048576 || exit 1; \
+    done
+
 # Regenerate the OpenAPI snapshot consumed by recrypt-client and the
 # generated sections of docs/http-api-reference.md. Run after touching
 # any utoipa-annotated handler or schema in recrypt-server. CI should

@@ -4308,6 +4308,7 @@ dependencies = [
  "figment",
  "http 1.4.0",
  "identikey-storage-auth",
+ "libc",
  "prost",
  "recrypt-core",
  "recrypt-ffi",
