@@ -108,11 +108,19 @@ fn main() {
     }
     bridge.compile("recrypt_openfhe_sys");
 
-    // Link OpenFHE static libraries (order matters for static linking!)
     println!("cargo::rustc-link-search=native={}", openfhe_lib.display());
-    println!("cargo::rustc-link-lib=static=OPENFHEpke_static");
-    println!("cargo::rustc-link-lib=static=OPENFHEbinfhe_static");
-    println!("cargo::rustc-link-lib=static=OPENFHEcore_static");
+    // Use the propagating `rustc-link-lib` form (NOT `rustc-link-arg`, which is
+    // NOT forwarded to dependent crates' final cdylib/bin links) with the
+    // `+whole-archive` modifier. OpenFHE pke/core/binfhe are mutually circular
+    // and a cdylib tolerates undefined symbols, so plain `static=` leaves the
+    // CKKS typeinfo/vtable (e.g. _ZTIN8lbcrypto23CryptoParametersCKKSRNSE)
+    // UNDEFINED in libnaoms_core.so -> on-device dlopen fails with
+    // "typeinfo for lbcrypto::CryptoParametersCKKSRNS is missing".
+    // `+whole-archive` force-includes every member AND propagates transitively
+    // to naoms-core's cdylib link, so the definitions land in the .so. (1054)
+    println!("cargo::rustc-link-lib=static:+whole-archive=OPENFHEpke_static");
+    println!("cargo::rustc-link-lib=static:+whole-archive=OPENFHEcore_static");
+    println!("cargo::rustc-link-lib=static:+whole-archive=OPENFHEbinfhe_static");
 
     // Link the C++ standard library. Apple platforms (macOS + iOS) use libc++.
     // Android (NDK) uses LLVM libc++ too, but the runtime is `c++_shared`
