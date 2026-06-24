@@ -1,171 +1,230 @@
 # Recrypt: Quantum-Resistant Proxy Recryption System
 
-**Status:** 🚀 Implementation Phase  
-**Version:** 2.0 (Rust)
+**Status:** Phase 8 — Documentation & Deployment (approaching 1.0)
+**Version:** 0.1.0
 
 ---
 
 ## Overview
 
-Recrypt is a production-ready proxy recryption system enabling secure, revocable file sharing with untrusted storage providers. Built on lattice-based cryptography (OpenFHE) with post-quantum signatures (liboqs), it provides end-to-end encryption where files can be shared without exposing private keys or plaintext.
+Recrypt is a quantum-resistant proxy recryption system enabling secure,
+revocable file sharing with untrusted storage providers. Built on lattice-based
+cryptography (OpenFHE) with post-quantum signatures (liboqs), it provides
+end-to-end encryption where files can be shared without exposing private keys or
+plaintext to any intermediary.
 
-### Core Innovation
+### Core ideas
 
-**Proxy Recryption:** Transform ciphertext encrypted for Alice into ciphertext for Bob without ever decrypting. The storage provider facilitates sharing without accessing plaintext.
+**Proxy recryption.** A semi-trusted proxy transforms ciphertext encrypted for
+Alice into ciphertext for Bob without ever decrypting it. The storage provider
+facilitates sharing without access to plaintext, and access can be revoked
+without re-encrypting the file.
 
-**Hybrid Encryption:** KEM-DEM architecture with pluggable PRE backends (lattice for post-quantum, EC for classical). Symmetric encryption (XChaCha20 + Bao) handles bulk data.
+**Hybrid encryption (KEM-DEM).** A 256-bit symmetric key is wrapped with the
+post-quantum PRE backend (KEM); bulk data is encrypted with XChaCha20 + Bao
+(DEM). Only the wrapped key (~KB) is recrypted on share — never the file itself.
 
-**Self-Correcting Identifiers:** HDprint provides human-readable identifiers that automatically correct typos and restore proper case from lowercase input.
-
----
-
-## Current Status
-
-### ✅ Phase 0: Planning — COMPLETE
-
-- [x] Implementation plan (`docs/IMPLEMENTATION_PLAN.md`)
-- [x] All design decisions documented
-- [x] Workspace structure defined
-
-### 🔲 Implementation Phases
-
-| Phase | Description                                       | Status |
-| ----- | ------------------------------------------------- | ------ |
-| 1     | FFI Bindings (OpenFHE + liboqs)                   | 🔲     |
-| 2     | Core Cryptography (PRE traits, hybrid encryption) | 🔲     |
-| 3     | Protocol Layer (Gordian Envelope, Bao)             | 🔲     |
-| 4     | Storage Client (S3-compatible)                    | 🔲     |
-| 4b    | Auth Service (identikey-storage-auth)             | 🔲     |
-| 5     | HDprint (parallelizable)                          | 🔲     |
-| 6     | Recryption Proxy Server                           | 🔲     |
-| 7     | CLI Application                                   | 🔲     |
-| 8     | Minimal TUI                                       | 🔲     |
-
-**Timeline:** 10-12 weeks to production-ready
+**Pluggable PRE backends.** OpenFHE BFV is the post-quantum default; a `mock`
+backend exists for fast testing.
 
 ---
 
-## Repository Structure
+## Quick start
 
-```
-recrypt/
-├── README.md
-├── docs/
-│   ├── IMPLEMENTATION_PLAN.md    # 📋 Master plan - READ THIS FIRST
-│   ├── hybrid-encryption-architecture.md
-│   ├── pre-backend-traits.md
-│   ├── storage-design.md
-│   ├── wire-protocol.md
-│   └── ...                       # Other design docs
-│
-├── python-prototype/             # 📦 ARCHIVED: Reference implementation
-│   ├── src/recrypt/
-│   ├── tests/
-│   └── docs/
-│
-├── vendor/                       # Third-party dependencies
-│   ├── openfhe-development/
-│   ├── liboqs/
-│   └── ...
-│
-└── [Rust workspace - Phase 1+]
-    ├── crates/
-    │   ├── recrypt-ffi/
-    │   ├── recrypt-core/
-    │   ├── recrypt-wire/
-    │   ├── recrypt-storage/
-    │   └── recrypt-hdprint/
-    ├── recrypt-cli/
-    ├── recrypt-server/
-    ├── recrypt-tui/
-    └── identikey-storage-auth/
-```
-
----
-
-## Quick Start (Coming Soon)
+### Build
 
 ```bash
-# Phase 1+: Build from source
-cargo build --release
+just setup          # first time: submodules + C/C++ deps + build
+just build-release  # subsequent release builds
+```
 
-# Generate identity
-recrypt identity new --output alice.json
+See [Development](#development) for prerequisites.
 
-# Encrypt file
-recrypt encrypt myfile.txt --for <bob-pubkey> --output myfile.enc
+### Use the CLI
 
-# Share with Bob (generates recryption key)
-recrypt share create <file-hash> --to <bob-pubkey>
+```bash
+# Create an identity (ED25519 + ML-DSA-87 keypair, stored in an encrypted wallet)
+recrypt identity new
 
-# Bob downloads (server recrypts on-the-fly)
+# Encrypt / decrypt locally (--for selects the recipient identity)
+recrypt encrypt myfile.txt --for alice --output myfile.enc
+recrypt decrypt myfile.enc --output myfile.txt
+
+# Register an account and upload a file to the proxy
+recrypt --server https://recrypt.example.com account register
+recrypt --server https://recrypt.example.com file upload myfile.enc
+
+# Share with a recipient (generates a recryption key for the proxy)
+recrypt share create <file-hash> --to <recipient-pubkey>
+
+# Recipient downloads; the proxy recrypts the wrapped key on the fly
 recrypt share download <share-id> --output myfile.txt
 ```
 
+Run `recrypt --help` (and `recrypt <command> --help`) for the full command set:
+`identity`, `encrypt`, `decrypt`, `account`, `file`, `share`, `config`, `wallet`.
+
+For a guided walkthrough see [`docs/user-guide.md`](docs/user-guide.md).
+
 ---
 
-## Key Features
+## Repository structure
 
-### 🔐 Cryptography
+```
+recrypt/
+├── crates/
+│   ├── recrypt-ffi/            # Safe Rust API over OpenFHE + liboqs + ed25519
+│   ├── recrypt-openfhe-sys/    # Low-level CXX bridge to OpenFHE C++
+│   ├── recrypt-core/           # PRE backends, hybrid encryption, signatures
+│   ├── recrypt-wire/           # Wire protocol (Gordian Envelope + Bao)
+│   ├── recrypt-storage/        # S3-compatible content-addressed storage
+│   ├── identikey-storage-auth/ # Auth service (capabilities, ownership)
+│   └── recrypt-client/         # Generated Rust HTTP client (from OpenAPI)
+├── recrypt-server/             # Recryption proxy server (Axum)
+├── recrypt-cli/                # Command-line interface
+├── recrypt-client-ts/          # Generated TypeScript HTTP client
+├── tests/e2e/                  # E2E test harness (36 tests)
+├── docs/                       # Architecture, standards, decisions
+└── vendor/                     # OpenFHE, liboqs (git submodules)
+```
 
-- **OpenFHE BFVrns** for lattice-based proxy recryption
-- **ED25519** for classical signatures
-- **ML-DSA-87** (mandatory) + optional PQ algorithms
+---
+
+## Architecture
+
+```
+                      ┌──────────────────┐
+                      │   recrypt-cli    │  workflows, wallet, HTTP client
+                      └────────┬─────────┘
+                               │ reqwest (HTTP)
+                               ▼
+                      ┌──────────────────┐
+                      │  recrypt-server  │  Axum proxy, auth middleware, routes
+                      └────────┬─────────┘
+          ┌────────────────────┼──────────────────┐
+          ▼                    ▼                  ▼
+┌──────────────────┐ ┌──────────────────┐ ┌──────────────────────────┐
+│   recrypt-core   │ │   recrypt-wire   │ │   recrypt-storage        │
+│  crypto objects  │ │   wire format    │ │  content-addressed blobs │
+└────────┬─────────┘ └──────────────────┘ └──────────────────────────┘
+         ▼
+┌──────────────────┐           ┌──────────────────────────┐
+│   recrypt-ffi    │           │  identikey-storage-auth  │
+│  OpenFHE+liboqs  │           │  capabilities, ownership │
+└────────┬─────────┘           └──────────────────────────┘
+         ▼
+┌────────────────────┐
+│ recrypt-openfhe-sys│  raw CXX bridge to OpenFHE C++
+└────────────────────┘
+```
+
+See [`docs/architecture.md`](docs/architecture.md) for per-crate ownership and
+the full dependency graph.
+
+### Crates
+
+| Crate                    | Purpose                                      |
+| ------------------------ | -------------------------------------------- |
+| `recrypt-ffi`            | Safe Rust API over OpenFHE + liboqs          |
+| `recrypt-openfhe-sys`    | Low-level CXX bridge to OpenFHE C++          |
+| `recrypt-core`           | PRE backends, hybrid encryption, signatures  |
+| `recrypt-wire`           | Wire protocol (Gordian Envelope + Bao)       |
+| `recrypt-storage`        | S3-compatible content-addressed storage      |
+| `identikey-storage-auth` | Auth service for storage access              |
+| `recrypt-client`         | Generated Rust HTTP client                   |
+
+### Binaries & clients
+
+| Component           | Purpose                                                   |
+| ------------------- | -------------------------------------------------------- |
+| `recrypt-server`    | Recryption proxy (holds recryption keys, never secrets)  |
+| `recrypt-cli`       | Command-line interface                                    |
+| `recrypt-client-ts` | Generated TypeScript client for the proxy API            |
+
+Both HTTP clients are generated from the utoipa-annotated handlers in
+`recrypt-server` (single source of truth → `openapi.json` → codegen). Regenerate
+with `just openapi-regen`.
+
+---
+
+## Key features
+
+### Cryptography
+- **OpenFHE BFV** lattice-based proxy recryption (post-quantum)
+- **ED25519** (classical) + **ML-DSA-87** (post-quantum) dual signatures
 - **Multi-signature** authorization (all keys must sign)
+- **Blake3** for all hashing; **Blake3/Bao** tree mode for streaming integrity
+- **XChaCha20 + Bao** authenticated symmetric encryption
 
-### 💾 Storage
+### Storage
+- S3-compatible storage (Minio for dev, any S3 backend for prod)
+- Content-addressed by Blake3 hash
+- Separate auth service controls access by public key → file hash
+- Chunked streaming for large files
 
-- **S3-compatible** storage layer (Minio for dev, any S3 for prod)
-- **Authenticated access** via file hash lookup
-- **Chunked streaming** for large files
-- **Content-addressed** storage
-
-### 🎯 HDprint Identifiers
-
-- **Error correction**: Automatically fixes single-character typos
-- **Case restoration**: Type lowercase, get proper mixed-case
-- **Hierarchical scaling**: 17.6 to 158+ bits security
-- **Human-friendly**: Base58 encoding, visual separators
-
-### 🌐 API & Interfaces
-
-- **HTTP REST API** (Axum framework)
-- **CLI application** with rich interactions
-- **Minimal TUI** for visual operations
+### API & interfaces
+- HTTP REST API (Axum) with OpenAPI schema
+- CLI with encrypted wallet (Argon2id + XChaCha20-Poly1305), OS-keychain caching
+- Generated Rust and TypeScript clients
 
 ---
 
-## Design Philosophy
+## Security model
 
-### Key Decisions
+### Trust assumptions
 
-| Area             | Decision                                           |
-| ---------------- | -------------------------------------------------- |
-| **Encryption**   | Hybrid KEM-DEM with pluggable PRE backends         |
-| **Hashing**      | Blake3 everywhere (HMAC-SHA3-512 for HDprint only) |
-| **Verification** | Blake3/Bao tree mode for streaming                 |
-| **Wire format**  | Gordian Envelope (primary), ASCII armor (export)   |
-| **Storage**      | Content-addressed S3 + auth service                |
-| **Signatures**   | ED25519 (classical) + ML-DSA-87 (post-quantum)     |
+| Component        | Trust level  | Notes                                            |
+| ---------------- | ------------ | ------------------------------------------------ |
+| Storage provider | Untrusted    | Sees only ciphertext + wrapped keys              |
+| Recryption proxy | Semi-trusted | Has recryption keys, not secret keys; self-hostable |
+| Auth service     | Trusted      | Controls access; can be self-hosted              |
+| Client           | Trusted      | Holds secret keys                                |
 
-### Changes from Python Prototype
+### Cryptographic guarantees
+- **E2E encryption** — plaintext never leaves the client
+- **Quantum resistance** — lattice-based PRE + ML-DSA-87 signatures
+- **Per-file keys** — fresh random symmetric key per file
+- **Streaming integrity** — Blake3/Bao verification during download
 
-| Removed             | Added                                 |
-| ------------------- | ------------------------------------- |
-| ECDSA/SECP256k1     | Pluggable PRE backends (lattice + EC) |
-| Naive file storage  | S3-compatible + auth service          |
-| Custom Merkle trees | Blake3/Bao streaming verification     |
-| Mixed hashing       | Blake3 standardized                   |
+See [`docs/threat-model.md`](docs/threat-model.md) and
+[`docs/security-tiers.md`](docs/security-tiers.md) for the full model.
 
-**Clean Slate:** No compatibility with Python prototype (different serialization, no production deployments)
+---
+
+## Development
+
+### Prerequisites
+- Rust (stable, edition 2024)
+- OpenFHE C++ library + liboqs (built via `just build-deps`; vendored as submodules)
+- OpenMP — `brew install libomp` on macOS
+- Docker (for the Minio S3 development environment)
+
+### Common commands (via [Just](https://github.com/casey/just))
+
+```bash
+just build            # build the workspace
+just test             # run all tests (--test-threads=1; OpenFHE global state)
+just lint             # clippy
+just format           # rustfmt
+just test-e2e         # E2E harness (mock backend, ~30s)
+just minio-up         # start Minio for S3 development
+just openapi-regen    # regenerate Rust + TS clients from the server schema
+```
+
+### Testing
+- Per-crate unit tests, with `proptest` property tests for crypto operations
+- E2E harness at `tests/e2e/` — 36 tests (19 CLI + 17 API), ~30s on the mock backend
+- S3 tests gated behind `--features s3-tests` (requires Docker/Minio)
+- Tests validate **semantic** correctness (`decrypt(encrypt(x)) == x`), not byte
+  equality — OpenFHE serialization is non-deterministic. See
+  [`docs/non-determinism.md`](docs/non-determinism.md).
 
 ---
 
 ## Documentation
 
-Start with [`docs/architecture.md`](docs/architecture.md) for the
-system overview. Historical phase plans are in
-[`docs/plans/archive/`](docs/plans/archive/).
+Start with [`docs/architecture.md`](docs/architecture.md) for the system
+overview, then [`docs/user-guide.md`](docs/user-guide.md) for usage.
 
 ### Design documents
 
@@ -181,113 +240,57 @@ system overview. Historical phase plans are in
 | `docs/security-tiers.md`                 | Security tier hierarchy                |
 | `docs/non-determinism.md`                | Crypto testing strategy                |
 | `docs/openfhe-threading-model.md`        | OpenFHE global-state threading rules   |
+| `docs/http-api-reference.md`             | HTTP API reference                     |
+| `docs/deployment.md`                     | Deployment guide                       |
 
 ### Standards (interop specs)
 
-| Document                                       | Description                                |
-| ---------------------------------------------- | ------------------------------------------ |
-| `docs/standards/recrypt-key-material-v1.md`    | Key material serialization                 |
-| `docs/standards/xchacha20-bao-aead.md`         | Streaming AEAD construction                |
-| `docs/standards/wallet-envelope-format.md`     | Encrypted wallet envelope format           |
-| `docs/standards/identity-self-signature.md`    | Identity self-signature wire shape         |
-| `docs/standards/dcbor-determinism.md`          | dCBOR interop contract                     |
-| `docs/standards/hashing-standard.md`           | Blake3 standardization                     |
+| Document                                    | Description                      |
+| ------------------------------------------- | -------------------------------- |
+| `docs/standards/recrypt-key-material-v1.md` | Key material serialization       |
+| `docs/standards/xchacha20-bao-aead.md`      | Streaming AEAD construction       |
+| `docs/standards/wallet-envelope-format.md`  | Encrypted wallet envelope format |
+| `docs/standards/identity-self-signature.md` | Identity self-signature shape    |
+| `docs/standards/dcbor-determinism.md`       | dCBOR interop contract           |
+| `docs/standards/hashing-standard.md`        | Blake3 standardization           |
 
----
-
-## Development
-
-### Prerequisites
-
-- Rust 1.75+ (stable)
-- OpenFHE C++ library
-- liboqs (post-quantum crypto)
-- Docker (for Minio development environment)
-
-### Python Prototype (Archived)
-
-The original Python proof-of-concept is preserved in `python-prototype/` for reference. It demonstrated the feasibility of proxy recryption with post-quantum signatures and includes a full TUI implementation.
-
-**To explore the prototype:**
-
-```bash
-cd python-prototype
-# See python-prototype/README.md for setup instructions
-```
-
-**Note:** The Python implementation is archived and not actively maintained. All new development is in Rust.
+Architectural decisions live in [`docs/decisions/`](docs/decisions/); read them
+before relitigating long-tail design questions.
 
 ---
 
 ## Terminology
 
-- **Recryption**: Transformation of ciphertext from one key to another (not "re-encryption")
-- **Recryption Key**: The key that enables recryption transformation (not "rekey" or "re-encryption key")
-- **Recrypted**: Data that has undergone recryption transformation
+- **Recryption** — transformation of ciphertext from one key to another (not "re-encryption")
+- **Recryption key** — the key enabling that transformation (not "rekey")
+- **Recrypted** — data that has undergone recryption
 
-This terminology is standardized throughout the Rust implementation.
-
----
-
-## Architecture Highlights
-
-### Crates
-
-| Crate                    | Purpose                                     |
-| ------------------------ | ------------------------------------------- |
-| `recrypt-ffi`            | OpenFHE + liboqs FFI bindings               |
-| `recrypt-core`           | PRE backends, hybrid encryption, signatures |
-| `recrypt-wire`          | Wire protocol (Gordian Envelope + Bao)      |
-| `recrypt-storage`        | S3-compatible storage client                |
-| `recrypt-hdprint`        | Self-correcting identifiers                 |
-| `identikey-storage-auth` | Auth service for storage access             |
-
-### Binaries
-
-| Binary           | Purpose                                                       |
-| ---------------- | ------------------------------------------------------------- |
-| `recrypt-server` | Recryption proxy (streams KEM ciphertext, holds recrypt keys) |
-| `recrypt-cli`    | Command-line interface                                        |
-| `recrypt-tui`    | Minimal terminal UI                                           |
-
----
-
-## Security Model
-
-### Trust Assumptions
-
-| Component        | Trust Level  | Notes                                            |
-| ---------------- | ------------ | ------------------------------------------------ |
-| Storage provider | Untrusted    | Sees only ciphertext + wrapped keys              |
-| Recryption proxy | Semi-trusted | Has recrypt keys, not secret keys; self-hostable |
-| Auth service     | Trusted      | Controls access; can be self-hosted              |
-| Client           | Trusted      | Holds secret keys                                |
-
-### Cryptographic Guarantees
-
-- **E2E Encryption**: Only key holders decrypt (plaintext never leaves client)
-- **Quantum Resistance**: Lattice-based PRE + ML-DSA-87 signatures
-- **Forward Secrecy**: Per-file random symmetric keys
-- **Streaming Integrity**: Blake3/Bao verification during download
-
----
-
-## Contributing
-
-See [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) for current phase and open tasks.
+Standardized throughout the codebase.
 
 ---
 
 ## License
 
-[License TBD]
+Recrypt is **dual-licensed**:
+
+- **Noncommercial use** — licensed under the
+  [PolyForm Noncommercial License 1.0.0](LICENSE). Personal, research,
+  educational, and nonprofit use is free, including running it in production. You
+  are **not** required to publish your own source code.
+- **Commercial use** — any use as part of a money-making product, service, or
+  business requires a commercial license from **Identikey Inc.** See
+  [LICENSE-COMMERCIAL.md](LICENSE-COMMERCIAL.md) or contact
+  [sales@identikey.io](mailto:sales@identikey.io).
+
+If you are not making money with Recrypt, the noncommercial license covers you.
+If you are, you need a commercial license.
+
+Vendored third-party dependencies under `vendor/` (e.g. OpenFHE, liboqs) remain
+under their own licenses.
 
 ---
 
 ## Links
 
 - **Website**: [identikey.io/recryption](https://identikey.io/recryption)
-
----
-
-**→ [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md)** for full implementation details
+- **Repository**: [github.com/identikey/recrypt](https://github.com/identikey/recrypt)

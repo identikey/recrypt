@@ -2,6 +2,7 @@
 name = "recrypt-client"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 description = "Generated Rust HTTP client for the recrypt proxy API (epic recrypt-nj1)."
 
 [dependencies]
