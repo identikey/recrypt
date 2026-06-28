@@ -29,9 +29,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let challenge = ChallengeIssuer::new("papyrus", 120).issue(&mut nonces, now);
     println!("issued challenge for audience 'papyrus'");
 
-    // 2. Claimant loads (or creates) a Secure Enclave identity and responds.
-    //    Creating/using the key presents Touch ID.
-    let signer = SecureEnclaveSigner::load_or_create("io.identikey.papyrus.device")?;
+    // 2. Claimant creates a Secure Enclave identity and responds. We use an EPHEMERAL
+    //    (session-only) key here so the demo needs no keychain entitlement; the real app
+    //    uses `load_or_create` for a persistent device key. Signing presents Touch ID.
+    let signer = SecureEnclaveSigner::create_ephemeral("io.identikey.papyrus.device")?;
     println!("device fingerprint: {}", signer.classical_public_key().fingerprint());
     let response = signer.respond(&challenge)?;
     println!("signed challenge with Secure Enclave P-256 key");
