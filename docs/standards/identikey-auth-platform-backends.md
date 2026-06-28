@@ -69,8 +69,20 @@ No hosted-domain / entitlement analog. `NCryptSignHash` returns **raw `r‖s`** 
 `NTE_BAD_KEYSET` (0x80090016) = key-not-found. CNG handles are `usize` newtypes, so the
 signer is `Send + Sync` with no wrapper (unlike macOS `SecKey`).
 
-**Linux (expected):** TPM 2.0 persistent handles (`tss-esapi`), or a software key sealed
-to the TPM; no uniform biometric prompt — "user presence" is not a standard concept.
+**Linux (done, verified on a hardware TPM):** TPM 2.0 via `tss-esapi` 7.7. No uniform
+biometric prompt — "user presence" is not a standard concept. Gotchas learned:
+- Use `PublicEccParametersBuilder::new_unrestricted_signing_key(...)`; a hand-rolled
+  builder omits the KDF scheme → runtime `WrapperError(ParamsMissing)`.
+- The TPM returns big-endian coordinates / signature components with leading zeros
+  stripped — **left-pad X, Y, r, s to 32 bytes** before assembling SEC1 / raw `r‖s`.
+- `Context` is `!Send`, so (like macOS) hold the TCTI string + cached pubkey and open a
+  `Context` per op. `create_primary` on `Hierarchy::Null` = ephemeral (no persistent TPM
+  state); `Hierarchy::Owner` + `evict_control` for persistence. `sign` needs a null
+  `HashcheckTicket`; wrap ops in `execute_with_nullauth_session`.
+- `/dev/tpmrm0` is `root:tss` mode 660 — run as a member of `tss` or via sudo; override
+  the TCTI with `TPM2TOOLS_TCTI` (e.g. `swtpm:host=…,port=…`) for a software TPM.
+- `tss-esapi-sys` ships pre-generated bindings on x86_64/aarch64 Linux, so libclang is
+  not needed unless you enable `generate-bindings`; it does need tpm2-tss via pkg-config.
 
 ## 4. Curve choice
 
