@@ -62,9 +62,12 @@ The key must (a) survive relaunch and (b) require a biometric/user-presence chec
 - Use the **file keychain** (`Location::DefaultFileKeychain`), not the data-protection
   keychain, for a Developer-ID (non-App-Store) app.
 
-**Windows (expected):** persisted CNG keys via `MS_PLATFORM_CRYPTO_PROVIDER`
-(`NCryptCreatePersistedKey` + `NCryptFinalizeKey`); user-presence via `NCRYPT_UI_POLICY`
-or a Windows Hello (`KeyCredentialManager`) gate. No hosted-domain / entitlement analog.
+**Windows (done, verified on a vTPM):** persisted CNG keys via
+`MS_PLATFORM_CRYPTO_PROVIDER` (`NCryptCreatePersistedKey` + `NCryptFinalizeKey`);
+user-presence via `NCRYPT_UI_POLICY` (interactive — gate behind a flag, not headless).
+No hosted-domain / entitlement analog. `NCryptSignHash` returns **raw `r‖s`** (no DER).
+`NTE_BAD_KEYSET` (0x80090016) = key-not-found. CNG handles are `usize` newtypes, so the
+signer is `Send + Sync` with no wrapper (unlike macOS `SecKey`).
 
 **Linux (expected):** TPM 2.0 persistent handles (`tss-esapi`), or a software key sealed
 to the TPM; no uniform biometric prompt — "user presence" is not a standard concept.
@@ -81,6 +84,11 @@ at rest under an enclave P-256 key (spec §8; tracked separately).
   version independently; don't pin the sys crate to `3`.
 - Target-gate the platform deps (`[target.'cfg(target_os = "macos")'.dependencies]`) so
   the base crate stays dependency-lean and `no_std`-friendly elsewhere.
+- **Edition-2024 `unsafe_op_in_unsafe_fn`**: calling an `unsafe fn` (every `windows`/`NCrypt`
+  and `tss-esapi` FFI call) is no longer implicitly allowed inside an `unsafe fn` body —
+  you get a warning unless you wrap each call in an explicit `unsafe { }`. Prefer making
+  helpers **safe `fn`s** that encapsulate their FFI in `unsafe { }` blocks (as both the
+  macOS and Windows backends do). This will hit the Linux `tss-esapi` backend too.
 
 ## 6. How to verify a backend without the full app
 
