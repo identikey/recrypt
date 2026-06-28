@@ -61,7 +61,7 @@ pub use verify::{verify_response, Verified, VerifyPolicy};
 
 #[cfg(target_os = "macos")]
 pub use enclave::SecureEnclaveSigner;
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 pub use enclave::TpmSigner;
 
 #[cfg(test)]

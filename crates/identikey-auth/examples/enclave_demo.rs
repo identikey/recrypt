@@ -8,7 +8,7 @@
 //! Expected output ends with `VERIFIED identity: <fingerprint>`. On other platforms this
 //! example is a no-op.
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     use identikey_auth::{
         verify_response, ChallengeIssuer, InMemoryNonceStore, Signer, VerifyPolicy,
@@ -24,7 +24,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 2. Claimant signs it with an ephemeral hardware key (no entitlement / no prompt).
     #[cfg(target_os = "macos")]
     let signer = identikey_auth::SecureEnclaveSigner::create_ephemeral("io.identikey.papyrus.device")?;
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     let signer = identikey_auth::TpmSigner::create_ephemeral()?;
 
     println!("device fingerprint: {}", signer.classical_public_key().fingerprint());
@@ -45,7 +45,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 fn main() {
-    eprintln!("enclave_demo runs on macOS (Secure Enclave) or Windows (TPM) only");
+    eprintln!("enclave_demo runs on macOS (Secure Enclave), Windows or Linux (TPM) only");
 }
