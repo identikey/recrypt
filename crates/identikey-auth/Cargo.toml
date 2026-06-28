@@ -21,5 +21,12 @@ rand_core = { workspace = true }
 zeroize = { workspace = true }
 thiserror = { workspace = true }
 
+# macOS Secure Enclave + Touch ID backend (target-gated so the base crate stays lean
+# and dependency-free on other platforms).
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "3"
+security-framework-sys = "2.17"
+core-foundation = "0.10"
+
 [dev-dependencies]
 proptest = { workspace = true }

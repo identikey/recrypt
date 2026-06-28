@@ -42,6 +42,7 @@ mod cbor;
 
 pub mod algorithm;
 pub mod challenge;
+pub mod enclave;
 pub mod error;
 pub mod key;
 pub mod nonce;
@@ -57,6 +58,9 @@ pub use key::{
 pub use nonce::{ChallengeIssuer, InMemoryNonceStore, NonceStore};
 pub use signer::{verify_classical, verify_pq, Signer, SoftwareSigner};
 pub use verify::{verify_response, Verified, VerifyPolicy};
+
+#[cfg(target_os = "macos")]
+pub use enclave::SecureEnclaveSigner;
 
 #[cfg(test)]
 mod tests {

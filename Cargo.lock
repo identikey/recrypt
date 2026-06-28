@@ -2675,11 +2675,14 @@ version = "0.1.0"
 dependencies = [
  "blake3",
  "bs58",
+ "core-foundation 0.10.1",
  "ed25519-dalek",
  "fips204",
  "p256 0.13.2",
  "proptest",
  "rand_core 0.6.4",
+ "security-framework 3.5.1",
+ "security-framework-sys",
  "thiserror 2.0.18",
  "zeroize",
 ]
@@ -4953,9 +4956,9 @@ dependencies = [
 
 [[package]]
 name = "security-framework-sys"
-version = "2.15.0"
+version = "2.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc1f0cbffaac4852523ce30d8bd3c5cdc873501d96ff467ca09b6767bb8cd5c0"
+checksum = "6ce2691df843ecc5d231c0b14ece2acc3efb62c0a398c7e1d875f3983ce020e3"
 dependencies = [
  "core-foundation-sys",
  "libc",
