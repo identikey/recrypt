@@ -41,6 +41,7 @@
 mod cbor;
 
 pub mod algorithm;
+pub mod attestation;
 pub mod challenge;
 pub mod enclave;
 pub mod error;
@@ -50,6 +51,7 @@ pub mod signer;
 pub mod verify;
 
 pub use algorithm::{ClassicalAlg, PqAlg};
+pub use attestation::{attest_node_id, verify_node_attestation, NodeAttestation};
 pub use challenge::{signing_payload, Challenge, Response, VERSION};
 pub use error::{AuthError, Result};
 pub use key::{
