@@ -16,7 +16,7 @@ pub mod windows;
 pub mod linux;
 
 #[cfg(target_os = "macos")]
-pub use macos::SecureEnclaveSigner;
+pub use macos::{SecureEnclaveEd25519Signer, SecureEnclaveSigner};
 #[cfg(target_os = "windows")]
 pub use windows::TpmSigner;
 #[cfg(target_os = "linux")]

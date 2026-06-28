@@ -28,10 +28,18 @@ use security_framework_sys::access_control::{
     kSecAccessControlBiometryCurrentSet, kSecAccessControlPrivateKeyUsage,
 };
 
+use ed25519_dalek::{Signer as _, SigningKey};
+use rand_core::RngCore;
+use zeroize::Zeroize;
+
 use crate::algorithm::ClassicalAlg;
 use crate::error::{AuthError, Result};
 use crate::key::{ClassicalPublicKey, ClassicalSignature};
 use crate::signer::Signer;
+
+/// ECIES profile used to wrap the Ed25519 seed under the Secure Enclave P-256 key:
+/// cofactor ECDH + X9.63-SHA256 KDF + AES-GCM, with a per-message ephemeral key.
+const ECIES: Algorithm = Algorithm::ECIESEncryptionCofactorVariableIVX963SHA256AESGCM;
 
 /// `SecKey` wrapper asserting thread-safety.
 ///
@@ -173,4 +181,124 @@ fn pubkey_from_seckey(key: &SecKey) -> Result<ClassicalPublicKey> {
         alg: ClassicalAlg::P256,
         bytes: point.to_encoded_point(true).as_bytes().to_vec(),
     })
+}
+
+// ===========================================================================
+// Ed25519 identity, wrapped at rest under a Secure Enclave P-256 key (§8).
+// ===========================================================================
+
+/// An **Ed25519** identity whose seed is encrypted at rest under a Touch-ID-gated
+/// Secure Enclave P-256 key (the SE cannot hold an Ed25519 key directly).
+///
+/// Wrapping uses the SE key's public half via ECIES (no prompt); each signature unwraps
+/// the seed with the SE private key (Touch ID), Ed25519-signs in memory, then zeroizes.
+/// The wrapped seed is opaque at rest — only this device's Secure Enclave can decrypt it.
+///
+/// The seed is briefly present in process memory during a signature — the deliberate,
+/// documented compromise of the wrapped-key mode (vs P-256-in-enclave, which never
+/// exposes key material). Prefer [`SecureEnclaveSigner`] (P-256) unless an Ed25519
+/// identity is specifically required.
+pub struct SecureEnclaveEd25519Signer {
+    wrapping_key: SendKey,
+    wrapped_seed: Vec<u8>,
+    public_key: ClassicalPublicKey,
+}
+
+impl SecureEnclaveEd25519Signer {
+    /// Create an ephemeral Ed25519 identity wrapped under a session-only Secure Enclave
+    /// key (no keychain persistence; no entitlement required). For tooling/CI.
+    pub fn create_ephemeral(label: &str) -> Result<Self> {
+        let key = generate_sep_key(label, false)?;
+        let (ed_public, wrapped_seed) = wrap_fresh_ed25519(&key)?;
+        Ok(Self {
+            wrapping_key: SendKey(key),
+            wrapped_seed,
+            public_key: ClassicalPublicKey {
+                alg: ClassicalAlg::Ed25519,
+                bytes: ed_public.to_vec(),
+            },
+        })
+    }
+
+    /// Load a persistent wrapped Ed25519 identity (SE wrapping key in the keychain under
+    /// `label`, wrapped seed at `<storage_dir>/device_identity.ed25519.ecies`), or create
+    /// and persist one. Persisting the SE key needs the `keychain-access-groups`
+    /// entitlement (works in the signed app).
+    pub fn load_or_create(label: &str, storage_dir: &std::path::Path) -> Result<Self> {
+        let path = storage_dir.join("device_identity.ed25519.ecies");
+        let (key, ed_public, wrapped_seed) = match load_seckey(label)? {
+            Some(key) => {
+                // File layout: ed25519 public key (32 bytes) || ECIES-wrapped seed.
+                let blob = std::fs::read(&path)
+                    .map_err(|e| AuthError::Backend(format!("read wrapped seed: {e}")))?;
+                if blob.len() < 32 {
+                    return Err(AuthError::Backend("wrapped seed file too short".into()));
+                }
+                (key, blob[..32].to_vec(), blob[32..].to_vec())
+            }
+            None => {
+                let key = generate_sep_key(label, true)?;
+                let (ed_public, wrapped_seed) = wrap_fresh_ed25519(&key)?;
+                std::fs::create_dir_all(storage_dir)
+                    .map_err(|e| AuthError::Backend(format!("create storage dir: {e}")))?;
+                let mut blob = ed_public.to_vec();
+                blob.extend_from_slice(&wrapped_seed);
+                std::fs::write(&path, &blob)
+                    .map_err(|e| AuthError::Backend(format!("write wrapped seed: {e}")))?;
+                (key, ed_public.to_vec(), wrapped_seed)
+            }
+        };
+        Ok(Self {
+            wrapping_key: SendKey(key),
+            wrapped_seed,
+            public_key: ClassicalPublicKey {
+                alg: ClassicalAlg::Ed25519,
+                bytes: ed_public,
+            },
+        })
+    }
+}
+
+impl Signer for SecureEnclaveEd25519Signer {
+    fn classical_public_key(&self) -> ClassicalPublicKey {
+        self.public_key.clone()
+    }
+
+    fn sign_classical(&self, payload: &[u8]) -> Result<ClassicalSignature> {
+        // Unwrap the seed via the SE private key — Touch ID is presented here.
+        let mut seed_bytes = self
+            .wrapping_key
+            .0
+            .decrypt_data(ECIES, &self.wrapped_seed)
+            .map_err(|e| AuthError::Backend(format!("Secure Enclave unwrap (Touch ID): {e}")))?;
+        let mut seed: [u8; 32] = seed_bytes
+            .as_slice()
+            .try_into()
+            .map_err(|_| AuthError::Backend("unwrapped seed has wrong length".into()))?;
+        let signing_key = SigningKey::from_bytes(&seed);
+        let sig = signing_key.sign(payload);
+        // Scrub the seed from memory (SigningKey zeroizes itself on drop).
+        seed.zeroize();
+        seed_bytes.zeroize();
+        Ok(ClassicalSignature {
+            alg: ClassicalAlg::Ed25519,
+            bytes: sig.to_bytes().to_vec(),
+        })
+    }
+}
+
+/// Generate a fresh Ed25519 seed, wrap it under the Secure Enclave key's public half
+/// (ECIES), and return `(ed25519_public_key, wrapped_seed)`. The seed is zeroized.
+fn wrap_fresh_ed25519(se_key: &SecKey) -> Result<([u8; 32], Vec<u8>)> {
+    let se_public = se_key
+        .public_key()
+        .ok_or_else(|| AuthError::Backend("no public key on Secure Enclave key".into()))?;
+    let mut seed = [0u8; 32];
+    rand_core::OsRng.fill_bytes(&mut seed);
+    let ed_public = SigningKey::from_bytes(&seed).verifying_key().to_bytes();
+    let wrapped = se_public
+        .encrypt_data(ECIES, &seed)
+        .map_err(|e| AuthError::Backend(format!("Secure Enclave ECIES wrap: {e}")))?;
+    seed.zeroize();
+    Ok((ed_public, wrapped))
 }
