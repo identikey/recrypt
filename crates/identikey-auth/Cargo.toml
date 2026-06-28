@@ -28,5 +28,13 @@ security-framework = "3"
 security-framework-sys = "2.17"
 core-foundation = "0.10"
 
+# Windows TPM (CNG Platform Crypto Provider) + Windows Hello backend.
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.62", features = [
+    "Win32_Security_Cryptography",
+    "Win32_Foundation",
+] }
+sha2 = "0.10"
+
 [dev-dependencies]
 proptest = { workspace = true }
