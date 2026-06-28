@@ -15,7 +15,7 @@ use crate::key::{ClassicalPublicKey, ClassicalSignature, PqPublicKey, PqSignatur
 /// Implementors provide the classical key + signing operation (and optionally a PQ
 /// key); [`Signer::respond`] assembles the full [`Response`] with correct
 /// domain-separation, so backends never touch the wire format.
-pub trait Signer {
+pub trait Signer: Send + Sync {
     fn classical_public_key(&self) -> ClassicalPublicKey;
     fn sign_classical(&self, payload: &[u8]) -> Result<ClassicalSignature>;
 
