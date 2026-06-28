@@ -1,0 +1,25 @@
+[package]
+name = "identikey-auth"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "IdentiKey hardware-enclave-backed challenge/response authentication protocol"
+
+[dependencies]
+# Classical signatures
+ed25519-dalek = { workspace = true }
+p256 = { version = "0.13", features = ["ecdsa"] }
+# Post-quantum signatures (FIPS 204 / ML-DSA), pure Rust, no C deps
+fips204 = "0.4"
+# Fingerprints + identifiers
+blake3 = "1"
+bs58 = { workspace = true }
+# RNG for keygen + nonces
+rand_core = { workspace = true }
+# Hygiene + errors
+zeroize = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
