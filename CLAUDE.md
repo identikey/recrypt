@@ -139,6 +139,7 @@ recrypt/
 ## Terminology
 
 **Consistent throughout codebase:**
+- "Recrypt" (capitalized) when naming the project; lowercase `recrypt` only for the CLI command, crate names, and the operation noun ("recrypt key"). Never "ReCrypt".
 - "Recryption" (not "re-encryption")
 - "Recryption key" (not "rekey" or "re-encryption key")
 - "Recrypted" (data that has undergone recryption)
