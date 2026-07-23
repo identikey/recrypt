@@ -2,7 +2,7 @@
 name = "identikey-storage-auth"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
+license = "AGPL-3.0-or-later"
 description = "Authorization layer for content-addressed storage"
 
 [features]

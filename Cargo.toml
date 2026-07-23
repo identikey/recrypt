@@ -20,7 +20,7 @@ exclude = ["crates/recrypt-ffi/fuzz"]
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-license = "PolyForm-Noncommercial-1.0.0"
+license = "MIT OR Apache-2.0"
 repository = "https://github.com/identikey/recrypt"
 
 [workspace.dependencies]

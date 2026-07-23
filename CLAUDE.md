@@ -174,6 +174,15 @@ recrypt/
 - **Security First:** Never expose secret keys or plaintext in logs/commits
 - **Git Submodules:** OpenFHE and other deps are in `vendor/` as submodules
 
+## Licensing
+
+Per-crate split (authoritative: `license` field in each crate's Cargo.toml, map in `LICENSE`):
+- Core library crates (`recrypt-core`, `recrypt-ffi`, `recrypt-openfhe-sys`, `recrypt-wire`, `recrypt-storage`, `recrypt-client`, `identikey-auth`): **MIT OR Apache-2.0** — publishable to crates.io, embeddable anywhere.
+- Deployable stack (`recrypt-server`, `recrypt-cli`, `identikey-storage-auth`): **AGPL-3.0-or-later**, with a commercial license from Identikey Inc. as the carve-out (`LICENSE-COMMERCIAL.md`).
+- Permissive crates must never depend on AGPL crates. New library crates default to MIT OR Apache-2.0 (workspace default); new services/binaries get an explicit `license = "AGPL-3.0-or-later"`.
+- Contributions require the CLA (`CLA.md`), which enables the dual licensing.
+- Context: Shift Grants (EF d/acc) funded — the permissive core is the grant-funded public good.
+
 ## Decisions
 
 Architectural and process decisions live in [`docs/decisions/`](docs/decisions/).

@@ -1,0 +1,46 @@
+Recrypt
+Copyright (C) 2026 Identikey Inc. and the Recrypt contributors
+
+Recrypt is a monorepo with a per-crate license split; see the LICENSE file
+for the full map.
+
+The core library crates (recrypt-core, recrypt-ffi, recrypt-openfhe-sys,
+recrypt-wire, recrypt-storage, recrypt-client, identikey-auth) are licensed
+under your choice of the MIT License (LICENSE-MIT) or the Apache License,
+Version 2.0 (LICENSE-APACHE).
+
+The deployable stack (recrypt-server, recrypt-cli, identikey-storage-auth)
+is free software: you can redistribute it and/or modify it under the terms
+of the GNU Affero General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version. See the LICENSE-AGPL file for the full text.
+
+This program is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License
+for more details.
+
+------------------------------------------------------------------------------
+Dual licensing (AGPL crates)
+------------------------------------------------------------------------------
+
+The AGPL-licensed crates are also available under a separate commercial
+license, for organizations that wish to embed them in a proprietary product
+or offer them as a network service without the AGPL's source-disclosure
+obligations. See LICENSE-COMMERCIAL.md, or contact sales@identikey.io.
+
+Contributions to this project are accepted under the Contributor License
+Agreement in CLA.md, which is what makes the dual-licensing model possible.
+
+------------------------------------------------------------------------------
+Third-party components
+------------------------------------------------------------------------------
+
+Recrypt builds on other open-source software distributed under its own
+license. Notably, vendored under vendor/:
+
+  - OpenFHE (openfhe-development) — BSD-2-Clause
+  - liboqs — MIT
+
+These licenses continue to apply to that code and are unaffected by
+Recrypt's licensing.

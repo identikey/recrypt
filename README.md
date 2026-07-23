@@ -271,19 +271,23 @@ Standardized throughout the codebase.
 
 ## License
 
-Recrypt is **dual-licensed**:
+Recrypt uses a per-crate license split (see [LICENSE](LICENSE) for the full
+map):
 
-- **Noncommercial use** — licensed under the
-  [PolyForm Noncommercial License 1.0.0](LICENSE). Personal, research,
-  educational, and nonprofit use is free, including running it in production. You
-  are **not** required to publish your own source code.
-- **Commercial use** — any use as part of a money-making product, service, or
-  business requires a commercial license from **Identikey Inc.** See
+- **Core library crates** (`recrypt-core`, `recrypt-ffi`, `recrypt-openfhe-sys`,
+  `recrypt-wire`, `recrypt-storage`, `recrypt-client`, `identikey-auth`) —
+  permissively licensed under **[MIT](LICENSE-MIT) OR
+  [Apache-2.0](LICENSE-APACHE)**, your choice. Use them anywhere, commercially
+  or otherwise.
+- **Deployable stack** (`recrypt-server`, `recrypt-cli`,
+  `identikey-storage-auth`) — **[AGPL-3.0-or-later](LICENSE-AGPL)**, free for
+  any use that complies with its source-sharing terms (including the network
+  clause, §13). A **commercial license** from **Identikey Inc.** is available
+  for closed products and services — see
   [LICENSE-COMMERCIAL.md](LICENSE-COMMERCIAL.md) or contact
   [sales@identikey.io](mailto:sales@identikey.io).
 
-If you are not making money with Recrypt, the noncommercial license covers you.
-If you are, you need a commercial license.
+Contributions are accepted under the [CLA](CLA.md).
 
 Vendored third-party dependencies under `vendor/` (e.g. OpenFHE, liboqs) remain
 under their own licenses.
