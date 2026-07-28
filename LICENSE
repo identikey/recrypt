@@ -32,6 +32,13 @@ commercial license available for uses the AGPL doesn't fit — see
 - `recrypt-cli` — command-line interface
 - `crates/identikey-storage-auth` — storage auth service
 
+These three carry **additional permissions** under AGPL section 7 — see
+[LICENSE-EXCEPTIONS.md](LICENSE-EXCEPTIONS.md). In short: you may link
+AGPL-incompatible cryptographic libraries (OpenSSL and relatives) and still
+convey the result under the AGPL. Speaking the wire protocol is not a
+derivative work and imposes no obligation — the copyleft boundary is the
+server, never the protocol.
+
 ## Third-party components
 
 Vendored dependencies under `vendor/` (e.g. OpenFHE — BSD-2-Clause,
