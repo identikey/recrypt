@@ -100,6 +100,7 @@ impl TestHarness {
                 sqlite_path,
             },
             nonce: NonceConfig { window_secs: 300 },
+            limits: Default::default(),
             pre_backend: backend.to_string(),
             rate_limit: RateLimitConfig {
                 per_ip_rps: 10_000,

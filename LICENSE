@@ -5,11 +5,13 @@ Copyright © 2026 Identikey Inc. (https://identikey.io)
 Recrypt is a monorepo with a per-crate license split. Check the `license`
 field in each crate's `Cargo.toml` for the authoritative answer.
 
-## Core library crates — MIT OR Apache-2.0
+## Core library crates — Apache-2.0 OR BSD-2-Clause-Patent
 
 The core cryptography and protocol crates are permissively licensed under
-your choice of the [MIT License](LICENSE-MIT) or the
-[Apache License 2.0](LICENSE-APACHE):
+your choice of the [Apache License 2.0](LICENSE-APACHE) or the
+[BSD-2-Clause Plus Patent License](LICENSE-BSD-2-CLAUSE-PATENT) — both
+carry a mandatory patent grant, which is why this pair replaces the earlier
+`MIT OR Apache-2.0` (an MIT election carries no patent protection):
 
 - `crates/recrypt-core` — hybrid encryption (KEM-DEM)
 - `crates/recrypt-ffi` — OpenFHE + liboqs FFI bindings
@@ -17,9 +19,12 @@ your choice of the [MIT License](LICENSE-MIT) or the
 - `crates/recrypt-wire` — wire protocol (Gordian Envelope + Bao)
 - `crates/recrypt-storage` — S3-compatible storage client
 - `crates/recrypt-client` — client library
-- `crates/identikey-auth` — hardware-backed identity (Secure Enclave / TPM)
 
 Use them anywhere, commercially or otherwise, no strings attached.
+
+Identity-protocol crates (`identikey-auth`, `identikey-wallet`) live in the
+[identikey-protocol](https://github.com/identikey/identikey-protocol)
+repository under the same license pair.
 
 ## Deployable stack — AGPL-3.0-or-later (or commercial)
 

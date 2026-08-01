@@ -7,7 +7,6 @@ members = [
   "crates/recrypt-wire",
   "crates/recrypt-storage",
   "crates/identikey-storage-auth",
-  "crates/identikey-auth",
   "crates/recrypt-client",
   "recrypt-server",
   "recrypt-cli",
@@ -20,7 +19,7 @@ exclude = ["crates/recrypt-ffi/fuzz"]
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-license = "MIT OR Apache-2.0"
+license = "Apache-2.0 OR BSD-2-Clause-Patent"
 repository = "https://github.com/identikey/recrypt"
 
 [workspace.dependencies]

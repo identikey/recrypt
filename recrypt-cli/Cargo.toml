@@ -24,10 +24,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.8"
 
-# Crypto for wallet encryption
-argon2 = "0.5"
-chacha20poly1305 = "0.10"
-rand = "0.8"
+# Wallet engine (file crypto, keychain caching, envelope container)
+identikey-wallet = { git = "https://github.com/identikey/identikey-protocol", branch = "main" }
 zeroize = { version = "1.7", features = ["derive"] }
 
 # Wallet body serialization (Gordian Envelope / dCBOR)
@@ -36,7 +34,6 @@ bc-envelope = "=0.43.0"
 # Output
 colored = "2"
 indicatif = "0.17"
-dialoguer = "0.11"
 
 # Paths
 directories = "5"
@@ -57,9 +54,6 @@ anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
-# OS keyring integration (platform-specific features below)
-keyring = { version = "3", default-features = false }
-
 # Workspace crates
 recrypt-core = { path = "../crates/recrypt-core" }
 recrypt-wire = { path = "../crates/recrypt-wire" }
@@ -71,12 +65,3 @@ ed25519-dalek = "2"
 assert_cmd = "2"
 predicates = "3"
 tempfile = "3"
-
-[target.'cfg(target_os = "macos")'.dependencies]
-security-framework = "3"
-
-[target.'cfg(target_os = "linux")'.dependencies]
-keyring = { version = "3", features = ["linux-native"] }
-
-[target.'cfg(target_os = "windows")'.dependencies]
-keyring = { version = "3", features = ["windows-native"] }

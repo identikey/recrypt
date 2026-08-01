@@ -5,9 +5,9 @@ Recrypt is a monorepo with a per-crate license split; see the LICENSE file
 for the full map.
 
 The core library crates (recrypt-core, recrypt-ffi, recrypt-openfhe-sys,
-recrypt-wire, recrypt-storage, recrypt-client, identikey-auth) are licensed
-under your choice of the MIT License (LICENSE-MIT) or the Apache License,
-Version 2.0 (LICENSE-APACHE).
+recrypt-wire, recrypt-storage, recrypt-client) are licensed under your
+choice of the Apache License, Version 2.0 (LICENSE-APACHE) or the
+BSD-2-Clause Plus Patent License (LICENSE-BSD-2-CLAUSE-PATENT).
 
 The deployable stack (recrypt-server, recrypt-cli, identikey-storage-auth)
 is free software: you can redistribute it and/or modify it under the terms

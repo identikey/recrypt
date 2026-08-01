@@ -275,10 +275,12 @@ Recrypt uses a per-crate license split (see [LICENSE](LICENSE) for the full
 map):
 
 - **Core library crates** (`recrypt-core`, `recrypt-ffi`, `recrypt-openfhe-sys`,
-  `recrypt-wire`, `recrypt-storage`, `recrypt-client`, `identikey-auth`) —
-  permissively licensed under **[MIT](LICENSE-MIT) OR
-  [Apache-2.0](LICENSE-APACHE)**, your choice. Use them anywhere, commercially
-  or otherwise.
+  `recrypt-wire`, `recrypt-storage`, `recrypt-client`) — permissively licensed
+  under **[Apache-2.0](LICENSE-APACHE) OR
+  [BSD-2-Clause-Patent](LICENSE-BSD-2-CLAUSE-PATENT)**, your choice; both carry
+  a mandatory patent grant. Use them anywhere, commercially or otherwise.
+  (Identity-protocol crates live in
+  [identikey-protocol](https://github.com/identikey/identikey-protocol).)
 - **Deployable stack** (`recrypt-server`, `recrypt-cli`,
   `identikey-storage-auth`) — **[AGPL-3.0-or-later](LICENSE-AGPL)**, free for
   any use that complies with its source-sharing terms (including the network

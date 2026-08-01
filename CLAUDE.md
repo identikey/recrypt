@@ -177,9 +177,10 @@ recrypt/
 ## Licensing
 
 Per-crate split (authoritative: `license` field in each crate's Cargo.toml, map in `LICENSE`):
-- Core library crates (`recrypt-core`, `recrypt-ffi`, `recrypt-openfhe-sys`, `recrypt-wire`, `recrypt-storage`, `recrypt-client`, `identikey-auth`): **MIT OR Apache-2.0** — publishable to crates.io, embeddable anywhere.
+- Core library crates (`recrypt-core`, `recrypt-ffi`, `recrypt-openfhe-sys`, `recrypt-wire`, `recrypt-storage`, `recrypt-client`): **Apache-2.0 OR BSD-2-Clause-Patent** — publishable to crates.io, embeddable anywhere; both options carry a mandatory patent grant (never add an MIT election — see identikey-core's licensing-and-commons doctrine, Gap 2).
 - Deployable stack (`recrypt-server`, `recrypt-cli`, `identikey-storage-auth`): **AGPL-3.0-or-later**, with a commercial license from Identikey Inc. as the carve-out (`LICENSE-COMMERCIAL.md`).
-- Permissive crates must never depend on AGPL crates. New library crates default to MIT OR Apache-2.0 (workspace default); new services/binaries get an explicit `license = "AGPL-3.0-or-later"`.
+- Permissive crates must never depend on AGPL crates. New library crates inherit the workspace default (Apache-2.0 OR BSD-2-Clause-Patent); new services/binaries get an explicit `license = "AGPL-3.0-or-later"`.
+- Identity-protocol code (wallet engine, hardware-backed auth) lives in the separate [identikey-protocol](https://github.com/identikey/identikey-protocol) repo; `recrypt-cli` consumes `identikey-wallet` as a git dependency and layers PRE key material on top via the `WalletIdentity` trait (`recrypt-cli/src/wallet/mod.rs`).
 - Contributions require the CLA (`CLA.md`), which enables the dual licensing.
 - Context: Shift Grants (EF d/acc) funded — the permissive core is the grant-funded public good.
 
