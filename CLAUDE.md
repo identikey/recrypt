@@ -191,6 +191,8 @@ Read that directory before relitigating questions like:
 
 - Wallet identity envelope vs. unified codegen schema (D-1)
 - TS client distribution model (D-2)
+- Capability tokens vs. RBAC; field-scoped recryption; issuance-derived
+  provenance (D-5) — the recryption key *is* the bearer token
 
 Each doc states the decision, rationale, alternatives considered, and
 the reversal triggers that should reopen the question. If you're about
