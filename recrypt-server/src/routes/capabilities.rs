@@ -11,7 +11,7 @@ use crate::state::AppState;
 use axum::{Json, extract::State, http::StatusCode};
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use ed25519_dalek::VerifyingKey;
-use identikey_storage_auth::Capability;
+use recrypt_storage_auth::Capability;
 use recrypt_core::sign::{VerifyPolicy, VerifyingKeys};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;

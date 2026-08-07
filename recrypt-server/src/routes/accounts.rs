@@ -8,7 +8,7 @@ use axum::{
     http::StatusCode,
 };
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
-use identikey_storage_auth::{AccountRecord, PublicKeyFingerprint};
+use recrypt_storage_auth::{AccountRecord, PublicKeyFingerprint};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -178,7 +178,7 @@ pub async fn list_files(
     Path(fingerprint): Path<String>,
 ) -> ServerResult<Json<Vec<FileInfo>>> {
     use blake3::Hash;
-    use identikey_storage_auth::PublicKeyFingerprint;
+    use recrypt_storage_auth::PublicKeyFingerprint;
 
     let fp = PublicKeyFingerprint::from_base58(&fingerprint)
         .ok_or_else(|| ServerError::BadRequest("Invalid fingerprint".into()))?;

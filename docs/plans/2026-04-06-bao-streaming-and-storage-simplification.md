@@ -134,7 +134,7 @@ s3://recrypt-store/
 - **S3 key = base58(bao_hash) = base58(blake3(ciphertext))** — one
   authoritative content identifier across the whole system. Same value
   that appears in `EncryptedFileProto.bao_hash`, same value used by
-  `identikey-storage-auth` as a content address, same value iroh-blobs
+  `recrypt-storage-auth` as a content address, same value iroh-blobs
   would use as a blob ID for the same bytes.
 
 The `.obao` suffix matches iroh-blobs' naming (`{hash}.obao4` where `4` is

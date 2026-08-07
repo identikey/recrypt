@@ -2657,31 +2657,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "identikey-storage-auth"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "bc-components",
- "bc-envelope",
- "blake3",
- "bs58",
- "ed25519-dalek",
- "rand 0.8.5",
- "recrypt-core",
- "recrypt-ffi",
- "recrypt-storage",
- "recrypt-wire",
- "rusqlite",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tokio-rusqlite",
- "tracing",
-]
-
-[[package]]
 name = "identikey-wallet"
 version = "0.1.0"
 source = "git+https://github.com/identikey/identikey-protocol?branch=main#241f313cbda9f92b45665de6910ec794dbf24f8b"
@@ -4323,12 +4298,12 @@ dependencies = [
  "ed25519-dalek",
  "figment",
  "http 1.4.0",
- "identikey-storage-auth",
  "libc",
  "prost",
  "recrypt-core",
  "recrypt-ffi",
  "recrypt-storage",
+ "recrypt-storage-auth",
  "recrypt-wire",
  "reqwest 0.12.28",
  "rusqlite",
@@ -4362,6 +4337,31 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+]
+
+[[package]]
+name = "recrypt-storage-auth"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bc-components",
+ "bc-envelope",
+ "blake3",
+ "bs58",
+ "ed25519-dalek",
+ "rand 0.8.5",
+ "recrypt-core",
+ "recrypt-ffi",
+ "recrypt-storage",
+ "recrypt-wire",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-rusqlite",
+ "tracing",
 ]
 
 [[package]]

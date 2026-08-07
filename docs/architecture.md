@@ -49,7 +49,7 @@ integrity-verified with **Blake3 + Bao** streaming hashes.
          │                    └── (converts core ↔ envelope)
          ▼
 ┌──────────────────┐           ┌──────────────────────────┐
-│  recrypt-ffi     │           │  identikey-storage-auth  │
+│  recrypt-ffi     │           │  recrypt-storage-auth  │
 │  safe Rust for   │           │  capabilities, ownership,│
 │  OpenFHE + liboqs│           │  provider index          │
 │  + ed25519       │           └──────────────────────────┘
@@ -185,7 +185,7 @@ The wire format is [Gordian Envelope](https://developer.blockchaincommons.com/en
 **Depends on:** `bc-envelope`, `bc-dcbor`, `bc-components`, `blake3`,
 `bs58`, `recrypt-core`, `ed25519-dalek`.
 
-**Downstream consumers:** `recrypt-server`, `recrypt-cli`, `identikey-storage-auth`.
+**Downstream consumers:** `recrypt-server`, `recrypt-cli`, `recrypt-storage-auth`.
 
 ---
 
@@ -217,11 +217,11 @@ Blake3 hash. Content addressing makes blobs immutable by construction.
 `aws-sdk-s3` (optional).
 
 **Downstream:** `recrypt-server` (via `Arc<dyn BlobStorage>` in `AppState`),
-`identikey-storage-auth` (dev-dep for integration tests).
+`recrypt-storage-auth` (dev-dep for integration tests).
 
 ---
 
-### `identikey-storage-auth` — capability-based auth service
+### `recrypt-storage-auth` — capability-based auth service
 
 **Owns:**
 
@@ -292,7 +292,7 @@ grants. It is **trusted**. Capabilities are forgery-resistant via multi-sig.
 - **Persistent state:** Four trait-backed stores with in-memory and SQLite
   implementations:
   - `AccountStore` — account registration and lookup (from
-    `identikey-storage-auth`).
+    `recrypt-storage-auth`).
   - `ShareStore` — share policy creation/deletion/listing (local to
     `recrypt-server`).
   - `NonceStore` — replay prevention with periodic GC (local to
@@ -326,7 +326,7 @@ It does **not** hold:
 - possession of a revoked recrypt key (deletion is atomic).
 
 **Depends on:** `recrypt-core`, `recrypt-wire`, `recrypt-storage`,
-`identikey-storage-auth`, `recrypt-ffi` (indirect), `axum`, `tower`.
+`recrypt-storage-auth`, `recrypt-ffi` (indirect), `axum`, `tower`.
 
 ---
 
@@ -478,7 +478,7 @@ docs under [plans/](plans/). Two sprints are queued, in order:
 2. **[2026-04-07 — Production readiness](plans/archive/2026-04-07-production-readiness.md)**
    Trait-backed state stores with SQLite-default / in-memory-for-tests
    implementations via `tokio-rusqlite` + WAL. Boundary refactor:
-   `AccountStore` moves to `identikey-storage-auth`, `ProviderIndex`
+   `AccountStore` moves to `recrypt-storage-auth`, `ProviderIndex`
    moves to `recrypt-storage`. Env-var config via `figment`. Drop-in
    `tower-governor` rate limiting. This is the "make it real" sprint —
    turns the prototype into something you can actually run.

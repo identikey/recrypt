@@ -35,7 +35,7 @@ keep up with what's in their drive and in their groups.
 - Tombstones for deleted files so sync knows to remove local copies
 
 **Where the primitives already live:**
-`identikey-storage-auth::OwnershipStore::list_owned` and
+`recrypt-storage-auth::OwnershipStore::list_owned` and
 `list_shared_with` give us the raw "which file hashes" queries.
 Everything above those is UX metadata (names, folders, tags,
 timestamps) that does not exist yet. That metadata should probably
@@ -404,7 +404,7 @@ will cover reworking recipient PRE public-key discovery now that
 `pre_pk` has been removed from `AccountRecord`: PRE pubkeys are
 capability artifacts, not identity. The sprint will promote the
 existing `AccessGrant` / `Capability` scaffolding in
-`crates/identikey-storage-auth/src/{grant.rs,capability.rs}` into a
+`crates/recrypt-storage-auth/src/{grant.rs,capability.rs}` into a
 first-class `GrantStore` (in-memory impl already landed; SQLite impl
 pending) wired into `AppState`, add keyspace-scoped PRE key bundles
 attached to grants, and re-enable `recrypt-cli share create` against

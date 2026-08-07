@@ -6,7 +6,7 @@ of this repository:
 
 - `recrypt-server`
 - `recrypt-cli`
-- `crates/identikey-storage-auth`
+- `crates/recrypt-storage-auth`
 
 They apply **only** to those components, and only when you are exercising rights
 under the AGPL. If you hold a commercial license (see

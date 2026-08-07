@@ -1,4 +1,4 @@
-//! identikey-storage-auth: Authorization for content-addressed storage
+//! recrypt-storage-auth: Authorization for content-addressed storage
 //!
 //! Provides ownership tracking, capability issuance, and provider indexing
 //! for the Recrypt storage layer.
@@ -14,7 +14,7 @@
 //!
 //! ```rust,ignore
 //! use std::collections::BTreeSet;
-//! use identikey_storage_auth::{Capability, Permission, SubjectKind};
+//! use recrypt_storage_auth::{Capability, Permission, SubjectKind};
 //!
 //! let cap = Capability::new(
 //!     file_hash,

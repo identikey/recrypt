@@ -189,7 +189,7 @@ pub struct AccessGrant {
 ```
 
 Grants scaffolding already exists in
-[`crates/identikey-storage-auth/src/grant.rs`](../../crates/identikey-storage-auth/src/grant.rs).
+[`crates/recrypt-storage-auth/src/grant.rs`](../../crates/recrypt-storage-auth/src/grant.rs).
 This sprint wires it into the Keyspace flow and adds a store trait
 (`GrantStore`, already scaffolded in the same sprint as production
 readiness).
@@ -398,12 +398,12 @@ counter and enforcement is natural.
 
 | Concept | Crate | Rationale |
 |---|---|---|
-| `KeyspaceDoc`, `Member`, `Capability`, `DecryptionPolicy`, `RotationMode` | `identikey-storage-auth` | Identity + authorization types |
-| `AccessGrant`, `GrantId` | `identikey-storage-auth` (done) | Already scaffolded |
-| `KeyspaceStore` trait + InMemory/Sqlite impls | `identikey-storage-auth` | Matches AccountStore pattern |
-| `GrantStore` trait + InMemory (done) / Sqlite | `identikey-storage-auth` | Scaffolded; add Sqlite |
-| Signature verification, chain validation | `identikey-storage-auth` | Pure auth logic |
-| HD epoch key derivation | `identikey-storage-auth` (via IdentiKey HD primitives) | Keyed on the keyspace HD root |
+| `KeyspaceDoc`, `Member`, `Capability`, `DecryptionPolicy`, `RotationMode` | `recrypt-storage-auth` | Identity + authorization types |
+| `AccessGrant`, `GrantId` | `recrypt-storage-auth` (done) | Already scaffolded |
+| `KeyspaceStore` trait + InMemory/Sqlite impls | `recrypt-storage-auth` | Matches AccountStore pattern |
+| `GrantStore` trait + InMemory (done) / Sqlite | `recrypt-storage-auth` | Scaffolded; add Sqlite |
+| Signature verification, chain validation | `recrypt-storage-auth` | Pure auth logic |
+| HD epoch key derivation | `recrypt-storage-auth` (via IdentiKey HD primitives) | Keyed on the keyspace HD root |
 | Opaque PRE pubkey blobs in vault | `recrypt-storage` | Content-addressed bytes |
 | KeyspaceDoc blobs in vault (optional backup) | `recrypt-storage` | Content-addressed bytes |
 | Keyspace/Grant index tables | `recrypt-server` | Fast metadata cache |
@@ -411,7 +411,7 @@ counter and enforcement is natural.
 | Personal list (my keyspaces) | `recrypt-server` routes + IdentiKey client overlay | Source of truth + user overlay |
 | CLI commands (`keyspace create`, `keyspace add-member`, etc.) | `recrypt-cli` | User-facing |
 
-**No new crate.** Keyspace is core to identikey-storage-auth's job.
+**No new crate.** Keyspace is core to recrypt-storage-auth's job.
 The temptation to create `recrypt-keyspace` as a shared crate is
 rejected on the principle of avoiding proliferation — keyspace logic
 is auth logic.
@@ -520,7 +520,7 @@ No separate `Group` type. Same primitive, different parameters.
 
 1. Define `KeyspaceDoc`, `Member`, `Capability`, `DecryptionPolicy`,
    `RotationMode`, `KeyspaceId`, `KeyspaceDocHash` in
-   `crates/identikey-storage-auth/src/keyspace.rs`.
+   `crates/recrypt-storage-auth/src/keyspace.rs`.
 2. Define `KeyspaceStore` async trait with `InMemoryKeyspaceStore` impl.
 3. Signature verification over the doc bytes (dcbor canonical encoding
    if the envelope migration has landed; otherwise ad-hoc canonical
@@ -548,7 +548,7 @@ No separate `Group` type. Same primitive, different parameters.
 
 1. Integrate with IdentiKey HD primitives (wherever they live in the
    IdentiKey codebase — may require a dependency added to
-   `identikey-storage-auth`).
+   `recrypt-storage-auth`).
 2. `derive_epoch_pre_keypair(root: HdRoot, epoch: u64) -> PreKeypair`
 3. Publish epoch PRE pubkey to vault on each rotation; store content
    hash in `KeyspaceDoc.epoch_pre_pk`.
@@ -703,8 +703,8 @@ removed (base tier cannot enforce deletion).
   persistence foundation
 - [2026-04-07 next-steps backlog](2026-04-07-next-steps-backlog.md) —
   follow-up work including personal-list expansion
-- [crates/identikey-storage-auth/src/grant.rs](../../crates/identikey-storage-auth/src/grant.rs) —
+- [crates/recrypt-storage-auth/src/grant.rs](../../crates/recrypt-storage-auth/src/grant.rs) —
   existing grant scaffolding (this sprint extends it)
-- [crates/identikey-storage-auth/src/capability.rs](../../crates/identikey-storage-auth/src/capability.rs) —
+- [crates/recrypt-storage-auth/src/capability.rs](../../crates/recrypt-storage-auth/src/capability.rs) —
   existing capability type (to be replaced with the keyspace-scoped
   Capability enum)

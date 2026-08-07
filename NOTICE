@@ -9,7 +9,7 @@ recrypt-wire, recrypt-storage, recrypt-client) are licensed under your
 choice of the Apache License, Version 2.0 (LICENSE-APACHE) or the
 BSD-2-Clause Plus Patent License (LICENSE-BSD-2-CLAUSE-PATENT).
 
-The deployable stack (recrypt-server, recrypt-cli, identikey-storage-auth)
+The deployable stack (recrypt-server, recrypt-cli, recrypt-storage-auth)
 is free software: you can redistribute it and/or modify it under the terms
 of the GNU Affero General Public License as published by the Free Software
 Foundation, either version 3 of the License, or (at your option) any later

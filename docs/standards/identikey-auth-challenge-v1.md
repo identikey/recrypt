@@ -143,7 +143,7 @@ fingerprint := Blake3( dcbor(PublicKey) )          ; 32 bytes
 display      := base58(fingerprint)
 ```
 
-This matches recrypt's `Blake3`-of-public-key, base58 convention (`identikey-storage-auth::fingerprint`),
+This matches recrypt's `Blake3`-of-public-key, base58 convention (`recrypt-storage-auth::fingerprint`),
 generalized to be algorithm-committing. For pure-Ed25519 identities the input is the self-describing
 `{"alg":"ed25519","key":…}` map, **not** the bare 32 bytes — so IdentiKey-auth fingerprints are a distinct
 namespace from recrypt's raw-Ed25519 fingerprints by construction. (If raw-Ed25519 interop is ever needed,
@@ -238,7 +238,7 @@ cleaner and removes escaping/parse ambiguity). `version` is kept as a single int
 - **NodeId attestation (Papyrus FR5/FR6).** The same signing key attests an iroh `NodeId` by signing it
   under a `"node-attestation"` purpose tag (same domain-separation scheme as §4.3). To be specified
   alongside the Papyrus transport work (`Papyrus-0tk` / `Papyrus-rh0`).
-- **Delegation / capability chains.** Out of scope for v1; align with `identikey-storage-auth`'s
+- **Delegation / capability chains.** Out of scope for v1; align with `recrypt-storage-auth`'s
   UCAN-style capabilities when needed.
 - **HD device-key derivation** (Papyrus FR30) — multiple devices under one IdentiKey root — deferred.
 - **SLH-DSA (FIPS 205)** as a conservative hash-based PQ alternative — reserve a registry tag if needed.

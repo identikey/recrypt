@@ -8,7 +8,7 @@
 
 use std::path::PathBuf;
 
-use identikey_storage_auth::{AccountRecord, PublicKeyFingerprint};
+use recrypt_storage_auth::{AccountRecord, PublicKeyFingerprint};
 use recrypt_core::pre::BackendId;
 use recrypt_server::config::{
     Config, NonceConfig, PersistenceConfig, RateLimitConfig, StorageConfig,

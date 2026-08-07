@@ -30,7 +30,7 @@ pub async fn upload_file(
     // Look up uploader's account
     let account = {
         let fp =
-            identikey_storage_auth::PublicKeyFingerprint::from_base58(&sig_headers.fingerprint)
+            recrypt_storage_auth::PublicKeyFingerprint::from_base58(&sig_headers.fingerprint)
                 .ok_or_else(|| ServerError::BadRequest("Invalid fingerprint".into()))?;
         state
             .accounts
@@ -71,7 +71,7 @@ pub async fn upload_file(
         .map_err(|e| ServerError::Internal(format!("Storage error: {e}")))?;
 
     // Register ownership
-    let fingerprint = identikey_storage_auth::PublicKeyFingerprint::from_bytes(
+    let fingerprint = recrypt_storage_auth::PublicKeyFingerprint::from_bytes(
         *blake3::hash(&account.ed25519_pk).as_bytes(),
     );
     state
@@ -135,7 +135,7 @@ pub async fn delete_file(
     // Look up account
     let account = {
         let fp =
-            identikey_storage_auth::PublicKeyFingerprint::from_base58(&sig_headers.fingerprint)
+            recrypt_storage_auth::PublicKeyFingerprint::from_base58(&sig_headers.fingerprint)
                 .ok_or_else(|| ServerError::BadRequest("Invalid fingerprint".into()))?;
         state
             .accounts
@@ -146,7 +146,7 @@ pub async fn delete_file(
     };
 
     // Verify ownership
-    let fingerprint = identikey_storage_auth::PublicKeyFingerprint::from_bytes(
+    let fingerprint = recrypt_storage_auth::PublicKeyFingerprint::from_bytes(
         *blake3::hash(&account.ed25519_pk).as_bytes(),
     );
 

@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use identikey_storage_auth::{
+use recrypt_storage_auth::{
     AccessGrant, Capability, DecryptionPolicy, GrantStore, InMemoryGrantStore,
     InMemoryKeyspaceStore, InMemoryOwnershipStore, KeyspaceDoc, KeyspaceId, KeyspaceStore, Member,
     OwnershipStore, Permission, PublicKeyFingerprint, RotationMode, SubjectKind,

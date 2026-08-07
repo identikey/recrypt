@@ -73,10 +73,13 @@ tracker — see "Where protocol work is tracked" below.
 - `ikey` reading `recrypt.wallet` files (cross-app wallet management) needs
   a tolerant container codec that accepts multiple type strings — deferred.
   → `ikp-pus`.
-- Consider renaming `identikey-storage-auth` → `recrypt-storage-auth`; it
-  is storage authorization, not identity, and the prefix now misleads.
-  → `recrypt-5u9`. Do it before any crates.io publish so the misleading
-  name never ships in a published artifact.
+- ~~Consider renaming `identikey-storage-auth` → `recrypt-storage-auth`~~ —
+  **done 2026-08-07** (`recrypt-5u9`). Code, `Cargo.toml`s, `Justfile`,
+  `LICENSE`/`NOTICE`/`LICENSE-COMMERCIAL.md`/`LICENSE-EXCEPTIONS.md`,
+  `README.md`, `CLAUDE.md`, and the live docs were rewritten; the crate
+  stays `AGPL-3.0-or-later`. Decision records and `docs/plans/archive/`
+  keep the old name deliberately — they are historical records of what was
+  true when written, not current documentation.
 
 ## Where protocol work is tracked
 

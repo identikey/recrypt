@@ -35,7 +35,7 @@ commercial license available for uses the AGPL doesn't fit — see
 
 - `recrypt-server` — recryption proxy server
 - `recrypt-cli` — command-line interface
-- `crates/identikey-storage-auth` — storage auth service
+- `crates/recrypt-storage-auth` — storage auth service
 
 These three carry **additional permissions** under AGPL section 7 — see
 [LICENSE-EXCEPTIONS.md](LICENSE-EXCEPTIONS.md). In short: you may link

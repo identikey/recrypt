@@ -45,7 +45,7 @@ this threat model are:
 - **`recrypt-cli`** — local key management, encryption, decryption, HTTP client
 - **`recrypt-server`** — recryption proxy, HTTP API, share policy storage
 - **`recrypt-storage`** — content-addressed blob storage backends (S3, local)
-- **`identikey-storage-auth`** — ownership and capability tracking
+- **`recrypt-storage-auth`** — ownership and capability tracking
 - **`recrypt-core` / `recrypt-wire` / `recrypt-ffi`** — crypto primitives and
   wire format used by the above
 
@@ -101,7 +101,7 @@ attacker who cannot also breach those controls gains them nothing.
              │
    ┌─────────┼──────── Recryption proxy (semi-trusted) ─────────────────────────┐
    │         ▼                                                                   │
-   │    recrypt-server ─── identikey-storage-auth ─── SQLite                    │
+   │    recrypt-server ─── recrypt-storage-auth ─── SQLite                    │
    │         │                                                                   │
    │         ▼                                                                   │
    │    recrypt-storage (trait) ───────────────────────────────────────────────  │

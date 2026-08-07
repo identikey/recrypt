@@ -1,7 +1,7 @@
 use crate::config::Config;
 use crate::nonces::{InMemoryNonceStore, NonceStore, SqliteNonceStore};
 use crate::shares::{InMemoryShareStore, ShareStore, SqliteShareStore};
-use identikey_storage_auth::{
+use recrypt_storage_auth::{
     AccountStore, GrantStore, InMemoryAccountStore, InMemoryGrantStore, InMemoryKeyspaceStore,
     InMemoryOwnershipStore, KeyspaceStore, OwnershipStore, SqliteAccountStore, SqliteGrantStore,
     SqliteKeyspaceStore,

@@ -189,7 +189,7 @@ diagnostic notation with elidable salted assertions marked
 | `recrypt.identity`            | ✅ Implemented | `crates/recrypt-wire/src/identity.rs`                    |
 | `recrypt.pre-wrapped-key`     | 📝 Spec-only  | Carried as a `wrapped-key` assertion on `recrypt.encrypted-file` today; standalone envelope not yet implemented |
 | `recrypt.public-key-bundle`   | 📝 Spec-only  | `POST /accounts` body uses ad-hoc JSON; envelope variant not yet implemented |
-| `recrypt.capability`          | 📝 Spec-only  | `crates/identikey-storage-auth/src/capability.rs` still uses domain-tagged TLV; envelope migration tracked under recrypt-6aj follow-ups |
+| `recrypt.capability`          | 📝 Spec-only  | `crates/recrypt-storage-auth/src/capability.rs` still uses domain-tagged TLV; envelope migration tracked under recrypt-6aj follow-ups |
 | `recrypt.recrypt-key`         | 🚧 Speculative | Held only on the proxy; never crosses an envelope boundary today. Drop from spec unless a concrete export use case appears. |
 | `recrypt.secret-key-bundle`   | 🚧 Redundant  | Subsumed by `recrypt.identity` (which already carries secrets when present). Drop from spec. |
 | `recrypt.key-material`        | 📝 Documentary| Not an envelope — a 96-byte fixed plaintext layout (see §3.3) |
@@ -627,7 +627,7 @@ all non-elided assertions. dCBOR canonical encoding makes the
 payload byte-identical for any equivalent input ordering.
 
 Construction and verification API: see
-[`crates/identikey-storage-auth/src/capability.rs`](../crates/identikey-storage-auth/src/capability.rs).
+[`crates/recrypt-storage-auth/src/capability.rs`](../crates/recrypt-storage-auth/src/capability.rs).
 HTTP verification surface: `POST /capabilities/verify` (see
 [http-api-reference.md §2.6](http-api-reference.md#26-capabilities)).
 
@@ -709,7 +709,7 @@ See §6 for the salting / brute-force analysis.
 
 ## 5. The auth service and wrapped-key discovery
 
-The `identikey-storage-auth` crate indexes wrapped-key envelopes
+The `recrypt-storage-auth` crate indexes wrapped-key envelopes
 and answers the question "which wrapped-key should this recipient
 fetch for this file?" It does not mint wrapped-keys itself; the
 proxy does that.

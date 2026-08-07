@@ -98,7 +98,7 @@ pub async fn create_share(
 
     // Look up sender's account
     let sender_account = {
-        let fp = identikey_storage_auth::PublicKeyFingerprint::from_base58(&from_fingerprint)
+        let fp = recrypt_storage_auth::PublicKeyFingerprint::from_base58(&from_fingerprint)
             .ok_or_else(|| ServerError::BadRequest("Invalid fingerprint".into()))?;
         state
             .accounts
@@ -110,7 +110,7 @@ pub async fn create_share(
 
     // Verify recipient exists
     {
-        let to_fp = identikey_storage_auth::PublicKeyFingerprint::from_base58(&body.to_fingerprint)
+        let to_fp = recrypt_storage_auth::PublicKeyFingerprint::from_base58(&body.to_fingerprint)
             .ok_or_else(|| ServerError::BadRequest("Invalid recipient fingerprint".into()))?;
         if !state
             .accounts
@@ -232,7 +232,7 @@ pub async fn get_recrypted_share(
 
     // Look up requester's account for signature verification
     let requester_account = {
-        let fp = identikey_storage_auth::PublicKeyFingerprint::from_base58(&requester_fingerprint)
+        let fp = recrypt_storage_auth::PublicKeyFingerprint::from_base58(&requester_fingerprint)
             .ok_or_else(|| ServerError::BadRequest("Invalid fingerprint".into()))?;
         state
             .accounts
@@ -364,7 +364,7 @@ pub async fn revoke_share(
 
     // Look up requester's account
     let requester_account = {
-        let fp = identikey_storage_auth::PublicKeyFingerprint::from_base58(&requester_fingerprint)
+        let fp = recrypt_storage_auth::PublicKeyFingerprint::from_base58(&requester_fingerprint)
             .ok_or_else(|| ServerError::BadRequest("Invalid fingerprint".into()))?;
         state
             .accounts
@@ -412,7 +412,7 @@ pub async fn list_shares(
 
     // Look up account
     let account = {
-        let fp = identikey_storage_auth::PublicKeyFingerprint::from_base58(&fingerprint)
+        let fp = recrypt_storage_auth::PublicKeyFingerprint::from_base58(&fingerprint)
             .ok_or_else(|| ServerError::BadRequest("Invalid fingerprint".into()))?;
         state
             .accounts

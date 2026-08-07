@@ -31,7 +31,7 @@ use axum::{
     http::StatusCode,
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
-use identikey_storage_auth::{
+use recrypt_storage_auth::{
     AccessGrant, GrantId, KeyspaceDoc, KeyspaceDocHash, KeyspaceId, Permission,
     PublicKeyFingerprint,
 };
@@ -168,15 +168,15 @@ fn parse_grant_id(s: &str) -> ServerResult<GrantId> {
     Ok(GrantId::from_bytes(arr))
 }
 
-fn auth_err(e: identikey_storage_auth::AuthError) -> ServerError {
+fn auth_err(e: recrypt_storage_auth::AuthError) -> ServerError {
     match e {
-        identikey_storage_auth::AuthError::AlreadyExists(msg) => ServerError::Conflict(msg),
+        recrypt_storage_auth::AuthError::AlreadyExists(msg) => ServerError::Conflict(msg),
         other => ServerError::Internal(format!("Store error: {other}")),
     }
 }
 
-fn mode_to_string(mode: &identikey_storage_auth::RotationMode) -> String {
-    use identikey_storage_auth::RotationMode;
+fn mode_to_string(mode: &recrypt_storage_auth::RotationMode) -> String {
+    use recrypt_storage_auth::RotationMode;
     match mode {
         RotationMode::Create => "create".into(),
         RotationMode::Additive => "additive".into(),
@@ -188,8 +188,8 @@ fn mode_to_string(mode: &identikey_storage_auth::RotationMode) -> String {
     }
 }
 
-fn string_to_mode(s: &str) -> ServerResult<identikey_storage_auth::RotationMode> {
-    use identikey_storage_auth::RotationMode;
+fn string_to_mode(s: &str) -> ServerResult<recrypt_storage_auth::RotationMode> {
+    use recrypt_storage_auth::RotationMode;
     match s {
         "create" => Ok(RotationMode::Create),
         "additive" => Ok(RotationMode::Additive),
@@ -204,8 +204,8 @@ fn string_to_mode(s: &str) -> ServerResult<identikey_storage_auth::RotationMode>
 /// Parse `decryption_policy` JSON string. Phase-C threshold shares are
 /// not yet supported at the HTTP layer; submitting anything other than
 /// `"standalone"` is rejected loudly rather than silently rewritten.
-fn string_to_decryption_policy(s: &str) -> ServerResult<identikey_storage_auth::DecryptionPolicy> {
-    use identikey_storage_auth::DecryptionPolicy;
+fn string_to_decryption_policy(s: &str) -> ServerResult<recrypt_storage_auth::DecryptionPolicy> {
+    use recrypt_storage_auth::DecryptionPolicy;
     match s {
         "standalone" => Ok(DecryptionPolicy::Standalone),
         other => Err(ServerError::BadRequest(format!(
@@ -235,8 +235,8 @@ fn doc_to_json(doc: &KeyspaceDoc) -> KeyspaceDocJson {
                     .map(|c| c.as_str().to_string())
                     .collect(),
                 decryption_policy: match &m.decryption_policy {
-                    identikey_storage_auth::DecryptionPolicy::Standalone => "standalone".into(),
-                    identikey_storage_auth::DecryptionPolicy::ThresholdShare {
+                    recrypt_storage_auth::DecryptionPolicy::Standalone => "standalone".into(),
+                    recrypt_storage_auth::DecryptionPolicy::ThresholdShare {
                         threshold,
                         total,
                         ..
@@ -281,7 +281,7 @@ fn json_to_doc(json: &KeyspaceDocJson) -> ServerResult<KeyspaceDoc> {
                 .collect::<ServerResult<_>>()?;
             let added_by = parse_fingerprint(&m.added_by)?;
             let decryption_policy = string_to_decryption_policy(&m.decryption_policy)?;
-            Ok(identikey_storage_auth::Member {
+            Ok(recrypt_storage_auth::Member {
                 fingerprint: fp,
                 permissions: caps,
                 decryption_policy,

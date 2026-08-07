@@ -5,7 +5,7 @@ Apache-2.0) and never need a commercial license — see [LICENSE](LICENSE) for
 the full crate map.
 
 The deployable stack — `recrypt-server`, `recrypt-cli`, and
-`identikey-storage-auth` — is **dual-licensed**. You may use it under
+`recrypt-storage-auth` — is **dual-licensed**. You may use it under
 **either**:
 
 1. The **GNU Affero General Public License v3.0 or later**

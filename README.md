@@ -78,7 +78,7 @@ recrypt/
 │   ├── recrypt-core/           # PRE backends, hybrid encryption, signatures
 │   ├── recrypt-wire/           # Wire protocol (Gordian Envelope + Bao)
 │   ├── recrypt-storage/        # S3-compatible content-addressed storage
-│   ├── identikey-storage-auth/ # Auth service (capabilities, ownership)
+│   ├── recrypt-storage-auth/ # Auth service (capabilities, ownership)
 │   └── recrypt-client/         # Generated Rust HTTP client (from OpenAPI)
 ├── recrypt-server/             # Recryption proxy server (Axum)
 ├── recrypt-cli/                # Command-line interface
@@ -109,7 +109,7 @@ recrypt/
 └────────┬─────────┘ └──────────────────┘ └──────────────────────────┘
          ▼
 ┌──────────────────┐           ┌──────────────────────────┐
-│   recrypt-ffi    │           │  identikey-storage-auth  │
+│   recrypt-ffi    │           │  recrypt-storage-auth  │
 │  OpenFHE+liboqs  │           │  capabilities, ownership │
 └────────┬─────────┘           └──────────────────────────┘
          ▼
@@ -130,7 +130,7 @@ the full dependency graph.
 | `recrypt-core`           | PRE backends, hybrid encryption, signatures  |
 | `recrypt-wire`           | Wire protocol (Gordian Envelope + Bao)       |
 | `recrypt-storage`        | S3-compatible content-addressed storage      |
-| `identikey-storage-auth` | Auth service for storage access              |
+| `recrypt-storage-auth` | Auth service for storage access              |
 | `recrypt-client`         | Generated Rust HTTP client                   |
 
 ### Binaries & clients
@@ -282,7 +282,7 @@ map):
   (Identity-protocol crates live in
   [identikey-protocol](https://github.com/identikey/identikey-protocol).)
 - **Deployable stack** (`recrypt-server`, `recrypt-cli`,
-  `identikey-storage-auth`) — **[AGPL-3.0-or-later](LICENSE-AGPL)**, free for
+  `recrypt-storage-auth`) — **[AGPL-3.0-or-later](LICENSE-AGPL)**, free for
   any use that complies with its source-sharing terms (including the network
   clause, §13). A **commercial license** from **Identikey Inc.** is available
   for closed products and services — see

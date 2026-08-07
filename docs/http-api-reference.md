@@ -408,7 +408,7 @@ the signing endpoints.
 client-side, signed with the issuer's keys, presented to a relying
 party who verifies the signature against the issuer's public keys.
 See [wire-protocol.md §3.7](wire-protocol.md#37-recryptcapability)
-for the envelope wire format and `crates/identikey-storage-auth/src/capability.rs`
+for the envelope wire format and `crates/recrypt-storage-auth/src/capability.rs`
 for the construction API.
 
 This endpoint is a thin verification helper for relying parties that

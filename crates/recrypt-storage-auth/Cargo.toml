@@ -1,5 +1,5 @@
 [package]
-name = "identikey-storage-auth"
+name = "recrypt-storage-auth"
 version.workspace = true
 edition.workspace = true
 license = "AGPL-3.0-or-later"

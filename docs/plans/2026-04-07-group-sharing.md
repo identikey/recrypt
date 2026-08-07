@@ -318,7 +318,7 @@ ciphertexts don't get copied; they're shared by reference.
 
 ### 3.1 Steps
 
-1. **Data model in `identikey-storage-auth`**: add `GroupStore` trait,
+1. **Data model in `recrypt-storage-auth`**: add `GroupStore` trait,
    in-memory and SQLite impls, `Group`/`GroupMember`/`GroupFile`
    types. Schema migration.
 
@@ -481,7 +481,7 @@ generation. Deferred.
 - Existing machinery:
   - Per-file shares: `recrypt-server/src/routes/recryption.rs`
   - Recrypt key generation: `recrypt-core::pre::PreBackend::generate_recrypt_key`
-  - Ownership tracking: `identikey-storage-auth::OwnershipStore`
+  - Ownership tracking: `recrypt-storage-auth::OwnershipStore`
 - The user-facing framing ("Signal meets Dropbox"):
   [architecture.md §1](../architecture.md),
   [threat-model.md §0](../threat-model.md)

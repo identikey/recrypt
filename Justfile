@@ -289,22 +289,22 @@ check-storage:
 
 # Run auth service tests (in-memory only)
 test-auth:
-    cargo test -p identikey-storage-auth -- --test-threads=1
+    cargo test -p recrypt-storage-auth -- --test-threads=1
 
 # Run auth service tests with SQLite
 test-auth-sqlite:
-    cargo test -p identikey-storage-auth --features sqlite -- --test-threads=1
+    cargo test -p recrypt-storage-auth --features sqlite -- --test-threads=1
 
 # Check auth service crate
 check-auth:
-    cargo check -p identikey-storage-auth
-    cargo check -p identikey-storage-auth --features sqlite
-    cargo clippy -p identikey-storage-auth -- -D warnings
-    cargo clippy -p identikey-storage-auth --features sqlite -- -D warnings
+    cargo check -p recrypt-storage-auth
+    cargo check -p recrypt-storage-auth --features sqlite
+    cargo clippy -p recrypt-storage-auth -- -D warnings
+    cargo clippy -p recrypt-storage-auth --features sqlite -- -D warnings
 
 # Generate auth service docs
 docs-auth:
-    cargo doc -p identikey-storage-auth --no-deps --open
+    cargo doc -p recrypt-storage-auth --no-deps --open
 
 # =============================================================================
 # CLI Wallet Utilities (Phase 6b)

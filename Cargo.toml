@@ -6,7 +6,7 @@ members = [
   "crates/recrypt-core",
   "crates/recrypt-wire",
   "crates/recrypt-storage",
-  "crates/identikey-storage-auth",
+  "crates/recrypt-storage-auth",
   "crates/recrypt-client",
   "recrypt-server",
   "recrypt-cli",
