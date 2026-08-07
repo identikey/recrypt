@@ -1,0 +1,91 @@
+# cargo-deny configuration — license policy enforcement.
+#
+# The policy this file enforces is stated in CLAUDE.md ("Licensing") and
+# decided in docs/decisions/2026-07-23-license-split.md (D-3) and
+# docs/decisions/2026-08-02-protocol-tier-extraction.md (D-4):
+#
+#   * Core library crates are `Apache-2.0 OR BSD-2-Clause-Patent` — publishable
+#     and embeddable anywhere. Both branches carry a MANDATORY patent grant;
+#     an MIT election would let a hostile licensee dodge it, which is why the
+#     disjunction never includes MIT.
+#   * The deployable stack (recrypt-server, recrypt-cli, recrypt-storage-auth)
+#     is `AGPL-3.0-or-later` plus a commercial carve-out.
+#   * Permissive crates must never depend on AGPL crates.
+#
+# The first two are enforced below. The third is a FIRST-PARTY graph property
+# that cargo-deny cannot express — see scripts/check-license-tiers.sh, which
+# runs alongside this in CI.
+
+[graph]
+all-features = true
+
+[licenses]
+# Anything not on this list fails the build. Adding to it is a licensing
+# decision, not a build fix: a copyleft dependency anywhere in the graph
+# reaches the permissive crates and collapses the tier.
+allow = [
+    "Apache-2.0",
+    # Blue Oak Model License 1.0.0 — OSI approved, permissive, and it carries
+    # its own express patent grant, so it is if anything stronger than MIT for
+    # our purposes. Reaches us through the Gordian Envelope chain
+    # (minicbor -> ur -> bc-ur -> bc-components -> bc-envelope), which
+    # recrypt-wire depends on, i.e. it lands in a PERMISSIVE crate. Checked
+    # 2026-08-07: not copyleft, no source-disclosure obligation.
+    "BlueOak-1.0.0",
+    "BSD-2-Clause",
+    "BSD-2-Clause-Patent",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    # Community Data License Agreement — Permissive 2.0. A DATA licence, not a
+    # code one: it covers the Mozilla CA root certificate set shipped by
+    # webpki-root-certs (reqwest -> rustls-platform-verifier), pulled in by
+    # recrypt-client. Permissive, no share-alike, no attribution obligation
+    # beyond the notice. Checked 2026-08-07.
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+
+# `MIT` above is for INBOUND dependencies, which we merely use. It is not an
+# option we offer on our own crates — see the note about the patent grant.
+
+confidence-threshold = 0.9
+
+# AGPL is permitted for exactly the three crates we deliberately made AGPL.
+# Naming them individually means a NEW crate cannot become AGPL by accident,
+# and a third-party AGPL dependency still fails.
+[[licenses.exceptions]]
+name = "recrypt-server"
+allow = ["AGPL-3.0-or-later"]
+
+[[licenses.exceptions]]
+name = "recrypt-cli"
+allow = ["AGPL-3.0-or-later"]
+
+[[licenses.exceptions]]
+name = "recrypt-storage-auth"
+allow = ["AGPL-3.0-or-later"]
+
+# The e2e harness is AGPL for the same reason: it builds against all three of
+# the above. `publish = false`, but the licence field must still be true.
+[[licenses.exceptions]]
+name = "recrypt-e2e-tests"
+allow = ["AGPL-3.0-or-later"]
+
+[bans]
+multiple-versions = "allow"
+
+[advisories]
+# Advisories are a separate concern with a separate cadence; this file is the
+# license gate. `cargo deny check advisories` still works on demand.
+yanked = "warn"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "allow"

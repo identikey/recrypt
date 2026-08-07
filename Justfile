@@ -35,6 +35,12 @@ test-openfhe:
 lint:
     cargo clippy -- -D warnings
 
+# Check the licensing policy: allowed dependency licences (cargo-deny) plus
+# the tier rule that no permissive crate may depend on an AGPL crate.
+check-licenses:
+    cargo deny check licenses
+    ./scripts/check-license-tiers.sh
+
 # Format code
 format:
     cargo fmt

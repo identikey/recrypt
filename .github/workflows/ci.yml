@@ -44,6 +44,32 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
+  # Two halves of one policy, and neither substitutes for the other.
+  # cargo-deny checks that every licence in the dependency graph is one we
+  # allow; check-license-tiers.sh checks that no permissive crate reaches an
+  # AGPL one. Only the second catches a permissive crate published to
+  # crates.io carrying a hidden AGPL obligation. Needs no OpenFHE build --
+  # both run off cargo metadata, not a compile.
+  licenses:
+    name: Licenses
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+
+      - name: Check dependency licences
+        run: cargo deny check licenses
+
+      - name: Check permissive/AGPL tier separation
+        run: ./scripts/check-license-tiers.sh
+
   clippy:
     name: Clippy
     runs-on: ubuntu-latest

@@ -2,7 +2,13 @@
 name = "recrypt-e2e-tests"
 version = "0.1.0"
 edition = "2024"
-license.workspace = true
+# NOT the workspace default. This harness dev-depends on recrypt-server,
+# recrypt-cli and recrypt-storage-auth — all AGPL-3.0-or-later — and its source
+# is distributed with the repo. Labelling it `Apache-2.0 OR BSD-2-Clause-Patent`
+# claimed a permissive licence over code that builds against AGPL crates, which
+# was simply inaccurate. `publish = false` kept it off crates.io but did not
+# make the label true.
+license = "AGPL-3.0-or-later"
 publish = false
 
 [features]
