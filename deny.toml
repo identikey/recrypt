@@ -46,7 +46,6 @@ allow = [
     "ISC",
     "MIT",
     "MIT-0",
-    "MPL-2.0",
     "Unicode-3.0",
     "Unlicense",
     "Zlib",
@@ -57,7 +56,72 @@ allow = [
 
 confidence-threshold = 0.9
 
-# AGPL is permitted for exactly the three crates we deliberately made AGPL.
+# THE COPYLEFT DEPENDENCIES IN THIS GRAPH — named individually, never
+# blanket-allowed. There are three, in three quite different situations, and
+# only one of them is really interesting. AGPL exceptions for our own crates
+# follow further down.
+#
+# option-ext is MPL-2.0 and it reaches recrypt-wire, which is permissive and
+# publishable to crates.io:
+#
+#   option-ext <- dirs-sys <- dirs <- known-values <- bc-envelope <- recrypt-wire
+#
+# It arrives through Blockchain Commons' `known-values`, which pulls `dirs`;
+# nothing we control chose it, and bumping `directories`/`dirs-sys` does not
+# remove it (dirs-sys 0.5 still depends on option-ext). Tracked upstream as
+# ikp-a6x in the identikey-protocol repo, which has the same dependency.
+#
+# Assessed 2026-08-07 and accepted, with the reasoning stated so the next
+# person does not have to redo it:
+#   * MPL-2.0 is FILE-scope copyleft. The obligation attaches to the MPL files
+#     and to modifications of them. Using option-ext unmodified imposes nothing
+#     on our code — it is not GPL-style reciprocity across a linked work.
+#   * MPL-2.0 section 3.3 makes it explicitly GPL-compatible, so the GPLv2
+#     firmware reach that BSD-2-Clause-Patent exists to preserve is not lost.
+#
+# These are exceptions on NAMED crates. A new copyleft dependency still fails
+# the build, which is the point of not leaving MPL-2.0 in `allow`.
+[[licenses.exceptions]]
+name = "option-ext"
+allow = ["MPL-2.0"]
+
+# progenitor-client — MPL-2.0, and the most consequential of the three, so do
+# not read past it. It is a RUNTIME dependency of recrypt-client:
+#
+#   progenitor-client <- recrypt-client   (permissive, intended for crates.io)
+#
+# Unlike option-ext this is a substantial library — the runtime half of Oxide's
+# OpenAPI generator, linked into every consumer of recrypt-client. The
+# file-scope analysis above still holds (no obligation attaches to
+# recrypt-client's own source, and MPL is GPL-compatible), so this is accepted
+# rather than blocking. But it is the dependency to re-examine first if the
+# permissive tier's promise is ever challenged, and the one worth replacing if
+# recrypt-client's generated-client layer is ever revisited.
+[[licenses.exceptions]]
+name = "progenitor"
+allow = ["MPL-2.0"]
+
+[[licenses.exceptions]]
+name = "progenitor-client"
+allow = ["MPL-2.0"]
+
+[[licenses.exceptions]]
+name = "progenitor-impl"
+allow = ["MPL-2.0"]
+
+[[licenses.exceptions]]
+name = "progenitor-macro"
+allow = ["MPL-2.0"]
+
+# colored — MPL-2.0, reached only by recrypt-cli, which is AGPL-3.0-or-later.
+# No tier question at all: MPL is compatible with AGPL, and nothing permissive
+# touches it. Listed so it is a decision on the record rather than a silent
+# blanket allowance.
+[[licenses.exceptions]]
+name = "colored"
+allow = ["MPL-2.0"]
+
+# AGPL is permitted for exactly the four crates we deliberately made AGPL.
 # Naming them individually means a NEW crate cannot become AGPL by accident,
 # and a third-party AGPL dependency still fails.
 [[licenses.exceptions]]
