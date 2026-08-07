@@ -609,8 +609,8 @@ We propose **XChaCha20-Bao** as the canonical name. Variants:
 - [BLAKE3 specification](https://github.com/BLAKE3-team/BLAKE3-specs/blob/master/blake3.pdf)
 - [Bao specification](https://github.com/oconnor663/bao/blob/master/docs/spec.md)
 - [`bao-tree`](https://docs.rs/bao-tree/) Rust crate documentation
-- [Recrypt project](../README.md) — reference implementation context
-- [Recrypt verification architecture](verification-architecture.md)
+- [Recrypt project](../../README.md) — reference implementation context
+- [Recrypt verification architecture](../verification-architecture.md)
 
 ## Appendix A: Why not just sign the plaintext?
 

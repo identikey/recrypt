@@ -508,7 +508,7 @@ recrypt identity new
 ```
 
 The current format is the Gordian Envelope (dCBOR) wallet body documented in
-[`docs/standards/wallet-envelope-format.md`](standards/wallet-envelope-format.md).
+[`docs/standards/wallet-envelope-format.md`](https://github.com/identikey/identikey-protocol/blob/main/docs/standards/wallet-envelope-format.md).
 
 ### "Connection refused" / Server errors
 

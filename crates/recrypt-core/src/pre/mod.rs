@@ -28,7 +28,8 @@ pub enum BackendId {
 impl std::fmt::Display for BackendId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            // Canonical strings match docs/standards/wallet-envelope-format.md
+            // Canonical strings match wallet-envelope-format.md in identikey-protocol
+            // (docs/standards/, moved there 2026-08-07 with the wallet engine)
             // and the recrypt-wire identity envelope (convert.rs::backend_to_string).
             BackendId::Lattice => write!(f, "lattice-bfv"),
             BackendId::EcPairing => write!(f, "ec-pairing"),

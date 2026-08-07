@@ -10,7 +10,7 @@
 
 There are exactly two regimes:
 
-- **Inside CBOR / Gordian Envelope payloads** (wire, wallet body, exported identity, signed messages): everything is **raw bytes** (CBOR major type 2). No base58, no base64, no hex, no JSON arrays. The dCBOR rules in [dcbor-determinism.md](dcbor-determinism.md) require byte-identical re-serialization, and any text wrapping breaks that contract.
+- **Inside CBOR / Gordian Envelope payloads** (wire, wallet body, exported identity, signed messages): everything is **raw bytes** (CBOR major type 2). No base58, no base64, no hex, no JSON arrays. The dCBOR rules in [dcbor-determinism.md](https://github.com/identikey/identikey-protocol/blob/main/docs/standards/dcbor-determinism.md) require byte-identical re-serialization, and any text wrapping breaks that contract.
 
 - **At text boundaries** (HTTP headers, HTTP JSON bodies, console output, URL path segments, error messages, log lines): use the table in §2.
 
@@ -118,9 +118,9 @@ Format: envelope+cbor
 ## 7. References
 
 - [wire-protocol.md](../wire-protocol.md) — wire format (envelope + dCBOR)
-- [wallet-envelope-format.md](wallet-envelope-format.md) — wallet body encoding
+- [wallet-envelope-format.md](https://github.com/identikey/identikey-protocol/blob/main/docs/standards/wallet-envelope-format.md) — wallet body encoding
 - [http-api-reference.md](../http-api-reference.md) — header & JSON-body encodings
 - [hashing-standard.md](hashing-standard.md) — fingerprint / file-hash construction
-- [dcbor-determinism.md](dcbor-determinism.md) — dCBOR rules for byte-identical serialization
+- [dcbor-determinism.md](https://github.com/identikey/identikey-protocol/blob/main/docs/standards/dcbor-determinism.md) — dCBOR rules for byte-identical serialization
 - [RFC 4648](https://datatracker.ietf.org/doc/html/rfc4648) — base64 / base32 / base16 specs
 - [Base58 (Bitcoin)](https://en.bitcoin.it/wiki/Base58Check_encoding) — alphabet origin and rationale

@@ -11,7 +11,7 @@
 //! - [`Identity`] — Ed25519 + ML-DSA-87 + PRE keypairs. Its envelope codec
 //!   delegates to `recrypt_wire::Identity`, so wallet bytes stay identical
 //!   to on-the-wire identity envelopes (spec:
-//!   docs/standards/wallet-envelope-format.md).
+//!   wallet-envelope-format.md in the identikey-protocol repo, docs/standards/).
 
 use anyhow::{anyhow, Context as _, Result};
 use bc_envelope::prelude::*;
@@ -285,7 +285,8 @@ mod tests {
         assert_wallet_eq(&wallet, &decrypted);
     }
 
-    /// The spec'd exact v1 rejection string (wallet-envelope-format.md §7)
+    /// The spec'd exact v1 rejection string (identikey-protocol,
+    /// docs/standards/wallet-envelope-format.md §7)
     /// must survive the extraction into the generic wallet crate.
     #[test]
     fn v1_wallet_rejected_with_spec_string() {
