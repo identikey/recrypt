@@ -59,14 +59,41 @@ reference implementations of formats meant to outlive any steward.
 
 ## Follow-ups
 
+All four are now tracked (2026-08-07). Protocol-tier work lives in
+identikey-protocol's own bd workspace (`ikp-*`) rather than in a consumer's
+tracker — see "Where protocol work is tracked" below.
+
 - Publish `identikey-wallet` (and recrypt core crates) to crates.io; switch
-  the git dependency to a version once published.
+  the git dependency to a version once published. → `ikp-6yz.1` (publish),
+  `recrypt-c9q` (the dep switch here). Until then the dep is
+  `branch = "main"`, i.e. unversioned: pin a `rev` if the publish slips.
 - Wallet format + identity envelope specs with test vectors belong in the
-  identikey-protocol repo (the doctrine's highest-leverage gap).
+  identikey-protocol repo (the doctrine's highest-leverage gap). →
+  `ikp-6yz.2`.
 - `ikey` reading `recrypt.wallet` files (cross-app wallet management) needs
   a tolerant container codec that accepts multiple type strings — deferred.
+  → `ikp-pus`.
 - Consider renaming `identikey-storage-auth` → `recrypt-storage-auth`; it
   is storage authorization, not identity, and the prefix now misleads.
+  → `recrypt-5u9`. Do it before any crates.io publish so the misleading
+  name never ships in a published artifact.
+
+## Where protocol work is tracked
+
+identikey-protocol has its own bd workspace (prefix `ikp`). The alternative —
+tracking it in identikey-core or here — reproduces at tracker level exactly
+the coupling that identikey-core's ADR-002 split the repos to avoid: a fork
+of the permissive tier would get the code and none of the reasoning. Two
+consequences already visible:
+
+- identikey-core's extraction epic (`identikey-core-jsv`) sat open with
+  completed children for six days after this commit landed, because the work
+  happened in a different repo than the tracker.
+- `identikey-log` cites `Dreamball-*` issue IDs in its `Cargo.toml` for
+  load-bearing dependency decisions (the bc-envelope feature set, fips204
+  over pqcrypto-mldsa, the two-`getrandom`-majors plumbing). Tracked as
+  `ikp-c1u`; the fix is that the protocol repo carries its own copy of the
+  reasoning, not that consumers stop recording theirs.
 
 ## Reversal triggers
 
