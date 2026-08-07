@@ -1,6 +1,12 @@
-//! ASCII armor format for human-readable export
+//! ASCII armor format for human-readable export.
 //!
-//! See [`docs/standards/encoding-conventions.md` §6](../../../docs/standards/encoding-conventions.md#6-ascii-armor-block-headers)
+//! **Legacy as of 2026-08-07.** `ur:envelope/…` is the canonical text form for
+//! a whole envelope — see §7 of the spec below. This module stays for reading
+//! existing armor blocks and for the frozen `--format=armor` alias; do not
+//! reach for it in new code.
+//!
+//! See [`encoding-conventions.md` §6](https://github.com/identikey/identikey-protocol/blob/main/docs/standards/encoding-conventions.md#6-ascii-armor-block-headers--legacy-read-only)
+//! in the identikey-protocol repo
 //! for the canonical header set, parsing rules, and BEGIN/END marker
 //! conventions. Each armor block's `Version:` header matches the
 //! `format-version` of the embedded envelope subject — currently `1`
@@ -124,7 +130,7 @@ pub fn armor_decode(s: &str) -> WireResult<ArmorBlock> {
             payload_start = begin_idx + 1 + i + 1;
             break;
         }
-        // Per docs/standards/encoding-conventions.md §6: each header line is
+        // Per encoding-conventions.md §6 (identikey-protocol/docs/standards): each header line is
         // exactly `Key: Value` (ASCII colon + space). A line that doesn't
         // match isn't a header; reject the armor instead of silently
         // dropping it (a typo'd header would have hidden itself).

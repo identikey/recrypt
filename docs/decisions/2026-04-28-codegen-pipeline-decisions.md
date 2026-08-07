@@ -16,7 +16,7 @@ keeps its hand-written envelope encoder.
 **Rationale.**
 
 - **Encoding mismatch.** Wallet identity uses raw-bytes for all key
-  material per [encoding-conventions.md §1](../standards/encoding-conventions.md);
+  material per [encoding-conventions.md §1](https://github.com/identikey/identikey-protocol/blob/main/docs/standards/encoding-conventions.md);
   the codegen pipeline standardizes on base64 in JSON. Forcing the wallet
   through the pipeline would either re-encode keys (breaking the
   on-disk format that recrypt-03y just shipped) or carve out a

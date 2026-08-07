@@ -671,7 +671,8 @@ fn truncate(s: &str, max_len: usize) -> String {
     }
 }
 
-/// Encode a key for display per docs/standards/encoding-conventions.md §4:
+/// Encode a key for display per encoding-conventions.md §4
+/// (identikey-protocol/docs/standards):
 /// short stable IDs (≤256 B) → base58; multi-KB blobs → base64. base58 is
 /// O(n²); never feed it ML-DSA or lattice-PRE keys.
 fn encode_key_display(bytes: &[u8]) -> String {

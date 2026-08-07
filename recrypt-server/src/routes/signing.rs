@@ -27,7 +27,7 @@
 //!     authority. Authentication would be tautological.
 //!   - Rate-limited per-IP via the server's global governor layer.
 //!
-//! See `docs/standards/encoding-conventions.md` for the rationale behind
+//! See `encoding-conventions.md` (identikey-protocol/docs/standards) for the rationale behind
 //! base64 over base58 for multi-KB blobs.
 
 use axum::{Json, http::StatusCode};

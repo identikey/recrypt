@@ -967,4 +967,4 @@ every signed type.
 - [XChaCha20+Bao AEAD spec (this repo)](standards/xchacha20-bao-aead.md)
 - [Envelope sketch spike](plans/archive/2026-04-08-envelope-sketch.md)
 - [Threat model](threat-model.md)
-- [Encoding conventions](standards/encoding-conventions.md) — when to use raw bytes vs base58 vs base64
+- [Encoding conventions](https://github.com/identikey/identikey-protocol/blob/main/docs/standards/encoding-conventions.md) — when to use raw bytes vs base58 vs base64

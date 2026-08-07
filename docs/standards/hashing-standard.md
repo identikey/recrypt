@@ -141,4 +141,4 @@ bao = "0.12"  # For tree mode / streaming verification
 - [Bao specification](https://github.com/oconnor663/bao/blob/master/docs/spec.md)
 - [blake3 crate](https://docs.rs/blake3)
 - [bao crate](https://docs.rs/bao)
-- [Encoding Conventions](encoding-conventions.md) — when fingerprints/hashes get base58 vs raw bytes
+- [Encoding Conventions](https://github.com/identikey/identikey-protocol/blob/main/docs/standards/encoding-conventions.md) — when fingerprints/hashes get base58 vs raw bytes

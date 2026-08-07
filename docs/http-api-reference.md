@@ -70,7 +70,7 @@ trailing field is always the nonce string exactly as it appears in the
 | `GET    /accounts/{fp}/shares`        | `LIST_SHARES` | `LIST_SHARES:{fingerprint}:{nonce}`                              |
 
 **Field encodings** (used in both the body/path values and the canonical
-message string). See [Encoding Conventions](standards/encoding-conventions.md)
+message string). See [Encoding Conventions](https://github.com/identikey/identikey-protocol/blob/main/docs/standards/encoding-conventions.md)
 for the project-wide rules:
 
 - `ed25519_pk` — base64 (32 B)
@@ -383,7 +383,7 @@ localhost; do not expose publicly.
 - **Encoding:** request fields accept `b64:<base64>`, `b58:<base58>`,
   or a bare base58 string (legacy). Responses always emit
   `b64:<base64>`. See
-  [encoding-conventions.md §5.1](standards/encoding-conventions.md#51-tagged-input-convention).
+  [encoding-conventions.md §5.1](https://github.com/identikey/identikey-protocol/blob/main/docs/standards/encoding-conventions.md#51-tagged-input-convention).
 - **Source:** [`recrypt-server/src/routes/signing.rs`](../recrypt-server/src/routes/signing.rs).
 
 #### `POST /keyspaces`, `GET /keyspaces/{id}`, `POST /grants`, etc. — Keyspace management

@@ -250,16 +250,19 @@ overview, then [`docs/user-guide.md`](docs/user-guide.md) for usage.
 | `docs/standards/recrypt-key-material-v1.md` | Key material serialization       |
 | `docs/standards/xchacha20-bao-aead.md`      | Streaming AEAD construction       |
 | `docs/standards/identity-self-signature.md` | Identity self-signature shape    |
-| `docs/standards/encoding-conventions.md`    | Bytes crossing text boundaries   |
 | `docs/standards/hashing-standard.md`        | Blake3 standardization           |
 
 The identity-tier specs moved to
 [identikey-protocol](https://github.com/identikey/identikey-protocol/blob/main/docs/standards/)
 on 2026-08-07, following the code that implements them — the wallet envelope
 format, the `identikey-auth` challenge/response protocol and its platform
-backend notes, and the dCBOR determinism contract. Recrypt still depends on
-them; they are upstream documents now. See
+backend notes, the dCBOR determinism contract, and the encoding conventions.
+Recrypt still depends on all of them; they are upstream documents now. See
 [`docs/standards/README.md`](docs/standards/README.md).
+
+Note that `encoding-conventions.md` now makes **`ur:envelope/…` the canonical
+text form** for a whole envelope. Recrypt's ASCII armor block is legacy
+read-only (`recrypt-9og`).
 
 Architectural decisions live in [`docs/decisions/`](docs/decisions/); read them
 before relitigating long-tail design questions.
