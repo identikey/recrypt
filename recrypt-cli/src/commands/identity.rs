@@ -14,10 +14,16 @@ use super::Context;
 use crate::config::Config;
 use crate::output::{print_info, print_json, print_success};
 use crate::wallet::{write_secret_file, Identity, KeyPair, Wallet};
+use recrypt_wire::format::MultiFormat;
 
 #[derive(Debug, Clone, ValueEnum, Default)]
 pub enum ExportFormat {
+    /// `ur:envelope/…` — the canonical text form. Readable by the Blockchain
+    /// Commons `envelope` CLI and every Gordian tool, and QR-able.
+    /// See encoding-conventions.md §7 (identikey-protocol/docs/standards).
     #[default]
+    Ur,
+    /// Raw Gordian Envelope dCBOR bytes.
     Envelope,
     Json,
 }
@@ -55,8 +61,8 @@ pub enum IdentityCommand {
         /// Output file
         #[arg(long)]
         output: String,
-        /// Output format: envelope (default) or json
-        #[arg(long, value_enum, default_value = "envelope")]
+        /// Output format: ur (default), envelope, or json
+        #[arg(long, value_enum, default_value = "ur")]
         format: ExportFormat,
     },
     /// Import an identity
@@ -392,7 +398,7 @@ async fn export_identity(
             write_secret_file(output_path, json.as_bytes())
                 .with_context(|| format!("Failed to write {output}"))?;
         }
-        ExportFormat::Envelope => {
+        ExportFormat::Ur | ExportFormat::Envelope => {
             let wire_id = wire_identity_from_wallet(&name, identity)?;
             // Wrap-then-sign so the export commits to all key material, not
             // just the ed25519 fingerprint. Prefer hybrid (ed25519 + ML-DSA-87)
@@ -406,8 +412,26 @@ async fn export_identity(
                     .sign_self_ed25519()
                     .map_err(|e| anyhow::anyhow!("Failed to ed25519-sign envelope: {e}"))?,
             };
-            write_secret_file(output_path, &bytes)
-                .with_context(|| format!("Failed to write {output}"))?;
+            // Both formats carry the same signed envelope; UR is that envelope
+            // as text. Re-parsing to produce the UR keeps a single source of
+            // truth for the signed bytes rather than building the envelope twice.
+            match format {
+                ExportFormat::Ur => {
+                    // Encode the SIGNED bytes directly. `bytes` is a
+                    // wrap-then-sign envelope whose subject is the identity
+                    // envelope, so parsing it back into `Identity` fails
+                    // ("subject is not a leaf") — the UR must wrap what we
+                    // actually signed, not a re-derived inner envelope.
+                    let ur = recrypt_wire::format::ur_from_envelope_bytes(&bytes)
+                        .map_err(|e| anyhow::anyhow!("Failed to encode UR: {e}"))?;
+                    write_secret_file(output_path, ur.as_bytes())
+                        .with_context(|| format!("Failed to write {output}"))?;
+                }
+                _ => {
+                    write_secret_file(output_path, &bytes)
+                        .with_context(|| format!("Failed to write {output}"))?;
+                }
+            }
         }
     }
 
@@ -430,10 +454,22 @@ async fn import_identity(file: String, name: Option<String>, ctx: &Context) -> R
 
     let bytes = std::fs::read(&file).with_context(|| format!("Failed to read {file}"))?;
 
-    // Detect format. CBOR envelopes start with the dCBOR tag-200 prefix
-    // (0xd8 0xc8). JSON may have leading whitespace or a UTF-8 BOM, so skip
-    // those before checking for an opening brace.
-    let identity = if bytes.starts_with(&[0xd8, 0xc8]) {
+    // Detect format. A UR is text starting `ur:` (case-insensitive per the UR
+    // spec — uppercase is used inside QR codes, where alphanumeric mode is
+    // denser). CBOR envelopes start with the dCBOR tag-200 prefix (0xd8 0xc8).
+    // JSON may have leading whitespace or a UTF-8 BOM, so skip those before
+    // checking for an opening brace.
+    let ur_prefixed = bytes
+        .get(..3)
+        .is_some_and(|p| p.eq_ignore_ascii_case(b"ur:"));
+
+    let identity = if ur_prefixed {
+        let text = std::str::from_utf8(&bytes).context("UR file is not valid UTF-8")?;
+        let envelope_bytes = recrypt_wire::format::envelope_bytes_from_ur(text)
+            .map_err(|e| anyhow::anyhow!("Failed to decode UR: {e}"))?;
+        let wire_id = parse_identity_envelope(&envelope_bytes)?;
+        wallet_identity_from_wire(&wire_id)?
+    } else if bytes.starts_with(&[0xd8, 0xc8]) {
         let wire_id = parse_identity_envelope(&bytes)?;
         wallet_identity_from_wire(&wire_id)?
     } else {
@@ -443,7 +479,8 @@ async fn import_identity(file: String, name: Option<String>, ctx: &Context) -> R
             serde_json::from_slice(&bytes).context("Invalid JSON identity file")?
         } else {
             anyhow::bail!(
-                "Unrecognized identity file format (expected CBOR envelope starting with 0xd8 0xc8, or JSON starting with '{{')"
+                "Unrecognized identity file format (expected a `ur:envelope/…` string, \
+                 a CBOR envelope starting with 0xd8 0xc8, or JSON starting with '{{')"
             );
         }
     };

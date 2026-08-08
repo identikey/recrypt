@@ -158,3 +158,38 @@ fn test_empty_wrapped_key_does_not_serialize() {
     let restored = Ciphertext::from_bytes(&bytes).unwrap();
     assert_eq!(restored.as_bytes().len(), 0);
 }
+
+/// UR is the canonical text form (encoding-conventions.md §7). This asserts the
+/// real thing, not our own re-parse: the string must carry the standard
+/// `ur:envelope/` prefix, so BC tooling and every other Gordian implementation
+/// can read it.
+#[test]
+fn test_ur_roundtrip() {
+    let encrypted = make_test_file();
+
+    let ur = encrypted.to_ur().unwrap();
+    assert!(
+        ur.starts_with("ur:envelope/"),
+        "must use the standard UR type, got: {}",
+        &ur[..ur.len().min(40)]
+    );
+
+    let restored = EncryptedFile::from_ur(&ur).unwrap();
+    assert_eq!(restored.bao_hash, encrypted.bao_hash);
+    assert_eq!(
+        restored.wrapped_key.backend(),
+        encrypted.wrapped_key.backend()
+    );
+}
+
+/// `from_any` must route a UR without being told what it is.
+#[test]
+fn test_from_any_ur() {
+    let encrypted = make_test_file();
+    let ur = encrypted.to_ur().unwrap();
+
+    assert_eq!(detect_format(ur.as_bytes()), Format::Ur);
+
+    let restored = EncryptedFile::from_any(ur.as_bytes()).unwrap();
+    assert_eq!(restored.bao_hash, encrypted.bao_hash);
+}
