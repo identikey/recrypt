@@ -8,16 +8,14 @@
 //!
 //! ## Wire shape
 //!
-//! Inputs accept tagged strings: `"b64:<base64>"` (preferred) or
-//! `"b58:<base58>"` (legacy). A bare string with no prefix is treated as
-//! base58 for backward compatibility with pre-2026 clients. ML-DSA-87
-//! payloads are multi-KB (4.9 KB secret key, 2.6 KB public key, ~4.6 KB
-//! signature); base58 encoding of multi-KB blobs is O(n²) bignum
-//! arithmetic and noticeably slow at this size, so base64 is preferred.
+//! Inputs and outputs are `"b64:<base64>"`. That is the only accepted form.
 //!
-//! Outputs are always emitted as `"b64:<base64>"`. Callers MUST handle
-//! the prefix; clients that previously stripped a `b58:` prefix should be
-//! updated to handle either tag.
+//! The `b58:` tag and the bare unprefixed string were removed on 2026-08-07.
+//! ML-DSA-87 payloads are multi-KB (4.9 KB secret key, 2.6 KB public key,
+//! ~4.6 KB signature) and base58 is O(n²) bignum arithmetic, so those two
+//! forms were an unbounded quadratic decode reachable from untrusted input on
+//! a public, unauthenticated endpoint. Nothing has shipped to production, so
+//! there was no compatibility worth keeping.
 //!
 //! Security notes:
 //!   - In production, run this server alongside its callers (localhost or
@@ -37,8 +35,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize)]
 pub struct SignRequest {
-    /// ML-DSA-87 secret key (4896 B). `b64:<base64>` preferred; `b58:<base58>`
-    /// or bare base58 accepted for backward compat.
+    /// ML-DSA-87 secret key (4896 B), as `b64:<base64>`.
     pub secret_key: String,
     /// Bytes to sign. Same encoding rules as `secret_key`.
     pub message: String,
@@ -71,25 +68,14 @@ pub struct ErrorResponse {
     pub error: String,
 }
 
-/// Decode a tagged input string. Accepts `"b64:..."`, `"b58:..."`, or a
-/// bare string (treated as base58 for legacy clients).
+/// Decode a `b64:<base64>` input. No other form is accepted — see the module
+/// docs for why the base58 forms were removed.
 fn decode_input(s: &str, label: &str) -> Result<Vec<u8>, (StatusCode, Json<ErrorResponse>)> {
-    if let Some(b64) = s.strip_prefix("b64:") {
-        return B64.decode(b64).map_err(|e| {
-            (
-                StatusCode::BAD_REQUEST,
-                Json(ErrorResponse {
-                    error: format!("{label}: base64 decode failed: {e}"),
-                }),
-            )
-        });
-    }
-    let b58 = s.strip_prefix("b58:").unwrap_or(s);
-    bs58::decode(b58).into_vec().map_err(|e| {
+    recrypt_wire::encoding::decode_tagged(s, label).map_err(|e| {
         (
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
-                error: format!("{label}: base58 decode failed: {e}"),
+                error: e.to_string(),
             }),
         )
     })
@@ -179,41 +165,38 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn legacy_b58_input_still_accepted() {
-        // Legacy clients (Dreamball pre-base64-migration) send `b58:<base58>`
-        // or bare base58. Server must still decode them, but emits b64: in
-        // its response.
+    async fn b58_tagged_input_is_rejected() {
+        // Removed 2026-08-07. This endpoint is public and unauthenticated, and
+        // ML-DSA-87 payloads are multi-KB, so accepting base58 here meant an
+        // unbounded O(n^2) decode driven by anonymous input. The error must
+        // name the form the caller should send instead.
         let kp = recrypt_ffi::liboqs::pq_keygen(PqAlgorithm::MlDsa87).unwrap();
-        let message = b"legacy client";
 
-        let sign_req = Json(SignRequest {
+        let req = Json(SignRequest {
             secret_key: format!("b58:{}", bs58::encode(&kp.secret_key).into_string()),
-            message: format!("b58:{}", bs58::encode(message).into_string()),
+            message: format!("b58:{}", bs58::encode(b"legacy client").into_string()),
         });
-        let Json(sign_resp) = sign_ml_dsa(sign_req).await.unwrap();
-        assert!(sign_resp.signature.starts_with("b64:"));
-
-        let verify_req = Json(VerifyRequest {
-            public_key: format!("b58:{}", bs58::encode(&kp.public_key).into_string()),
-            message: format!("b58:{}", bs58::encode(message).into_string()),
-            signature: sign_resp.signature,
-        });
-        let Json(verify_resp) = verify_ml_dsa(verify_req).await.unwrap();
-        assert!(verify_resp.ok);
+        let (status, Json(err)) = sign_ml_dsa(req).await.unwrap_err();
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert!(
+            err.error.contains("b64:<base64>"),
+            "error must name the required form, got: {}",
+            err.error
+        );
     }
 
     #[tokio::test]
-    async fn bare_unprefixed_input_treated_as_base58() {
-        // Pre-2026 clients sent bare base58 with no prefix. Still works.
+    async fn bare_unprefixed_input_is_rejected() {
+        // Previously "treated as base58 for pre-2026 clients". There are no
+        // pre-2026 clients; nothing shipped.
         let kp = recrypt_ffi::liboqs::pq_keygen(PqAlgorithm::MlDsa87).unwrap();
-        let message = b"no prefix";
 
-        let sign_req = Json(SignRequest {
+        let req = Json(SignRequest {
             secret_key: bs58::encode(&kp.secret_key).into_string(),
-            message: bs58::encode(message).into_string(),
+            message: bs58::encode(b"no prefix").into_string(),
         });
-        let Json(sign_resp) = sign_ml_dsa(sign_req).await.unwrap();
-        assert!(sign_resp.signature.starts_with("b64:"));
+        let (status, _) = sign_ml_dsa(req).await.unwrap_err();
+        assert_eq!(status, StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]

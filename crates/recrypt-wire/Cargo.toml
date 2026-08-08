@@ -37,8 +37,10 @@ hex = "0.4"
 # Serialization (serde for config compat; nothing in this crate produces JSON)
 serde = { version = "1", features = ["derive"] }
 
-# Encoding (base64 for ASCII armor payload)
+# Encoding: base64 for armor payloads and every multi-KB text boundary;
+# bs58 for short identifiers only, behind the size guard in `encoding.rs`.
 base64 = "0.22"
+bs58 = "0.5"
 
 # Core types (we serialize these)
 recrypt-core = { path = "../recrypt-core" }

@@ -672,13 +672,15 @@ fn truncate(s: &str, max_len: usize) -> String {
 }
 
 /// Encode a key for display per encoding-conventions.md §4
-/// (identikey-protocol/docs/standards):
-/// short stable IDs (≤256 B) → base58; multi-KB blobs → base64. base58 is
-/// O(n²); never feed it ML-DSA or lattice-PRE keys.
+/// (identikey-protocol/docs/standards): short stable IDs → base58, anything
+/// larger → base64.
+///
+/// The size split lives in `recrypt_wire::encoding` rather than here. It used
+/// to be an inline `if bytes.len() <= 256`, which is how `recrypt-n1e` (this
+/// display path hanging on a multi-MB lattice key) got fixed the first time —
+/// correctly, but only here. `b58_encode` refuses oversized input at every
+/// call site instead.
 fn encode_key_display(bytes: &[u8]) -> String {
-    if bytes.len() <= 256 {
-        bs58::encode(bytes).into_string()
-    } else {
-        base64::engine::general_purpose::STANDARD.encode(bytes)
-    }
+    recrypt_wire::encoding::b58_encode(bytes)
+        .unwrap_or_else(|_| recrypt_wire::encoding::b64_encode(bytes))
 }

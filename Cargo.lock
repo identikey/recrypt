@@ -4372,6 +4372,7 @@ dependencies = [
  "bc-components",
  "bc-envelope",
  "blake3",
+ "bs58",
  "ed25519-dalek",
  "hex",
  "proptest",

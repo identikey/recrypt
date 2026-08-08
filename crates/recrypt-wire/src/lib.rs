@@ -15,6 +15,7 @@
 
 pub mod armor;
 pub mod convert;
+pub mod encoding;
 pub mod error;
 pub mod format;
 pub mod identity;

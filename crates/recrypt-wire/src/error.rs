@@ -17,6 +17,18 @@ pub enum WireError {
     #[error("Invalid format: {0}")]
     InvalidFormat(String),
 
+    #[error("Encoding error: {0}")]
+    Encoding(String),
+
+    /// Base58 was asked to handle something that is not an identifier.
+    /// See `encoding::B58_MAX_BYTES` — base58 is O(n²), so this is a refusal,
+    /// not a buffer limit.
+    #[error(
+        "value is {len} bytes, over the {max}-byte base58 limit; \
+         use base64 for blobs this size (encoding-conventions.md §2)"
+    )]
+    EncodingTooLarge { len: usize, max: usize },
+
     #[error("Missing required field: {0}")]
     MissingField(String),
 

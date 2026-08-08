@@ -47,23 +47,18 @@ use std::str::FromStr;
 // signature is a MultiSig with an ED25519 64 B + ML-DSA-87 ~4.6 KB component
 // once Phase C lands). Base58 of multi-KB is O(n²) bignum arithmetic — the
 // same regression `recrypt-jtw` / `recrypt-fil` / `recrypt-n1e` fixed
-// elsewhere. Output uses `b64:<base64>`. Input accepts `b64:`, `b58:`, or a
-// bare string (treated as base58 for backward compat with pre-2026 clients).
+// elsewhere. Both directions are `b64:<base64>` and nothing else: the `b58:`
+// tag and bare-base58 input were removed 2026-08-07, since they were an
+// unbounded quadratic decode on untrusted input and nothing had shipped that
+// depended on them.
 
 fn encode_bytes_b64(bytes: &[u8]) -> String {
     format!("b64:{}", B64.encode(bytes))
 }
 
 fn decode_bytes_tagged(s: &str, label: &str) -> ServerResult<Vec<u8>> {
-    if let Some(b64) = s.strip_prefix("b64:") {
-        return B64
-            .decode(b64)
-            .map_err(|e| ServerError::BadRequest(format!("Invalid base64 {label}: {e}")));
-    }
-    let b58 = s.strip_prefix("b58:").unwrap_or(s);
-    bs58::decode(b58)
-        .into_vec()
-        .map_err(|e| ServerError::BadRequest(format!("Invalid base58 {label}: {e}")))
+    recrypt_wire::encoding::decode_tagged(s, label)
+        .map_err(|e| ServerError::BadRequest(e.to_string()))
 }
 
 // ---------------------------------------------------------------------------
@@ -87,7 +82,7 @@ pub struct MemberJson {
 /// Encoding: short identifiers (id, fingerprints, doc hashes, epoch_pre_pk)
 /// stay base58 — they're 32 bytes and shown to humans. Multi-KB blobs
 /// (`root_pk`, each signature in `signatures`) emit `b64:<base64>` and
-/// accept any of `b64:`/`b58:`/bare-base58 on input. See module-level
+/// require `b64:<base64>` in both directions. See module-level
 /// "Bytes encoding helpers" comment.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct KeyspaceDocJson {
