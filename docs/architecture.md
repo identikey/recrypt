@@ -23,20 +23,18 @@ The cryptographic core is **lattice-based (OpenFHE BFV)** for post-quantum
 security, authenticated with **ED25519 + ML-DSA-87** dual signatures, and
 integrity-verified with **Blake3 + Bao** streaming hashes.
 
-### What is Recrypt vs. what is the store (2026-08-24)
+### What is Recrypt vs. what is the store (2026-08-24; named 2026-08-26)
 
-Three layers, do not brand them as three products:
+Three layers. Two names on the store, on purpose:
 
-| Layer | What it is | User-facing name |
+| Layer | What it is | Name |
 |---|---|---|
-| **CAS** | Blake3 of stored bytes, layout `blob/b3/{base58}`. Mjolnir **blob door** (`10.200.0.1:7222`) or `recrypt-storage` local/S3. Unauthenticated: the hash *is* the capability. **Not MinIO** (ADR in mjolnir `0003`). | Operational: “blob door” / “blob store.” Not a product. |
+| **CAS** | Blake3 of stored bytes, layout `blob/b3/{base58}`. Mjolnir sidecar (`10.200.0.1:7222`) or `recrypt-storage` local/S3. Unauthenticated: the hash *is* the capability. **Not MinIO** (ADR in mjolnir `0003`). | **Blob Door** — OSS / Edgebox work (`mjolnir-blob-door`, `blob_door_url`). **Aeroblobs** — business ([aeroblobs.dev](https://aeroblobs.dev)). Same cut as Lightning Mesh vs `mjolnir-meshd`. |
 | **Auth / share** | `recrypt-server` + `recrypt-storage-auth`. Dual-sig HTTP, capabilities, PRE share. AGPL binary. | **Recrypt.** |
 | **Identity** | `identikey-wallet` / `ikey` / `identikey-auth`. Encrypts *to keys*; the store never sees plaintext. | **IdentiKey.** |
 
-Encryption sits *above* the store (Mjolnir ADR 0003 item 5). Naming the CAS
-“Recrypt” or “Keep” or “Lockbox” collapses that cut. If a household needs one
-word for the node they install, it is **Recrypt** — that is the process they
-talk to. The door is plumbing.
+Encryption sits *above* the store (Mjolnir ADR 0003 item 5). Do not rename Recrypt
+to Aeroblobs or Blob Door. Keep / Lockbox / Vault are closed.
 
 `recrypt-storage-auth` is a library linked *into* `recrypt-server`. Putting the
 server on someone else's appliance (Edgebox, a Pi) is the intended product-tier
