@@ -5,8 +5,8 @@ Thank you for contributing to Recrypt. This Contributor License Agreement
 from any person or entity, and is what allows parts of Recrypt to be
 **dual-licensed** — offered both under the GNU Affero General Public License
 v3.0 or later (AGPL-3.0-or-later) and under a separate commercial license.
-(The permissively-licensed core crates are also covered; the same grants
-apply.)
+Permissive protocol crates, including identikey-protocol, are not covered
+by this CLA.
 
 Please read this document carefully before contributing. **You keep the
 copyright to your contribution** — this is a license, not an assignment. But
