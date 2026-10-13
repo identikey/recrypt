@@ -52,3 +52,9 @@ crates/recrypt-ffi/fuzz/corpus/
 crates/recrypt-ffi/fuzz/artifacts/
 crates/recrypt-ffi/fuzz/coverage/
 crates/recrypt-ffi/fuzz/target/
+
+# Intention scratch (conductor isolate, spawn stage, harness session)
+.worktrees/
+.spawns/
+.omx/
+groups/*/inventory.json
