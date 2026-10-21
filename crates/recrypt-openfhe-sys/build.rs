@@ -13,7 +13,7 @@ fn is_ios() -> bool {
     target_os() == "ios"
 }
 
-/// True when cross-compiling for Android (NDK). 1054 Android port.
+/// True when cross-compiling for Android (NDK).
 fn is_android() -> bool {
     target_os() == "android"
 }
@@ -79,7 +79,7 @@ fn main() {
              Desktop: run `just build-openfhe` first.\n\
              iOS / Android cross build: build OpenFHE for the target and point \
              OPENFHE_INSTALL_DIR at its install prefix \
-             (see recrypt-openfhe-sys build.rs / 1054 openfhe evidence)."
+             (see the comments in recrypt-openfhe-sys/build.rs)."
         );
     }
 
@@ -114,10 +114,10 @@ fn main() {
     // `+whole-archive` modifier. OpenFHE pke/core/binfhe are mutually circular
     // and a cdylib tolerates undefined symbols, so plain `static=` leaves the
     // CKKS typeinfo/vtable (e.g. _ZTIN8lbcrypto23CryptoParametersCKKSRNSE)
-    // UNDEFINED in libnaoms_core.so -> on-device dlopen fails with
+    // UNDEFINED in a downstream cdylib -> on-device dlopen fails with
     // "typeinfo for lbcrypto::CryptoParametersCKKSRNS is missing".
     // `+whole-archive` force-includes every member AND propagates transitively
-    // to naoms-core's cdylib link, so the definitions land in the .so. (1054)
+    // to the dependent crate's cdylib link, so the definitions land in the .so.
     println!("cargo::rustc-link-lib=static:+whole-archive=OPENFHEpke_static");
     println!("cargo::rustc-link-lib=static:+whole-archive=OPENFHEcore_static");
     println!("cargo::rustc-link-lib=static:+whole-archive=OPENFHEbinfhe_static");
